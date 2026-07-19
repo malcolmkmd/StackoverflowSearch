@@ -10,7 +10,13 @@ import Observation
 @MainActor
 @Observable
 final class SearchViewModel {
+    enum ViewState {
+        case loading
+        case loaded([Question])
+        case failed(String)
+    }
     
+    var viewState: ViewState = .loaded([Question.mock, Question.mock])
     var query = ""
     var path: [AppRoute] = []
     

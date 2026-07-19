@@ -20,7 +20,7 @@ struct SearchView: View {
             VStack {
                 header
                 searchField
-                Spacer()
+                content
             }.navigationDestination(for: AppRoute.self) { route in
                 switch route {
                 case .question:
@@ -69,8 +69,37 @@ struct SearchView: View {
         .padding([.horizontal, .vertical], 8)
         .background(Theme.orange)
     }
+    
+    @ViewBuilder
+    private var content: some View {
+        switch viewModel.viewState {
+        case .loading:
+            List {
+                ForEach(0..<8, id: \.self) { _ in
+                    Text("Loading")
+                        .listRowSeparator(.visible)
+                }
+            }
+            .listStyle(.plain)
+            .scrollDisabled(true)
+        case .loaded(let questions) where questions.isEmpty:
+            Text("Nothing to see here")
+        case .loaded(let questions):
+            List {
+                ForEach(Array(questions.enumerated()), id: \.element.id) { index, question in
+                    SearchRowView(question: question)
+                        .listRowSeparator(.hidden)
+                }
+            }
+            .listStyle(.plain)
+            .scrollDisabled(true)
+        case .failed(let message):
+            Text("something went wrong: \(message)")
+        }
+    }
 }
 
 #Preview {
     SearchView()
 }
+
