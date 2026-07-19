@@ -23,8 +23,8 @@ struct SearchView: View {
                 content
             }.navigationDestination(for: AppRoute.self) { route in
                 switch route {
-                case .question:
-                    QuestionDetailView()
+                case .questionDetail(let question):
+                    QuestionDetailView(question: question)
                 }
             }
         }
@@ -87,8 +87,14 @@ struct SearchView: View {
         case .loaded(let questions):
             List {
                 ForEach(Array(questions.enumerated()), id: \.element.id) { index, question in
-                    SearchRowView(question: question)
-                        .listRowSeparator(.hidden)
+                    Button {
+                        viewModel.didSelect(question)
+                    } label: {
+                        SearchRowView(question: question)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .listRowSeparator(.hidden)
                 }
             }
             .listStyle(.plain)

@@ -8,13 +8,20 @@
 import SwiftUI
 
 struct QuestionDetailView: View {
+    
+    let question: Question
+    
+    init(question: Question) {
+        self.question = question
+    }
+    
     var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+        Text(question.title)
             .navigationTitle("More Info")
             .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 #Preview {
-    QuestionDetailView()
+    QuestionDetailView(question: Question.mock())
 }

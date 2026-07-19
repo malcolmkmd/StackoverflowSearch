@@ -6,5 +6,5 @@
 //
 
 enum AppRoute: Hashable {
-    case question
+    case questionDetail(Question)
 }

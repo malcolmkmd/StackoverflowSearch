@@ -16,14 +16,14 @@ final class SearchViewModel {
         case failed(String)
     }
     
-    var viewState: ViewState = .loaded([Question.mock, Question.mock])
+    var viewState: ViewState = .loaded([Question.mock(), Question.mock()])
     var query = ""
     var path: [AppRoute] = []
     
     init() {}
     
-    func goToQuestion() {
-        path.append(.question)
+    func didSelect(_ question: Question) {
+        path.append(.questionDetail(question))
     }
     
     func onSubmit() {

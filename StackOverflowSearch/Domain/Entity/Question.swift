@@ -23,7 +23,8 @@ struct Question: Sendable, Hashable, Identifiable {
 }
 
 extension Question {
-    static let mock: Question = {
-        Question(id: 1, title: "test", bodyHTML: "sxs", tags: [], isAnswered: true, viewCount: 120, answerCount: 21, score: 2, askedAt: Date(), activeAt: Date(), acceptedAnswerID: 21, link: nil, owner: nil)
-    }()
+    static func mock() -> Question {
+        let id = Int64.random(in: 0...10)
+        return Question(id: id, title: "question \(id)", bodyHTML: "sxs", tags: [], isAnswered: true, viewCount: 120, answerCount: 21, score: 2, askedAt: Date(), activeAt: Date(), acceptedAnswerID: 21, link: nil, owner: nil)
+    }
 }

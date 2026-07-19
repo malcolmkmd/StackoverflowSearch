@@ -74,5 +74,5 @@ struct SearchRowView: View {
 }
 
 #Preview {
-    SearchRowView(question: Question.mock)
+    SearchRowView(question: Question.mock())
 }
