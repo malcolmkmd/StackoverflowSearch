@@ -7,7 +7,6 @@
 import Foundation
 
 enum APIError: Error, Sendable, Equatable {
-    case encoding(String)
     case decoding(String)
     case transport(String)
     case httpStatus(Int, Data)

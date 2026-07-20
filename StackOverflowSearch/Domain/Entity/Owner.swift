@@ -8,7 +8,7 @@
 import Foundation
 
 struct Owner: Sendable, Hashable, Identifiable {
-    var id: Int64
+    var id: Int
     let displayName: String
     let reputation: Int
     let avatarURL: URL?

@@ -16,7 +16,7 @@ struct RemoteApiClientTests {
         await mockHTTPClient.stubSuccess(data: TestFixtures.questionListJSON)
         
         let client = RemoteApiClient(httpClient: mockHTTPClient)
-        let dto: QuestionListResponseDTO = try await client.request(QuestionsRequest(page: 1))
+        let dto: QuestionListResponseDTO = try await client.request(SearchRequest(query: "swift", page: 1))
         
         #expect(dto.items.count == 1)
         #expect(dto.hasMore == true)
@@ -28,7 +28,7 @@ struct RemoteApiClientTests {
             return
         }
         #expect(httpMethod == "GET")
-        #expect(url?.absoluteString == "https://api.stackexchange.com/2.2/questions?pagesize=20&site=stackoverflow&filter=withbody&page=1&order=desc&sort=activity")
+        #expect(url?.absoluteString == "https://api.stackexchange.com/2.2/search/advanced?pagesize=20&site=stackoverflow&filter=withbody&page=1&order=desc&sort=activity&title=swift")
     }
     
     enum RequestErrorCase: String, CaseIterable, Sendable {
@@ -50,34 +50,34 @@ struct RemoteApiClientTests {
         case .noConnection:
             await mockHTTPClient.stubFailure(URLError(.notConnectedToInternet))
             await #expect(throws: APIError.transport("no connection")) {
-                try await client.request(QuestionsRequest(page: 1)) as QuestionListResponseDTO
+                try await client.request(SearchRequest(query: "swift", page: 1)) as QuestionListResponseDTO
             }
         case .networkConnectionLost:
             await mockHTTPClient.stubFailure(URLError(.networkConnectionLost))
             await #expect(throws: APIError.transport("no connection")) {
-                try await client.request(QuestionsRequest(page: 1)) as QuestionListResponseDTO
+                try await client.request(SearchRequest(query: "swift", page: 1)) as QuestionListResponseDTO
             }
         case .dataNotAllowed:
             await mockHTTPClient.stubFailure(URLError(.dataNotAllowed))
             await #expect(throws: APIError.transport("no connection")) {
-                try await client.request(QuestionsRequest(page: 1)) as QuestionListResponseDTO
+                try await client.request(SearchRequest(query: "swift", page: 1)) as QuestionListResponseDTO
             }
         case .transport:
             let urlError = URLError(.timedOut)
             await mockHTTPClient.stubFailure(urlError)
             await #expect(throws: APIError.transport(urlError.localizedDescription)) {
-                try await client.request(QuestionsRequest(page: 1)) as QuestionListResponseDTO
+                try await client.request(SearchRequest(query: "swift", page: 1)) as QuestionListResponseDTO
             }
         case .httpStatus:
             let body = Data("not found".utf8)
             await mockHTTPClient.stubSuccess(data: body, statusCode: 404)
             await #expect(throws: APIError.httpStatus(404, body)) {
-                try await client.request(QuestionsRequest(page: 1)) as QuestionListResponseDTO
+                try await client.request(SearchRequest(query: "swift", page: 1)) as QuestionListResponseDTO
             }
         case .decoding:
             await mockHTTPClient.stubSuccess(data: Data("not-json".utf8))
             let error = await #expect(throws: APIError.self) {
-                try await client.request(QuestionsRequest(page: 1)) as QuestionListResponseDTO
+                try await client.request(SearchRequest(query: "swift", page: 1)) as QuestionListResponseDTO
             }
             guard case .decoding = error else {
                 Issue.record("Expected decoding error, got \(String(describing: error))")
@@ -86,7 +86,7 @@ struct RemoteApiClientTests {
         case .cancellation:
             await mockHTTPClient.stubFailure(CancellationError())
             await #expect(throws: CancellationError.self) {
-                try await client.request(QuestionsRequest(page: 1)) as QuestionListResponseDTO
+                try await client.request(SearchRequest(query: "swift", page: 1)) as QuestionListResponseDTO
             }
         }
     }

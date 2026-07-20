@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct StackOverflowSearchApp: App {
+    
+    private let dependencies = AppDependencies.live()
+    
     var body: some Scene {
         WindowGroup {
-            SearchView()
+            SearchView(questionRepository: dependencies.questionRepository)
         }
     }
 }

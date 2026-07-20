@@ -7,7 +7,7 @@
 import Foundation
 
 struct Question: Sendable, Hashable, Identifiable {
-    let id: Int64
+    let id: Int
     let title: String
     let bodyHTML: String
     let tags: [String]
@@ -24,7 +24,7 @@ struct Question: Sendable, Hashable, Identifiable {
 
 extension Question {
     static func mock() -> Question {
-        let id = Int64.random(in: 0...10)
+        let id = Int.random(in: 0...10)
         return Question(id: id, title: "question \(id)", bodyHTML: "sxs", tags: [], isAnswered: true, viewCount: 120, answerCount: 21, score: 2, askedAt: Date(), activeAt: Date(), acceptedAnswerID: 21, link: nil, owner: nil)
     }
 }

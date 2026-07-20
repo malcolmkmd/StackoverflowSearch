@@ -19,8 +19,20 @@ final class SearchViewModel {
     var viewState: ViewState = .loaded([Question.mock(), Question.mock()])
     var query = ""
     var path: [AppRoute] = []
+    private let questionRepository: any QuestionRepository
     
-    init() {}
+    init(questionRepository: any QuestionRepository) {
+        self.questionRepository = questionRepository
+    }
+    
+    func loadInitial() async {
+        do {
+            let page = try await questionRepository.fetchQuestions(query: query, page: 1)
+            viewState = .loaded(page.items)
+        } catch {
+            viewState = .failed(error.localizedDescription)
+        }
+    }
     
     func didSelect(_ question: Question) {
         path.append(.questionDetail(question))

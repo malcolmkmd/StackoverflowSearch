@@ -11,8 +11,8 @@ struct SearchView: View {
     
     @State private var viewModel: SearchViewModel
     
-    init() {
-        _viewModel = State(initialValue: SearchViewModel())
+    init(questionRepository: any QuestionRepository) {
+        _viewModel = State(initialValue: SearchViewModel(questionRepository: questionRepository))
     }
     
     var body: some View {
@@ -21,12 +21,16 @@ struct SearchView: View {
                 header
                 searchField
                 content
-            }.navigationDestination(for: AppRoute.self) { route in
+            }
+            .background(Color(.systemBackground))
+            .navigationDestination(for: AppRoute.self) { route in
                 switch route {
                 case .questionDetail(let question):
                     QuestionDetailView(question: question)
                 }
             }
+        }.task {
+            await viewModel.loadInitial()
         }
     }
     
@@ -103,9 +107,5 @@ struct SearchView: View {
             Text("something went wrong: \(message)")
         }
     }
-}
-
-#Preview {
-    SearchView()
 }
 
