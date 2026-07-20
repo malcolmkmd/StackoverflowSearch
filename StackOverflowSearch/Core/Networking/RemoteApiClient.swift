@@ -15,7 +15,10 @@ struct RemoteApiClient: ApiClient {
     private let httpClient: any HTTPClient
     private let decoder: JSONDecoder
     
-    init(httpClient: any HTTPClient, decoder: JSONDecoder) {
+    init(
+        httpClient: any HTTPClient = URLSession.shared,
+        decoder: JSONDecoder = JSONDecoder()
+    ) {
         self.httpClient = httpClient
         self.decoder = decoder
     }
