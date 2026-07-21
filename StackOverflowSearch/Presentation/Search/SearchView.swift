@@ -132,6 +132,7 @@ struct SearchView: View {
                     Text(message)
                 } actions: {
                     Button("Retry") { viewModel.retry() }
+                        .buttonStyle(.borderedProminent)
                 }
             }
         }

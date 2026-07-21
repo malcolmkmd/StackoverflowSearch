@@ -68,6 +68,7 @@ struct AnswerList: View {
                     Text(message)
                 } actions: {
                     Button("Retry") { viewModel.retry() }
+                        .buttonStyle(.borderedProminent)
                 }
                 .frame(minHeight: 180)
             }

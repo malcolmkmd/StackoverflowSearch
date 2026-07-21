@@ -58,7 +58,7 @@ final class PaginatedList<Item: Identifiable & Equatable & Sendable> {
                 self.hasMorePages = page.hasMore
             } catch {
                 guard !Task.isCancelled, !(error is CancellationError) else { return }
-                self.viewState = .failed(("Something went wrong."))
+                self.viewState = .failed((error.localizedDescription))
             }
         }
     }
