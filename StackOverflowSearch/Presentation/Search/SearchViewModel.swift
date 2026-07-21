@@ -18,6 +18,7 @@ final class SearchViewModel {
     var isPrefetching: Bool { list.isPrefetching }
 
     var query = ""
+    @ObservationIgnored private var lastQuery: String?
     var path: [AppRoute] = []
 
     private let list = PaginatedList<Question>()
@@ -29,18 +30,25 @@ final class SearchViewModel {
     }
     
     func loadInitial() {
-        queryDidChange(instant: true)
+        loadCurrentQuery(instant: true, force: true)
     }
 
     func queryDidChange(instant: Bool = false) {
-        let requestedQuery = query
-        list.load(delayNanoseconds: instant ? 0 : Self.debounceNanoseconds) { [questionRepository] page in
-            try await questionRepository.fetchQuestions(query: requestedQuery, page: page)
-        }
+        loadCurrentQuery(instant: instant)
     }
 
     func retry() {
-        queryDidChange(instant: true)
+        loadCurrentQuery(instant: true, force: true)
+    }
+    
+    private func loadCurrentQuery(instant: Bool = false, force: Bool = false) {
+        let requestedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard force || lastQuery != requestedQuery else { return }
+        lastQuery = requestedQuery
+        
+        list.load(delayNanoseconds: instant ? 0 : Self.debounceNanoseconds) { [questionRepository] page in
+            try await questionRepository.fetchQuestions(query: requestedQuery, page: page)
+        }
     }
 
     func didSelectQuestion(_ question: Question) {
