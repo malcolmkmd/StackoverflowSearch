@@ -108,9 +108,14 @@ struct SearchView: View {
         .overlay(alignment: .center) {
             switch viewModel.viewState {
             case .loading:
-                ProgressView()
-                    .controlSize(.extraLarge)
-                    .frame(maxWidth: .infinity)
+                List {
+                    ForEach(0..<8, id: \.self) { _ in
+                        SearchRowSkeleton()
+                            .listRowSeparator(.hidden)
+                    }
+                }
+                .scrollDisabled(true)
+                .listStyle(.plain)
             case .loaded(let questions) where questions.isEmpty:
                 ContentUnavailableView {
                     Label("No questions", systemImage: "magnifyingglass")
