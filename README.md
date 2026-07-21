@@ -12,7 +12,7 @@ A SwiftUI app for searching Stack Overflow questions via the Stack Exchange API
 
 MVVM with clean architecture split:
 
-- **Core/Networking** — protocol-based API client (`HTTPClient`, `ApiClient`), typed endpoints, and error handling.
+- **Core/Networking** — protocol-based API client (`HTTPClient`, `ApiClient`), typed endpoints, and error handling. Unit Tests for Network layer.
 - **Data** — DTOs, mappers, and repository implementations that talk to the network layer.
 - **Domain** — plain entities and repository protocols.
 - **Presentation** — SwiftUI views and view models & shared components.
