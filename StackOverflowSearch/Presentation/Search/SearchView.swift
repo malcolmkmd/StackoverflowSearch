@@ -45,6 +45,7 @@ struct SearchView: View {
             HStack(spacing: 4) {
                 Image("logo")
                     .resizable()
+                    .scaledToFit()
                     .frame(width: 200, height: 40)
                     .foregroundStyle(Theme.orange)
             }

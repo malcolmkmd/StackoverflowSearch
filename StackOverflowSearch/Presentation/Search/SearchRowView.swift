@@ -25,7 +25,7 @@ struct SearchRowView: View {
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text(question.bodyHTML)
+                    Text(question.bodyHTML.strippingHTMLTags())
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
