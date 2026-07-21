@@ -88,7 +88,7 @@ struct QuestionDetailView: View {
                 ForEach(viewModel.question.tags, id: \.self) { tag in
                     Text(tag)
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(Theme.tagForeground)
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Theme.tagBackground)

@@ -31,7 +31,6 @@ struct AnswerList: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 240)
-                .accessibilityLabel("Sort answers")
             }
 
             switch viewModel.viewState {
@@ -48,14 +47,16 @@ struct AnswerList: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .loaded(let answers):
                 ForEach(Array(answers.enumerated()), id: \.element.id) { index, answer in
-                    VStack(spacing: 0) {
+                    VStack(spacing: 4) {
                         AnswerRowView(answer: answer)
                         if index < answers.count - 1 {
-                            Divider()
+                            Rectangle()
+                                .fill(.primary)
+                                .frame(height: 0.5)
+                                .frame(maxWidth: .infinity)
                         }
                     }
                 }
-
                 PaginationFooter(
                     isPrefetching: viewModel.isPrefetching,
                     hasMorePages: viewModel.hasMorePages

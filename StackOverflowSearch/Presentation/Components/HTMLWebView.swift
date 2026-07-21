@@ -69,7 +69,10 @@ struct HTMLWebView: UIViewRepresentable {
             <html>
             <head>
             <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-            <style> :root { color-scheme: light dark; }</style>
+            <style>
+              :root { color-scheme: light dark; }
+              img, svg { max-width: 100%; height: auto; }
+            </style>
             </head>
             <body>\(body)</body>
             </html>
