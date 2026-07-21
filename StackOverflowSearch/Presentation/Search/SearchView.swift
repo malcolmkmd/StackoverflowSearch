@@ -10,8 +10,10 @@ import SwiftUI
 struct SearchView: View {
     
     @State private var viewModel: SearchViewModel
+    private let questionRepository: QuestionRepository
     
     init(questionRepository: any QuestionRepository) {
+        self.questionRepository = questionRepository
         _viewModel = State(initialValue: SearchViewModel(questionRepository: questionRepository))
     }
     
@@ -26,7 +28,10 @@ struct SearchView: View {
             .navigationDestination(for: AppRoute.self) { route in
                 switch route {
                 case .questionDetail(let question):
-                    QuestionDetailView(question: question)
+                    QuestionDetailView(
+                        question: question,
+                        questionRepository: questionRepository
+                    )
                 }
             }
         }.task {
