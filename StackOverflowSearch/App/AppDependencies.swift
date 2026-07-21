@@ -8,6 +8,7 @@
 @MainActor
 struct AppDependencies {
     let questionRepository: any QuestionRepository
+    let networkMonitor = NetworkMonitor()
     
     static func live() -> AppDependencies {
         AppDependencies(questionRepository: QuestionRepositoryImpl(apiClient: RemoteApiClient()))

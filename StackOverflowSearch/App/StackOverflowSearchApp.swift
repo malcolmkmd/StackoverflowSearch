@@ -15,6 +15,7 @@ struct StackOverflowSearchApp: App {
     var body: some Scene {
         WindowGroup {
             SearchView(questionRepository: dependencies.questionRepository)
+                .noNetworkOverlay(monitor: dependencies.networkMonitor)
         }
     }
 }
