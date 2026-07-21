@@ -102,6 +102,7 @@ struct SearchView: View {
             .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
+        .scrollDismissesKeyboard(.immediately)
         .isNearBottom {
             viewModel.prefetchNextPageIfNeeded()
         }
