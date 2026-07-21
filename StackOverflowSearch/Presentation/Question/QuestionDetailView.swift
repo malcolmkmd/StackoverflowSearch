@@ -26,11 +26,19 @@ struct QuestionDetailView: View {
                 questionBody
                 tags
                 askerBlock
+                Divider()
+                AnswerList(viewModel: viewModel)
             }
             .padding()
         }
         .navigationTitle("More Info")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            viewModel.loadAnswers()
+        }
+        .onDisappear {
+            viewModel.cancelWork()
+        }
     }
 
     private var questionBody: some View {
@@ -45,7 +53,7 @@ struct QuestionDetailView: View {
             .opacity(isQuestionHTMLReady ? 1 : 0)
             
             if !isQuestionHTMLReady {
-                QuestionBodySkeleton()
+                BodySkeleton()
             }
         }
         .frame(height: isQuestionHTMLReady ? questionBodyHeight : 140, alignment: .top)
