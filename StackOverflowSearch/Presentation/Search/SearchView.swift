@@ -30,7 +30,9 @@ struct SearchView: View {
                 }
             }
         }.task {
-            await viewModel.loadInitial()
+            viewModel.loadInitial()
+        }.onChange(of: viewModel.query) {
+            viewModel.queryDidChange()
         }
     }
     
@@ -61,7 +63,7 @@ struct SearchView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
-                .onSubmit { viewModel.onSubmit() }
+                .onSubmit { viewModel.queryDidChange(instant: true, ) }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -76,35 +78,50 @@ struct SearchView: View {
     
     @ViewBuilder
     private var content: some View {
-        switch viewModel.viewState {
-        case .loading:
-            List {
-                ForEach(0..<8, id: \.self) { _ in
-                    Text("Loading")
-                        .listRowSeparator(.visible)
+        List {
+            ForEach(viewModel.questions) { question in
+                Button {
+                    viewModel.didSelectQuestion(question)
+                } label: {
+                    SearchRowView(question: question)
+                }
+                .buttonStyle(.plain)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+            }
+            PaginationFooter(
+                isPrefetching: viewModel.isPrefetching,
+                hasMorePages: viewModel.hasMorePages
+            )
+            .listRowSeparator(.hidden)
+        }
+        .listStyle(.plain)
+        .isNearBottom {
+            viewModel.prefetchNextPageIfNeeded()
+        }
+        .overlay(alignment: .center) {
+            switch viewModel.viewState {
+            case .loading:
+                ProgressView()
+                    .controlSize(.extraLarge)
+                    .frame(maxWidth: .infinity)
+            case .loaded(let questions) where questions.isEmpty:
+                ContentUnavailableView {
+                    Label("No questions", systemImage: "magnifyingglass")
+                } description: {
+                    Text("Try again..")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .loaded: EmptyView()
+            case .failed(let message):
+                ContentUnavailableView {
+                    Label("Something went wrong", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(message)
+                } actions: {
+                    Button("Retry") { viewModel.retry() }
                 }
             }
-            .listStyle(.plain)
-            .scrollDisabled(true)
-        case .loaded(let questions) where questions.isEmpty:
-            Text("Nothing to see here")
-        case .loaded(let questions):
-            List {
-                ForEach(Array(questions.enumerated()), id: \.element.id) { index, question in
-                    Button {
-                        viewModel.didSelect(question)
-                    } label: {
-                        SearchRowView(question: question)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .listRowSeparator(.hidden)
-                }
-            }
-            .listStyle(.plain)
-            .scrollDisabled(true)
-        case .failed(let message):
-            Text("something went wrong: \(message)")
         }
     }
 }
