@@ -2,7 +2,7 @@
 
 Create the files in the order given. Run the commands where they appear. Open a PR where marked.
 
-61 tests when complete.
+159 tests when complete.
 
 `JackpotKit` is one package, so the whole suite runs in a simulator via
 `xcodebuild -scheme JackpotKit-Package`.
@@ -930,8 +930,22 @@ public struct JackpotDateField: View {
         .buttonStyle(.plain)
         .accessibilityLabel(fieldLabel ?? placeholder)
         .accessibilityValue(selection == nil ? "None" : displayedValue)
-        .sheet(isPresented: $isPresented) { sheet }
+        .sheet(isPresented: $isPresented) {
+            if #available(iOS 16.0, *) {
+                sheet
+                    .presentationDetents([.height(sheetHeight)])
+                    .presentationDragIndicator(.visible)
+            } else {
+                sheet
+            }
+        }
     }
+
+    /// Wheel plus title and button. Before iOS 16 there are no detents, so the sheet is full
+    /// height and the spacer pins the button to the bottom instead.
+    private var sheetHeight: CGFloat { wheelHeight + 160 }
+
+    private var wheelHeight: CGFloat { 216 }
 
     private var sheet: some View {
         ZStack {
@@ -947,9 +961,12 @@ public struct JackpotDateField: View {
                                               set: { selection = $0 }),
                            in: range,
                            displayedComponents: .date)
-                    .datePickerStyle(.graphical)
+                    .datePickerStyle(.wheel)
                     .labelsHidden()
+                    .frame(height: wheelHeight)
                     .padding(.horizontal)
+
+                Spacer(minLength: 0)
 
                 Button("Done") {
                     // Confirming without dragging still counts as a choice, otherwise the
@@ -1360,81 +1377,66 @@ Open `JackpotPreviewPanel.swift` and resume the **Gallery** preview.
 
 ## PR 2 — JackpotForms
 
-**18.**
+**19.**
 
 ```bash
-mkdir -p Packages/JackpotForms/Sources/{JackpotFormsDomain,JackpotFormsData,JackpotFormsRemote,JackpotForms}
-mkdir -p Packages/JackpotForms/Sources/JackpotFormsUI/{Fields,Demo,Resources}
-mkdir -p Packages/JackpotForms/Tests/JackpotFormsTests/Fixtures
-cd Packages/JackpotForms
-printf '.build/\n.swiftpm/\n*.xcuserdatad\n' > .gitignore
+mkdir -p JackpotKit/Sources/{JackpotFormsDomain,JackpotFormsData}
+mkdir -p JackpotKit/Sources/JackpotFormsUI/{Fields,Demo,Resources}
+mkdir -p JackpotKit/Tests/JackpotFormsTests/Fixtures
 ```
 
-**19.** `Packages/JackpotForms/Package.swift`
+**20.** `JackpotKit/Package.swift`
 
 ```swift
-// swift-tools-version: 5.7
-import PackageDescription
-
-let package = Package(
-    name: "JackpotForms",
-    defaultLocalization: "en",
-    platforms: [.iOS(.v15)],
-    products: [
-
-        .library(
-            name: "JackpotForms",
-            targets: ["JackpotForms", "JackpotFormsDomain", "JackpotFormsData", "JackpotFormsUI"]
-        ),
-    ],
-    dependencies: [
-        .package(path: "../JackpotUI"),
-    ],
-    targets: [
-
         .target(name: "JackpotFormsDomain"),
-
         .target(name: "JackpotFormsData", dependencies: ["JackpotFormsDomain"]),
-
         .target(
             name: "JackpotFormsUI",
-            dependencies: [
-                "JackpotFormsDomain",
-                .product(name: "JackpotUI", package: "JackpotUI"),
-            ],
+            dependencies: ["JackpotFormsDomain", "JackpotUI"],
             resources: [.process("Resources")]
         ),
-
-
-        .target(
-            name: "JackpotForms",
-            dependencies: [
-                "JackpotFormsData",
-                "JackpotFormsUI",
-            ]
-        ),
-
         .testTarget(
             name: "JackpotFormsTests",
-            dependencies: ["JackpotFormsDomain", "JackpotFormsData", "JackpotFormsUI", "JackpotForms"],
+            dependencies: ["JackpotFormsDomain", "JackpotFormsData", "JackpotFormsUI"],
             resources: [.process("Fixtures")]
         ),
-    ]
-)
 ```
 
-**20.** `Packages/JackpotForms/Sources/JackpotFormsDomain/FormName.swift`
+These append to the `targets:` array of the manifest PR 1 created — three more modules in the
+same package, not a package of their own.
+
+**21.** `JackpotKit/Sources/JackpotFormsDomain/FormName.swift`
 
 ```swift
 import Foundation
 
+/// Identifies a form in the CRM — the `formCodeName` in the schema, and the last path
+/// component of the fetch URL.
+///
+/// Deliberately **not** an enum. Forms are authored server-side and new ones appear
+/// without an app release, so a closed set would fight the architecture: the moment the
+/// CRM serves `deposit`, a `switch` somewhere would stop compiling or a new form would be
+/// unreachable until the next submission to the App Store.
+///
+/// Instead this is the `Notification.Name` pattern — a `RawRepresentable` wrapper with
+/// static members for the forms this build knows about:
+///
+///     DynamicFormView(formName: .registration) { ... }     // autocompleted, typo-proof
+///     DynamicFormView(formName: FormName("deposit")) { ... } // server-authored, still fine
+///
+/// Note it is **not** `ExpressibleByStringLiteral`. If it were, `formName: "registraton"`
+/// would still compile and you'd be back to a runtime 404 — which is the whole problem this
+/// type exists to remove. Constructing one from an arbitrary string is possible but has to be
+/// written out, so `FormName(` is greppable at review time.
 public struct FormName: RawRepresentable, Hashable, Sendable, Codable, CustomStringConvertible {
+
     public let rawValue: String
 
     public init(rawValue: String) {
         self.rawValue = rawValue
     }
 
+    /// Shorthand for the static members below and for server-authored names.
     public init(_ rawValue: String) {
         self.rawValue = rawValue
     }
@@ -1442,20 +1444,282 @@ public struct FormName: RawRepresentable, Hashable, Sendable, Codable, CustomStr
     public var description: String { rawValue }
 }
 
+// MARK: - Known forms
+//
+// Add a case here when the CRM starts serving a form you reference by name in code.
+// Forms you only ever reach dynamically (from a sitemap, a deep link, the forms list
+// endpoint) never need an entry — construct them with `FormName(_:)`.
+
 public extension FormName {
+    /// The two-section sign-up form: credentials + name + email, then FICA.
     static let registration = FormName("registration")
 
+    /// Development-only schema exercising every supported field type.
     static let kitchenSink = FormName("kitchenSink")
 
+    /// Forms bundled with the package as JSON, for mocks, previews and the sandbox.
     static let bundled: [FormName] = [.registration, .kitchenSink]
 }
 ```
 
-**21.** `Packages/JackpotForms/Sources/JackpotFormsDomain/Form.swift`
+**22.** `JackpotKit/Sources/JackpotFormsDomain/FormValue.swift`
 
 ```swift
 import Foundation
 
+/// A field's current value.
+///
+/// Every case can render itself as a string because the schema validates with
+/// regexes — including the checkboxes, whose patterns are literally `^true$`.
+/// `stringValue` is therefore both what gets validated and what gets submitted.
+public enum FormValue: Equatable, Hashable, Sendable {
+    case empty
+    case text(String)
+    case bool(Bool)
+    case option(String)
+    case date(Date)
+
+    public var stringValue: String {
+        switch self {
+        case .empty:            return ""
+        case .text(let s):      return s
+        case .bool(let b):      return b ? "true" : "false"
+        case .option(let v):    return v
+        case .date(let d):      return FormValue.iso8601.string(from: d)
+        }
+    }
+
+    public var isEmpty: Bool {
+        switch self {
+        case .empty:         return true
+        case .text(let s):   return s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .option(let v): return v.isEmpty
+        // An unticked required checkbox is "empty" for the purposes of the required
+        // check — which is what makes `terms` behave correctly.
+        case .bool(let b):   return !b
+        case .date:          return false
+        }
+    }
+
+    public var boolValue: Bool {
+        if case .bool(let b) = self { return b }
+        return stringValue.lowercased() == "true"
+    }
+
+    public var dateValue: Date? {
+        switch self {
+        case .date(let d): return d
+        case .text(let s): return FormValue.iso8601.date(from: s)
+        default:           return nil
+        }
+    }
+
+    /// The `dateOfBirth` regex in the schema expects an ISO-8601 date-time with
+    /// optional fractional seconds and offset, so that is what we emit.
+    public static let iso8601: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+}
+
+/// What the host receives in the submit callback: values keyed by `fieldIdentifier`.
+public struct FormSubmission: Equatable, Sendable {
+    public let formCodeName: FormName
+    public let values: [String: FormValue]
+
+    public init(formCodeName: FormName, values: [String: FormValue]) {
+        self.formCodeName = formCodeName
+        self.values = values
+    }
+
+    public subscript(identifier: String) -> FormValue {
+        values[identifier] ?? .empty
+    }
+
+    /// Flat string payload, ready to become a JSON body.
+    public var stringValues: [String: String] {
+        values.mapValues(\.stringValue)
+    }
+}
+```
+
+**23.** `JackpotKit/Sources/JackpotFormsDomain/FormField.swift`
+
+```swift
+import Foundation
+
+/// What component renders this field.
+///
+/// `unknown` is load-bearing, not defensive padding: the form schema is served from
+/// a CRM that product edits without shipping an app build. If an unrecognised
+/// `fieldType` threw, one CRM edit would brick registration for every installed
+/// version. Unknown fields are skipped and reported instead — see
+/// `DynamicFormModel.unsupportedFields`.
+public enum FieldType: Equatable, Hashable, Sendable {
+    case input
+    case button
+    case checkbox
+    case radio
+    case radioGroup
+    case dropdown
+    case divider
+    case textArea
+    case recaptchaV2
+    case recaptchaV3
+    case toggle
+    case welcomeOffer
+    case unknown(String)
+
+    public init(raw: String) {
+        switch raw.lowercased().replacingOccurrences(of: " ", with: "") {
+        case "input":                    self = .input
+        case "button":                   self = .button
+        case "checkbox":                 self = .checkbox
+        case "radio":                    self = .radio
+        case "radiogroup":               self = .radioGroup
+        case "dropdown", "select":       self = .dropdown
+        case "divider":                  self = .divider
+        case "textarea":                 self = .textArea
+        case "recapchav2", "recaptchav2": self = .recaptchaV2
+        case "recapchav3", "recaptchav3": self = .recaptchaV3
+        case "toggle":                   self = .toggle
+        case "welcomeoffer":             self = .welcomeOffer
+        default:                         self = .unknown(raw)
+        }
+    }
+
+    /// Layout-only types hold no value and are never validated or submitted.
+    public var isDecorative: Bool {
+        switch self {
+        case .divider, .button: return true
+        default:                return false
+        }
+    }
+}
+
+/// Keyboard and formatting hint for `.input`.
+public enum InputType: Equatable, Hashable, Sendable {
+    case text
+    case number
+    case password
+    case email
+    case calendar
+    case phone
+    case unknown(String)
+
+    public init(raw: String) {
+        switch raw.lowercased() {
+        case "text":                  self = .text
+        case "number", "numeric":     self = .number
+        case "password":              self = .password
+        case "email":                 self = .email
+        // The schema spells this "Calender". Accept both so a server-side fix
+        // doesn't silently turn every date field into a plain text box.
+        case "calender", "calendar", "date": self = .calendar
+        case "phone", "tel":          self = .phone
+        default:                      self = .unknown(raw)
+        }
+    }
+}
+
+public struct DropdownOption: Identifiable, Equatable, Hashable, Sendable {
+    /// Submitted value, e.g. "SalaryOrWages".
+    public let value: String
+    /// Localization key for the visible text, e.g. "jpc-reg-SalaryOrWages".
+    public let textKey: String
+    /// Either a regex pattern or the *name* of one — see `RegexResolving`.
+    public let regex: String?
+
+    public var id: String { value }
+
+    public init(value: String, textKey: String, regex: String?) {
+        self.value = value
+        self.textKey = textKey
+        self.regex = regex
+    }
+}
+
+public struct RadioOption: Identifiable, Equatable, Hashable, Sendable {
+    public let value: String
+    public let textKey: String
+
+    public var id: String { value }
+
+    public init(value: String, textKey: String) {
+        self.value = value
+        self.textKey = textKey
+    }
+}
+
+public struct FormField: Identifiable, Equatable, Hashable, Sendable {
+    public let id: Int
+    /// Key used for state, validation and the submitted payload. e.g. "idNumber".
+    public let identifier: String
+    public let name: String
+    /// Localization key for the label.
+    public let labelKey: String
+    public let type: FieldType
+    public let inputType: InputType
+    public let textStyle: String
+    /// Localization key for the validation failure message.
+    public let validationMessageKey: String
+    public let isRequired: Bool
+    public let isVisible: Bool
+    public let isReadOnly: Bool
+    /// Regex the value must match. Server-supplied, so it may be invalid — see `FieldValidator`.
+    public let regex: String?
+    public let prefix: String
+    public let suffix: String
+    /// Localization key for the placeholder.
+    public let placeholderKey: String
+    public let dropdownOptions: [DropdownOption]
+    public let radioOptions: [RadioOption]
+
+    public init(id: Int, identifier: String, name: String, labelKey: String,
+                type: FieldType, inputType: InputType, textStyle: String,
+                validationMessageKey: String, isRequired: Bool, isVisible: Bool, isReadOnly: Bool,
+                regex: String?, prefix: String, suffix: String, placeholderKey: String,
+                dropdownOptions: [DropdownOption], radioOptions: [RadioOption]) {
+        self.id = id
+        self.identifier = identifier
+        self.name = name
+        self.labelKey = labelKey
+        self.type = type
+        self.inputType = inputType
+        self.textStyle = textStyle
+        self.validationMessageKey = validationMessageKey
+        self.isRequired = isRequired
+        self.isVisible = isVisible
+        self.isReadOnly = isReadOnly
+        self.regex = regex
+        self.prefix = prefix
+        self.suffix = suffix
+        self.placeholderKey = placeholderKey
+        self.dropdownOptions = dropdownOptions
+        self.radioOptions = radioOptions
+    }
+
+    /// Fields that hold a value: rendered, validated and submitted.
+    public var carriesValue: Bool {
+        isVisible && !type.isDecorative && !(type == .recaptchaV2 || type == .recaptchaV3)
+    }
+
+    public var isSecure: Bool { inputType == .password }
+}
+```
+
+**24.** `JackpotKit/Sources/JackpotFormsDomain/Form.swift`
+
+```swift
+import Foundation
+
+/// A whole form as the CRM form-builder describes it.
+///
+/// Structure, per the ticket:
+///   • Sections are responsible for paging  (section == one page of the wizard)
+///   • Rows determine the row for inline elements  (fields sharing a row sit side by side)
+///   • Fields belong to rows
 public struct FormSchema: Identifiable, Equatable, Sendable {
     public let id: Int
     public let codeName: FormName
@@ -1474,6 +1738,7 @@ public struct FormSchema: Identifiable, Equatable, Sendable {
         self.sections = sections
     }
 
+    /// Every visible field, in render order, across all sections.
     public var allFields: [FormField] {
         sections.flatMap(\.fields)
     }
@@ -1516,352 +1781,15 @@ public struct FormRow: Identifiable, Equatable, Sendable {
 }
 ```
 
-**22.** `Packages/JackpotForms/Sources/JackpotFormsDomain/FormField.swift`
+**25.** `JackpotKit/Sources/JackpotFormsDomain/PasswordPolicy.swift`
 
 ```swift
 import Foundation
 
-public enum FieldType: Equatable, Hashable, Sendable {
-    case input
-    case button
-    case checkbox
-    case radio
-    case radioGroup
-    case dropdown
-    case divider
-    case textArea
-    case recaptchaV2
-    case recaptchaV3
-    case toggle
-    case welcomeOffer
-    case unknown(String)
-
-    public init(raw: String) {
-        switch raw.lowercased().replacingOccurrences(of: " ", with: "") {
-        case "input":                    self = .input
-        case "button":                   self = .button
-        case "checkbox":                 self = .checkbox
-        case "radio":                    self = .radio
-        case "radiogroup":               self = .radioGroup
-        case "dropdown", "select":       self = .dropdown
-        case "divider":                  self = .divider
-        case "textarea":                 self = .textArea
-        case "recapchav2", "recaptchav2": self = .recaptchaV2
-        case "recapchav3", "recaptchav3": self = .recaptchaV3
-        case "toggle":                   self = .toggle
-        case "welcomeoffer":             self = .welcomeOffer
-        default:                         self = .unknown(raw)
-        }
-    }
-
-    public var isDecorative: Bool {
-        switch self {
-        case .divider, .button: return true
-        default:                return false
-        }
-    }
-}
-
-public enum InputType: Equatable, Hashable, Sendable {
-    case text
-    case number
-    case password
-    case email
-    case calendar
-    case phone
-    case unknown(String)
-
-    public init(raw: String) {
-        switch raw.lowercased() {
-        case "text":                  self = .text
-        case "number", "numeric":     self = .number
-        case "password":              self = .password
-        case "email":                 self = .email
-
-        case "calender", "calendar", "date": self = .calendar
-        case "phone", "tel":          self = .phone
-        default:                      self = .unknown(raw)
-        }
-    }
-}
-
-public struct DropdownOption: Identifiable, Equatable, Hashable, Sendable {
-    public let value: String
-
-    public let textKey: String
-
-    public let regex: String?
-
-    public var id: String { value }
-
-    public init(value: String, textKey: String, regex: String?) {
-        self.value = value
-        self.textKey = textKey
-        self.regex = regex
-    }
-}
-
-public struct RadioOption: Identifiable, Equatable, Hashable, Sendable {
-    public let value: String
-    public let textKey: String
-
-    public var id: String { value }
-
-    public init(value: String, textKey: String) {
-        self.value = value
-        self.textKey = textKey
-    }
-}
-
-public struct FormField: Identifiable, Equatable, Hashable, Sendable {
-    public let id: Int
-
-    public let identifier: String
-    public let name: String
-
-    public let labelKey: String
-    public let type: FieldType
-    public let inputType: InputType
-    public let textStyle: String
-
-    public let validationMessageKey: String
-    public let isRequired: Bool
-    public let isVisible: Bool
-    public let isReadOnly: Bool
-
-    public let regex: String?
-    public let prefix: String
-    public let suffix: String
-
-    public let placeholderKey: String
-    public let dropdownOptions: [DropdownOption]
-    public let radioOptions: [RadioOption]
-
-    public init(id: Int, identifier: String, name: String, labelKey: String,
-                type: FieldType, inputType: InputType, textStyle: String,
-                validationMessageKey: String, isRequired: Bool, isVisible: Bool, isReadOnly: Bool,
-                regex: String?, prefix: String, suffix: String, placeholderKey: String,
-                dropdownOptions: [DropdownOption], radioOptions: [RadioOption]) {
-        self.id = id
-        self.identifier = identifier
-        self.name = name
-        self.labelKey = labelKey
-        self.type = type
-        self.inputType = inputType
-        self.textStyle = textStyle
-        self.validationMessageKey = validationMessageKey
-        self.isRequired = isRequired
-        self.isVisible = isVisible
-        self.isReadOnly = isReadOnly
-        self.regex = regex
-        self.prefix = prefix
-        self.suffix = suffix
-        self.placeholderKey = placeholderKey
-        self.dropdownOptions = dropdownOptions
-        self.radioOptions = radioOptions
-    }
-
-    public var carriesValue: Bool {
-        isVisible && !type.isDecorative && !(type == .recaptchaV2 || type == .recaptchaV3)
-    }
-
-    public var isSecure: Bool { inputType == .password }
-}
-```
-
-**23.** `Packages/JackpotForms/Sources/JackpotFormsDomain/FormValue.swift`
-
-```swift
-import Foundation
-
-public enum FormValue: Equatable, Hashable, Sendable {
-    case empty
-    case text(String)
-    case bool(Bool)
-    case option(String)
-    case date(Date)
-
-    public var stringValue: String {
-        switch self {
-        case .empty:            return ""
-        case .text(let s):      return s
-        case .bool(let b):      return b ? "true" : "false"
-        case .option(let v):    return v
-        case .date(let d):      return FormValue.iso8601.string(from: d)
-        }
-    }
-
-    public var isEmpty: Bool {
-        switch self {
-        case .empty:         return true
-        case .text(let s):   return s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .option(let v): return v.isEmpty
-
-        case .bool(let b):   return !b
-        case .date:          return false
-        }
-    }
-
-    public var boolValue: Bool {
-        if case .bool(let b) = self { return b }
-        return stringValue.lowercased() == "true"
-    }
-
-    public var dateValue: Date? {
-        switch self {
-        case .date(let d): return d
-        case .text(let s): return FormValue.iso8601.date(from: s)
-        default:           return nil
-        }
-    }
-
-    public static let iso8601: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-}
-
-public struct FormSubmission: Equatable, Sendable {
-    public let formCodeName: FormName
-    public let values: [String: FormValue]
-
-    public init(formCodeName: FormName, values: [String: FormValue]) {
-        self.formCodeName = formCodeName
-        self.values = values
-    }
-
-    public subscript(identifier: String) -> FormValue {
-        values[identifier] ?? .empty
-    }
-
-    public var stringValues: [String: String] {
-        values.mapValues(\.stringValue)
-    }
-}
-```
-
-**24.** `Packages/JackpotForms/Sources/JackpotFormsDomain/RegexResolving.swift`
-
-```swift
-import Foundation
-
-public protocol RegexResolving: Sendable {
-    func pattern(named name: String) -> String?
-}
-
-public struct RegexCatalog: RegexResolving {
-    private let patterns: [String: String]
-
-    public init(patterns: [String: String]) {
-        self.patterns = patterns
-    }
-
-    public func pattern(named name: String) -> String? {
-        patterns[name]
-    }
-
-    public static let jpcDefaults = RegexCatalog(patterns: [
-        "idNumberRegex": "^[0-9]{13}$",
-        "passportNumberRegex": "^[a-zA-Z0-9]{5,20}$",
-    ])
-}
-
-public extension String {
-    var looksLikeRegexPattern: Bool {
-        let metacharacters = CharacterSet(charactersIn: "^$[]{}()|*+?\\.")
-        return rangeOfCharacter(from: metacharacters) != nil
-    }
-}
-```
-
-**25.** `Packages/JackpotForms/Sources/JackpotFormsDomain/FieldValidator.swift`
-
-```swift
-import Foundation
-
-public enum ValidationResult: Equatable, Sendable {
-    case valid
-
-    case invalid(messageKey: String)
-
-    public var isValid: Bool { self == .valid }
-}
-
-public struct FieldValidator: Sendable {
-    private let regexResolver: any RegexResolving
-    private let cache = RegexCache()
-
-    public init(regexResolver: any RegexResolving = RegexCatalog.jpcDefaults) {
-        self.regexResolver = regexResolver
-    }
-
-    public func validate(_ value: FormValue,
-                         against field: FormField,
-                         overrideRegex: String? = nil) -> ValidationResult {
-        guard field.carriesValue, !field.isReadOnly else { return .valid }
-
-        if field.isRequired, value.isEmpty {
-            return .invalid(messageKey: field.validationMessageKey)
-        }
-
-        if !field.isRequired, value.isEmpty { return .valid }
-
-        guard let pattern = resolvedPattern(overrideRegex ?? field.regex), !pattern.isEmpty else {
-            return .valid
-        }
-
-        guard let expression = cache.expression(for: pattern) else {
-            return .valid
-        }
-
-        let subject = value.stringValue
-        let range = NSRange(subject.startIndex..<subject.endIndex, in: subject)
-        let matched = expression.firstMatch(in: subject, options: [], range: range) != nil
-        return matched ? .valid : .invalid(messageKey: field.validationMessageKey)
-    }
-
-    public func optionPattern(_ raw: String?) -> String? {
-        resolvedPattern(raw)
-    }
-
-    private func resolvedPattern(_ raw: String?) -> String? {
-        guard let raw, !raw.isEmpty else { return nil }
-        if let named = regexResolver.pattern(named: raw) { return named }
-        return raw.looksLikeRegexPattern ? raw : nil
-    }
-
-    public func invalidPatterns(in form: FormSchema) -> [String] {
-        form.allFields.compactMap { field in
-            guard let pattern = resolvedPattern(field.regex), !pattern.isEmpty else { return nil }
-            return cache.expression(for: pattern) == nil ? pattern : nil
-        }
-    }
-}
-
-private final class RegexCache: @unchecked Sendable {
-    private var storage: [String: NSRegularExpression?] = [:]
-    private let lock = NSLock()
-
-    func expression(for pattern: String) -> NSRegularExpression? {
-        lock.lock()
-        defer { lock.unlock() }
-        if let cached = storage[pattern] { return cached }
-        let compiled = try? NSRegularExpression(pattern: pattern)
-        storage[pattern] = compiled
-        return compiled
-    }
-}
-```
-
-**26.** `Packages/JackpotForms/Sources/JackpotFormsDomain/PasswordPolicy.swift`
-
-```swift
-import Foundation
-
+/// One rule shown in the "Password Validity" panel.
 public struct PasswordRule: Identifiable, Equatable, Sendable {
     public let id: String
-
+    /// Localization key, with a plain-English fallback baked in for the demo.
     public let descriptionKey: String
     public let fallbackDescription: String
     private let test: @Sendable (String) -> Bool
@@ -1879,6 +1807,14 @@ public struct PasswordRule: Identifiable, Equatable, Sendable {
     public static func == (lhs: PasswordRule, rhs: PasswordRule) -> Bool { lhs.id == rhs.id }
 }
 
+/// Supplies the checklist behind the password field.
+///
+/// ⚠️ OPEN QUESTION: the schema gives password a single regex, `^(.){8,20}$`, but the
+/// web UI shows two separate rules ("Minimum of 8 characters", "Maximum of 20
+/// characters") with independent tick states and a strength bar. Those cannot both come
+/// from one regex match. Either web parses the quantifier out of the pattern, or it has
+/// its own rules config. The default below parses the `{min,max}` quantifier, which
+/// reproduces the screenshots exactly for this form — but confirm with the web team.
 public protocol PasswordPolicyProviding: Sendable {
     func rules(for field: FormField) -> [PasswordRule]
 }
@@ -1909,6 +1845,7 @@ public struct PasswordPolicy: PasswordPolicyProviding {
         return rules
     }
 
+    /// Pulls `{8,20}` out of `^(.){8,20}$`.
     static func lengthBounds(in pattern: String?) -> (min: Int?, max: Int?) {
         guard let pattern,
               let expression = try? NSRegularExpression(pattern: #"\{(\d+),(\d+)\}"#),
@@ -1921,15 +1858,189 @@ public struct PasswordPolicy: PasswordPolicyProviding {
 }
 ```
 
-**27.** `Packages/JackpotForms/Sources/JackpotFormsDomain/FormLoadError.swift`
+**26.** `JackpotKit/Sources/JackpotFormsDomain/RegexResolving.swift`
 
 ```swift
 import Foundation
 
+/// Dropdown options in the schema carry a `regex` that is sometimes a pattern
+/// (`"[a-zA-Z]"` on sourceOfFunds) and sometimes a *name* (`"idNumberRegex"`,
+/// `"passportNumberRegex"` on idNumberType). A name has to resolve to a pattern
+/// somewhere; this protocol is that somewhere.
+///
+/// ⚠️ OPEN QUESTION for the backend team — see the guide, "Open questions". Confirm
+/// whether a named regex on an option is meant to (a) validate the option itself, or
+/// (b) *replace* the regex of a dependent field. The registration UI strongly implies
+/// (b): choosing "South African ID" vs "Passport" changes what a valid ID Number is,
+/// and the ID Number field's own regex is `^[0-9]{13}$`, which is SA-ID-specific.
+/// `DynamicFormModel` implements (b) behind `dependentRegexOverrides`; flip it off
+/// with `FormDependencies.appliesOptionRegexToDependentField = false`.
+public protocol RegexResolving: Sendable {
+    /// Pattern for a named regex, or nil if the name is unknown.
+    func pattern(named name: String) -> String?
+}
+
+public struct RegexCatalog: RegexResolving {
+    private let patterns: [String: String]
+
+    public init(patterns: [String: String]) {
+        self.patterns = patterns
+    }
+
+    public func pattern(named name: String) -> String? {
+        patterns[name]
+    }
+
+    /// ⚠️ **These patterns are invented.** The schema references `idNumberRegex` and
+    /// `passportNumberRegex` by *name*; it never sends the patterns, and we haven't been told
+    /// where they live. `idNumberRegex` is safe — it matches the `idNumber` field's own regex
+    /// in the schema (`^[0-9]{13}$`), which is the SA ID format. **`passportNumberRegex` is a
+    /// guess.**
+    ///
+    /// It is deliberately permissive. The two failure modes are not symmetric:
+    ///
+    /// - too strict → a real passport is rejected client-side and the user cannot register at
+    ///   all, with no way to appeal;
+    /// - too loose → the server rejects it and the user sees a message and retries.
+    ///
+    /// The server validates either way, so erring loose costs a round trip and erring strict
+    /// costs a registration. Replace this the moment the real pattern is known — see
+    /// `docs/OPEN-QUESTIONS.md` Q4b.
+    public static let jpcDefaults = RegexCatalog(patterns: [
+        "idNumberRegex": "^[0-9]{13}$",
+        "passportNumberRegex": "^[a-zA-Z0-9]{5,20}$",
+    ])
+}
+
+public extension String {
+    /// Tells a regex *pattern* from a regex *name*.
+    ///
+    /// The schema uses both in the same place: `idNumberType`'s options carry
+    /// `"idNumberRegex"` (a name, which redirects to another field's rule) while
+    /// `sourceOfFunds`'s carry `"[a-zA-Z]"` (a literal pattern describing the selection
+    /// itself). A bare identifier has no metacharacters; a real pattern almost always does.
+    var looksLikeRegexPattern: Bool {
+        let metacharacters = CharacterSet(charactersIn: "^$[]{}()|*+?\\.")
+        return rangeOfCharacter(from: metacharacters) != nil
+    }
+}
+```
+
+**27.** `JackpotKit/Sources/JackpotFormsDomain/FieldValidator.swift`
+
+```swift
+import Foundation
+
+public enum ValidationResult: Equatable, Sendable {
+    case valid
+    /// Localization key for the message to show, plus the field it belongs to.
+    case invalid(messageKey: String)
+
+    public var isValid: Bool { self == .valid }
+}
+
+/// Validates a value against a field's schema rules.
+///
+/// Two things make this less trivial than it looks:
+///  1. The regexes come from a server, so they can be malformed. `NSRegularExpression`
+///     throws on a bad pattern — if that propagated, one CRM typo would crash signup.
+///     A pattern that will not compile is treated as "no constraint", and reported.
+///  2. Compiling a pattern on every keystroke, for every field, is wasteful. Compiled
+///     expressions are cached by pattern string.
+public struct FieldValidator: Sendable {
+    private let regexResolver: any RegexResolving
+    private let cache = RegexCache()
+
+    public init(regexResolver: any RegexResolving = RegexCatalog.jpcDefaults) {
+        self.regexResolver = regexResolver
+    }
+
+    /// - Parameter overrideRegex: pattern that replaces `field.regex`, used when a
+    ///   dropdown selection changes a dependent field's rule (ID type → ID number).
+    public func validate(_ value: FormValue,
+                         against field: FormField,
+                         overrideRegex: String? = nil) -> ValidationResult {
+        guard field.carriesValue, !field.isReadOnly else { return .valid }
+
+        if field.isRequired, value.isEmpty {
+            return .invalid(messageKey: field.validationMessageKey)
+        }
+
+        // An empty optional field has nothing left to check. Note some schema regexes
+        // permit empty explicitly (referralCode: `...|^$`), but not all do, so this
+        // guard is what keeps optional fields genuinely optional.
+        if !field.isRequired, value.isEmpty { return .valid }
+
+        guard let pattern = resolvedPattern(overrideRegex ?? field.regex), !pattern.isEmpty else {
+            return .valid
+        }
+
+        guard let expression = cache.expression(for: pattern) else {
+            // Malformed server pattern: do not block the user on our inability to
+            // compile it. Surfaced via `invalidPatterns` for diagnostics.
+            return .valid
+        }
+
+        let subject = value.stringValue
+        let range = NSRange(subject.startIndex..<subject.endIndex, in: subject)
+        let matched = expression.firstMatch(in: subject, options: [], range: range) != nil
+        return matched ? .valid : .invalid(messageKey: field.validationMessageKey)
+    }
+
+    /// Pattern for a dropdown option's `regex`, resolving names via the catalogue.
+    public func optionPattern(_ raw: String?) -> String? {
+        resolvedPattern(raw)
+    }
+
+    private func resolvedPattern(_ raw: String?) -> String? {
+        guard let raw, !raw.isEmpty else { return nil }
+        if let named = regexResolver.pattern(named: raw) { return named }
+        return raw.looksLikeRegexPattern ? raw : nil
+    }
+
+    /// Patterns in this form that will not compile — worth logging in debug.
+    public func invalidPatterns(in form: FormSchema) -> [String] {
+        form.allFields.compactMap { field in
+            guard let pattern = resolvedPattern(field.regex), !pattern.isEmpty else { return nil }
+            return cache.expression(for: pattern) == nil ? pattern : nil
+        }
+    }
+}
+
+/// Thread-safe compiled-regex cache.
+private final class RegexCache: @unchecked Sendable {
+    private var storage: [String: NSRegularExpression?] = [:]
+    private let lock = NSLock()
+
+    func expression(for pattern: String) -> NSRegularExpression? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = storage[pattern] { return cached }
+        let compiled = try? NSRegularExpression(pattern: pattern)
+        storage[pattern] = compiled
+        return compiled
+    }
+}
+```
+
+**28.** `JackpotKit/Sources/JackpotFormsDomain/FormLoadError.swift`
+
+```swift
+import Foundation
+
+/// Why a form couldn't be loaded, in terms the UI can render.
+///
+/// `JackpotFormsUI` depends on Domain only — never on `JackpotNetworking` — so `APIError` cannot reach
+/// a view model. That's the layering working as intended, but it means the repository has to
+/// translate at the boundary. Without this type the server's own wording ("Mobile number
+/// already registered") gets decoded, carried all the way up, and then thrown away in favour
+/// of a generic string.
+///
+/// `LocalizedError` because that's what `DynamicFormModel` reads.
 public enum FormLoadError: LocalizedError, Equatable {
     case offline
     case notFound(FormName)
-
+    /// The server explained itself. Prefer its wording over ours.
     case server(message: String)
     case unexpected
 
@@ -1948,30 +2059,36 @@ public enum FormLoadError: LocalizedError, Equatable {
 }
 ```
 
-**28.** `Packages/JackpotForms/Sources/JackpotFormsDomain/FormRepository.swift`
+**29.** `JackpotKit/Sources/JackpotFormsDomain/FormLocalizing.swift`
 
 ```swift
 import Foundation
 
-public protocol FormRepository: Sendable {
-    func form(named name: FormName) async throws -> FormSchema
-}
-```
-
-**29.** `Packages/JackpotForms/Sources/JackpotFormsDomain/FormLocalizing.swift`
-
-```swift
-import Foundation
-
+/// The schema ships localization *keys*, not display text: `fieldLabel` is "username",
+/// dropdown text is "jpc-reg-idnumber", `validationMessage` is "regex". The rendered UI
+/// shows "Enter Mobile Number", "South African ID", "Enter in a valid ID number", so a
+/// string catalogue resolves them somewhere.
+///
+/// ⚠️ OPEN QUESTION: every field carries the *same* `validationMessage` value ("regex")
+/// yet the UI shows per-field messages. The key is therefore almost certainly composed,
+/// something like `jpc-reg-{fieldIdentifier}-{validationMessage}`. `ComposedKeyLocalizer`
+/// implements that guess and is a one-line change once the backend confirms the format.
 public protocol FormLocalizing: Sendable {
     func string(forKey key: String) -> String?
 
+    /// Copy for a server error code, when the localisation table carries one.
+    ///
+    /// The app-data response contains entries keyed by error code — `6000328` maps to the
+    /// max-OTP-tries message — so a numeric `code` in an API error envelope is a localisation
+    /// key. Defaulted to nil so an implementation that has no such table (bundled placeholder
+    /// copy, previews) doesn't have to care.
     func message(forErrorCode code: Int) -> String?
 }
 
 public extension FormLocalizing {
     func message(forErrorCode code: Int) -> String? { nil }
 
+    /// Resolve, or fall back to a humanised version of the key so nothing renders blank.
     func display(_ key: String) -> String {
         string(forKey: key) ?? key.humanisedKey
     }
@@ -1984,6 +2101,8 @@ public extension FormLocalizing {
     }
 }
 
+/// Looks up an in-memory table, then a bundle's `.strings`. Good enough for the demo
+/// and for production once the table is fed from the CRM strings endpoint.
 public struct ComposedKeyLocalizer: FormLocalizing {
     private let table: [String: String]
     private let bundle: Bundle?
@@ -2002,6 +2121,7 @@ public struct ComposedKeyLocalizer: FormLocalizing {
 }
 
 public extension String {
+    /// "jpc-reg-idnumber" → "Idnumber";  "firstname" → "Firstname";  "dateOfBirth" → "Date Of Birth"
     var humanisedKey: String {
         var working = self
         if let range = working.range(of: "jpc-reg-") { working.removeSubrange(range) }
@@ -2016,6 +2136,21 @@ public extension String {
     }
 }
 
+/// Wraps any `(key) -> String?` as a localizer.
+///
+/// This is how the app hands the form engine its *existing* `getTranslation` during the
+/// migration, without either package knowing the other exists:
+///
+/// ```swift
+/// ClosureLocalizer { key in
+///     let value = getTranslation(Key: key)
+///     return value == key ? nil : value      // getTranslation returns the key on a miss
+/// }
+/// ```
+///
+/// That last line matters. `FormLocalizing` uses `nil` to mean "unresolved" so the engine
+/// can fall back to humanised copy; without mapping key-on-miss back to `nil`, a missing
+/// string renders as the raw key ("username") instead of a readable label.
 public struct ClosureLocalizer: FormLocalizing {
     private let resolve: @Sendable (String) -> String?
     private let resolveCode: @Sendable (Int) -> String?
@@ -2031,10 +2166,28 @@ public struct ClosureLocalizer: FormLocalizing {
 }
 ```
 
-**30.** `Packages/JackpotForms/Sources/JackpotFormsData/FormDTO.swift`
+**30.** `JackpotKit/Sources/JackpotFormsDomain/FormRepository.swift`
 
 ```swift
 import Foundation
+
+/// Fetches a form definition by name.
+/// Implementation lives in JackpotFormsData; the UI only ever sees this.
+public protocol FormRepository: Sendable {
+    func form(named name: FormName) async throws -> FormSchema
+}
+```
+
+**31.** `JackpotKit/Sources/JackpotFormsData/FormDTO.swift`
+
+```swift
+import Foundation
+
+// Wire shapes, exactly as the CRM form-builder sends them. Nothing outside this file
+// knows about "formSectionCodeName" or the "Calender" spelling.
+//
+// Everything optional except the identifiers we cannot render without. The schema is
+// edited by product in a CMS; a missing `prefix` must not fail the whole decode.
 
 public struct FormDTO: Decodable {
     let formId: Int
@@ -2091,7 +2244,7 @@ public struct FieldRadioDTO: Decodable {
 }
 ```
 
-**31.** `Packages/JackpotForms/Sources/JackpotFormsData/FormMapper.swift`
+**32.** `JackpotKit/Sources/JackpotFormsData/FormMapper.swift`
 
 ```swift
 import Foundation
@@ -2138,7 +2291,8 @@ public enum FormMapper {
             inputType: InputType(raw: dto.inputType ?? "Text"),
             textStyle: dto.textStyle ?? "Regular",
             validationMessageKey: dto.validationMessage ?? "regex",
-
+            // Defaults chosen to fail safe: an unspecified field is optional and
+            // visible rather than silently blocking submission.
             isRequired: dto.isRequired ?? false,
             isVisible: dto.isVisible ?? true,
             isReadOnly: dto.isReadOnly ?? false,
@@ -2157,15 +2311,17 @@ public enum FormMapper {
 }
 ```
 
-**32.** `Packages/JackpotForms/Sources/JackpotFormsData/StubFormRepository.swift`
+**33.** `JackpotKit/Sources/JackpotFormsData/StubFormRepository.swift`
 
 ```swift
 import Foundation
 import JackpotFormsDomain
 
+/// Serves forms from bundled JSON. Backs the demo harness and previews, and lets the
+/// whole feature be built and reviewed before the endpoint is reachable from the app.
 public struct StubFormRepository: FormRepository {
     private let forms: [FormName: Data]
-
+    /// Seconds. (`Duration` is iOS 16 — this package targets 15.)
     private let delay: TimeInterval
     private let error: (any Error)?
 
@@ -2184,28 +2340,51 @@ public struct StubFormRepository: FormRepository {
         return FormMapper.map(try JSONDecoder().decode(FormDTO.self, from: data))
     }
 
+    /// Decodes raw JSON straight to a `form` — handy in tests and previews.
     public static func decode(_ data: Data) throws -> FormSchema {
         FormMapper.map(try JSONDecoder().decode(FormDTO.self, from: data))
     }
 }
 ```
 
-**33.** `Packages/JackpotForms/Sources/JackpotFormsUI/FormDependencies.swift`
+**34.** `JackpotKit/Sources/JackpotFormsUI/FormDependencies.swift`
 
 ```swift
 import SwiftUI
 import JackpotFormsDomain
 
+/// Everything `DynamicFormView` needs that isn't the form name or the callback.
+///
+/// Passing this through the SwiftUI environment is what keeps the public call site at
+/// the two arguments the ticket asks for:
+///
+///     DynamicFormView(formName: .registration) { submission in ... }
+///
+/// while still injecting every dependency explicitly at the composition root:
+///
+///     RootView().formDependencies(.live(repository: repo))
 public struct FormDependencies {
     public var repository: any FormRepository
     public var validator: FieldValidator
     public var localizer: any FormLocalizing
     public var passwordPolicy: any PasswordPolicyProviding
-
+    /// Whether a dropdown option's *named* regex overrides another field's rule.
+    ///
+    /// Confirmed behaviour: the ID Number Type dropdown selects whether the user is entering a
+    /// South African ID or a passport, and the ID Number field must validate accordingly.
     public var appliesOptionRegexToDependentField: Bool
 
+    /// Explicit "this dropdown drives this field's regex" links, keyed by field identifier.
+    ///
+    /// Without this the link is *positional* — the field immediately after the dropdown — which
+    /// works for the current schema but breaks silently if the CRM reorders rows or inserts a
+    /// field between them. On a regulated field (SA ID vs passport) silent breakage is the wrong
+    /// failure mode, so the known link is stated outright and the positional rule is only a
+    /// fallback for links we haven't been told about.
     public var regexDependencies: [String: String]
-
+    /// Latest date a `Calender` field allows. Defaults to 18 years ago: the form's
+    /// only age gate today is the T&C checkbox, and a picker that cannot select an
+    /// under-18 date is a cheap second line of defence.
     public var maximumDateOfBirth: Date
 
     public init(repository: any FormRepository,
@@ -2232,11 +2411,17 @@ public struct FormDependencies {
 }
 
 private struct FormDependenciesKey: EnvironmentKey {
+    /// Deliberately fatal: a form with no repository is a wiring bug, and a silent
+    /// empty form would be much harder to diagnose than a clear crash in development.
     static var defaultValue: FormDependencies {
         FormDependencies(repository: UnavailableFormRepository(assertsWhenCalled: true))
     }
 }
 
+/// Never returns a form. Used wherever a repository is structurally required but must not be
+/// called: the environment default (which asserts, because reaching it means the caller forgot
+/// `.formDependencies(_:)`), the placeholder a two-argument `DynamicFormView` holds until
+/// `.task` swaps in the environment's, and previews that seed a model directly.
 struct UnavailableFormRepository: FormRepository {
     let assertsWhenCalled: Bool
 
@@ -2267,6 +2452,8 @@ public extension View {
 
 #if DEBUG
 public extension FormDependencies {
+    /// Dependencies for previews: never fetches (previews seed the schema directly),
+    /// but carries the real localizer so the copy matches the designs.
     static var preview: FormDependencies {
         FormDependencies(repository: UnavailableFormRepository(),
                          localizer: ComposedKeyLocalizer.jpcRegistration)
@@ -2276,21 +2463,28 @@ public extension FormDependencies {
 #endif
 ```
 
-**34.** `Packages/JackpotForms/Sources/JackpotFormsUI/DynamicFormModel.swift`
+**35.** `JackpotKit/Sources/JackpotFormsUI/DynamicFormModel.swift`
 
 ```swift
 import Foundation
 import Combine
 import JackpotFormsDomain
 
+/// The engine. Owns the fetched schema, every field's value, touched state and errors,
+/// and which section (page) is showing.
+///
+/// `ObservableObject` rather than `@Observable` because this package targets iOS 15.
+/// The upgrade is mechanical when the app moves to 17 — see the guide, "iOS 15 seams".
 @MainActor
 public final class DynamicFormModel: ObservableObject {
+
     public enum ViewState: Equatable {
         case loading
         case loaded(FormSchema)
         case failed(String)
     }
 
+    // MARK: Published state
     @Published public internal(set) var viewState: ViewState = .loading
     @Published public private(set) var values: [String: FormValue] = [:]
     @Published public private(set) var errors: [String: String] = [:]
@@ -2298,25 +2492,36 @@ public final class DynamicFormModel: ObservableObject {
     @Published public private(set) var isSubmitting = false
     @Published public private(set) var submitError: String?
 
+    /// Field types the schema asked for that this build cannot render. Non-fatal by
+    /// design (see `FieldType.unknown`); surfaced so QA and logs can see them.
     @Published public private(set) var unsupportedFields: [String] = []
 
+    // MARK: Inputs
     private let formName: FormName
     private var dependencies: FormDependencies
     private var isConfigured: Bool
     private var touched: Set<String> = []
     private var loadTask: Task<Void, Never>?
 
+    /// - Parameter isConfigured: true when the caller supplied real dependencies. The
+    ///   two-argument `DynamicFormView.init` passes false and lets `configureIfNeeded`
+    ///   swap in the environment's copy on first appearance — `@StateObject` cannot
+    ///   read `@Environment` from an initializer.
     public init(formName: FormName, dependencies: FormDependencies, isConfigured: Bool = true) {
         self.formName = formName
         self.dependencies = dependencies
         self.isConfigured = isConfigured
     }
 
+    /// Adopts environment-provided dependencies exactly once. No-op afterwards, so a
+    /// re-render never resets a half-filled form.
     public func configureIfNeeded(with dependencies: FormDependencies) {
         guard !isConfigured else { return }
         self.dependencies = dependencies
         isConfigured = true
     }
+
+    // MARK: Derived
 
     public var form: FormSchema? {
         if case .loaded(let form) = viewState { return form }
@@ -2330,6 +2535,8 @@ public final class DynamicFormModel: ObservableObject {
     public var isFirstSection: Bool { sectionIndex == 0 }
     public var isLastSection: Bool { sectionIndex >= sections.count - 1 }
 
+    /// Fraction of all required fields across the whole form that currently validate.
+    /// Drives the progress bar at the top of the panel.
     public var progress: Double {
         guard let form else { return 0 }
         let required = form.allFields.filter { $0.carriesValue && $0.isRequired }
@@ -2338,6 +2545,7 @@ public final class DynamicFormModel: ObservableObject {
         return Double(satisfied) / Double(required.count)
     }
 
+    /// Whether the visible section can be advanced past / submitted.
     public var isCurrentSectionValid: Bool {
         guard let section = currentSection else { return false }
         return section.fields.filter(\.carriesValue).allSatisfy(isValid)
@@ -2352,6 +2560,7 @@ public final class DynamicFormModel: ObservableObject {
         values[field.identifier] ?? defaultValue(for: field)
     }
 
+    /// Error text for a field, or nil while it is untouched.
     public func error(for field: FormField) -> String? {
         touched.contains(field.identifier) ? errors[field.identifier] : nil
     }
@@ -2363,6 +2572,8 @@ public final class DynamicFormModel: ObservableObject {
     }
 
     public var maximumDateOfBirth: Date { dependencies.maximumDateOfBirth }
+
+    // MARK: Loading
 
     public func load() {
         loadTask?.cancel()
@@ -2404,19 +2615,25 @@ public final class DynamicFormModel: ObservableObject {
         }
     }
 
+    // MARK: Editing
+
     public func setValue(_ value: FormValue, for field: FormField) {
         values[field.identifier] = value
         validate(field)
-
+        // A dropdown can change a dependent field's rule (ID type → ID number), so
+        // anything downstream of it has to be re-checked, not just this field.
         if field.type == .dropdown, dependencies.appliesOptionRegexToDependentField {
             revalidateDependents(of: field)
         }
     }
 
+    /// Call on blur, or on first edit, so errors don't appear before the user has typed.
     public func markTouched(_ field: FormField) {
         touched.insert(field.identifier)
         objectWillChange.send()
     }
+
+    // MARK: Validation
 
     private func isValid(_ field: FormField) -> Bool {
         errors[field.identifier] == nil
@@ -2451,6 +2668,12 @@ public final class DynamicFormModel: ObservableObject {
         dependents.forEach { validate($0) }
     }
 
+    /// The dropdown that drives `field`'s regex, if any.
+    ///
+    /// Links are declared in `FormDependencies.regexDependencies`, never inferred from field
+    /// order. An earlier version fell back to "the dropdown immediately before this field",
+    /// which worked for the current schema but would have re-enabled silent breakage on a
+    /// reorder — the exact fragility declaring the link was meant to remove.
     private func regexDriver(for field: FormField) -> FormField? {
         guard dependencies.appliesOptionRegexToDependentField,
               let form,
@@ -2461,6 +2684,11 @@ public final class DynamicFormModel: ObservableObject {
         return driver
     }
 
+    /// The pattern a dropdown's current selection imposes on `field`, if any.
+    ///
+    /// Only *named* regexes redirect. `idNumberType`'s options carry `"idNumberRegex"` /
+    /// `"passportNumberRegex"` — names — while `sourceOfFunds`'s carry `"[a-zA-Z]"`, a literal
+    /// pattern that describes the selection itself and must not leak onto another field.
     private func overrideRegex(for field: FormField) -> String? {
         guard let driver = regexDriver(for: field),
               case .option(let selected) = value(for: driver),
@@ -2473,6 +2701,9 @@ public final class DynamicFormModel: ObservableObject {
         return dependencies.validator.optionPattern(raw)
     }
 
+    // MARK: Paging
+
+    /// Advances if the visible section validates; otherwise reveals its errors.
     @discardableResult
     public func advance() -> Bool {
         guard let section = currentSection else { return false }
@@ -2490,6 +2721,8 @@ public final class DynamicFormModel: ObservableObject {
         guard sectionIndex > 0 else { return }
         sectionIndex -= 1
     }
+
+    // MARK: Submitting
 
     public func submit(_ handler: @escaping (FormSubmission) async throws -> Void) async {
         guard let form else { return }
@@ -2521,8 +2754,13 @@ public final class DynamicFormModel: ObservableObject {
 }
 
 #if DEBUG
-
+// Preview support. Lives in this file because `apply(_:)` is private, and `private`
+// in Swift is file-scoped — so an extension here can seed a model without widening
+// the type's real API.
 public extension DynamicFormModel {
+
+    /// A model already holding `schema`, with no async load — previews render instantly
+    /// and deterministically instead of flashing a skeleton.
     static func preview(schema: FormSchema,
                         dependencies: FormDependencies = .preview,
                         values: [String: FormValue] = [:],
@@ -2542,10 +2780,12 @@ public extension DynamicFormModel {
         return model
     }
 
+    /// Stuck on the loading state, for previewing the skeleton.
     static func previewLoading(dependencies: FormDependencies = .preview) -> DynamicFormModel {
         DynamicFormModel(formName: FormName("preview"), dependencies: dependencies)
     }
 
+    /// Parked on the failure state.
     static func previewFailed(_ message: String = "The network connection was lost.") -> DynamicFormModel {
         let model = DynamicFormModel(formName: FormName("preview"), dependencies: .preview)
         model.viewState = .failed(message)
@@ -2555,7 +2795,7 @@ public extension DynamicFormModel {
 #endif
 ```
 
-**35.** `Packages/JackpotForms/Sources/JackpotFormsUI/Demo/PreviewFixtures.swift`
+**36.** `JackpotKit/Sources/JackpotFormsUI/Demo/PreviewFixtures.swift`
 
 ```swift
 #if DEBUG
@@ -2563,7 +2803,16 @@ import SwiftUI
 import JackpotUI
 import JackpotFormsDomain
 
+/// Hand-built fixtures mirroring the real registration schema.
+///
+/// Built in Swift rather than decoded from the bundled JSON on purpose: `JackpotFormsUI`
+/// does not depend on `JackpotFormsData`, so it has no decoder — and previews that don't
+/// touch the bundle render faster and can't fail on a missing resource. The JSON-backed
+/// previews live in `JackpotForms`, which can see both layers.
 public enum FormPreview {
+
+    // MARK: Field builder
+
     public static func field(_ identifier: String,
                              type: FieldType = .input,
                              inputType: InputType = .text,
@@ -2594,6 +2843,8 @@ public enum FormPreview {
             radioOptions: radios
         )
     }
+
+    // MARK: Individual fields, matching the real schema's rules
 
     public static let mobile = field("username", inputType: .number,
                                      regex: "^(27|0)?[1-9][0-9]{8}$", prefix: "+27")
@@ -2642,27 +2893,9 @@ public enum FormPreview {
 
     public static let terms = field("terms", type: .checkbox, required: true, regex: "^true$")
 
-    public static let notes = field("notes", type: .textArea, label: "Notes",
-                                    placeholder: "Anything else?", required: false)
+    // MARK: Whole schemas
 
-    public static let contactMethod = field(
-        "contactMethod", type: .radioGroup, label: "Preferred contact method", required: true,
-        regex: "^.+$",
-        radios: [
-            RadioOption(value: "sms", textKey: "SMS"),
-            RadioOption(value: "email", textKey: "Email"),
-            RadioOption(value: "whatsapp", textKey: "WhatsApp"),
-        ]
-    )
-
-    public static let welcomeOffer = field(
-        "welcomeOffer", type: .welcomeOffer, label: "Select your Welcome Offer:", required: false,
-        dropdowns: [
-            DropdownOption(value: "depositMatch", textKey: "100% Deposit Match", regex: nil),
-            DropdownOption(value: "freeSpins", textKey: "50 Free Spins", regex: nil),
-        ]
-    )
-
+    /// The two-section registration form, structured exactly as the CRM sends it.
     public static let registration = FormSchema(
         id: 1052, codeName: .registration, title: "registration", subTitle: "registration",
         regionCode: "JZA",
@@ -2686,12 +2919,15 @@ public enum FormPreview {
         ]
     )
 
+    /// A single field wrapped in a one-section schema — for previewing components alone.
     public static func schema(_ fields: [FormField]) -> FormSchema {
         FormSchema(id: 1, codeName: FormName("preview"), title: "", subTitle: "", regionCode: "JZA",
                    sections: [FormSection(id: 1, codeName: "1", title: "", subTitle: "", order: 1,
                                           rows: fields.enumerated().map { FormRow(number: $0.offset + 1, fields: [$0.element]) })])
     }
 
+    /// Model holding just these fields, optionally pre-filled and pre-touched so the
+    /// invalid (red) state can be previewed without interacting.
     @MainActor
     public static func model(_ fields: [FormField],
                             values: [String: FormValue] = [:],
@@ -2699,6 +2935,8 @@ public enum FormPreview {
         .preview(schema: schema(fields), values: values, touched: touched)
     }
 
+    /// Values that make section one valid — useful for previewing the unlocked
+    /// Welcome Offer and the enabled Next button.
     public static let validSectionOne: [String: FormValue] = [
         "username": .text("849134302"),
         "password": .text("Password1"),
@@ -2710,13 +2948,19 @@ public enum FormPreview {
 #endif
 ```
 
-**36.** `Packages/JackpotForms/Sources/JackpotFormsUI/Fields/FieldRenderer.swift`
+**37.** `JackpotKit/Sources/JackpotFormsUI/Fields/FieldRenderer.swift`
 
 ```swift
 import SwiftUI
 import JackpotUI
 import JackpotFormsDomain
 
+/// Maps a schema `fieldType` to a component. This switch is the entire contract between the
+/// form builder and the app: adding a type on the server means adding a case here and
+/// shipping — until then, the unknown case keeps the form usable.
+///
+/// Every case binds the model to a `JackpotUI` component. The components know nothing about
+/// forms; the views in this folder are the only place the two meet.
 struct FieldRenderer: View {
     let field: FormField
     @ObservedObject var model: DynamicFormModel
@@ -2724,20 +2968,18 @@ struct FieldRenderer: View {
     var body: some View {
         switch field.type {
         case .input:                    InputFieldView(field: field, model: model)
-        case .textArea:                 TextAreaFieldView(field: field, model: model)
         case .dropdown:                 DropdownFieldView(field: field, model: model)
         case .checkbox:                 CheckboxFieldView(field: field, model: model)
-        case .toggle:                   ToggleFieldView(field: field, model: model)
-        case .radio, .radioGroup:       RadioGroupFieldView(field: field, model: model)
-        case .divider:                  JackpotDivider()
-        case .welcomeOffer:             WelcomeOfferFieldView(field: field, model: model)
-        case .button:                   EmptyView()
+        case .textArea, .radio, .radioGroup, .toggle, .welcomeOffer, .divider: EmptyView()
+        case .button:                   EmptyView()          // the form's footer owns navigation
         case .recaptchaV2, .recaptchaV3: RecaptchaPlaceholderView(field: field)
-        case .unknown:                  EmptyView()
+        case .unknown:                  EmptyView()          // reported via model.unsupportedFields
         }
     }
 }
 
+/// reCAPTCHA needs a WKWebView bridge; out of scope for the first PR but the type is
+/// recognised so the form still renders and validates around it.
 struct RecaptchaPlaceholderView: View {
     let field: FormField
     @Environment(\.jackpotTheme) private var theme
@@ -2745,35 +2987,70 @@ struct RecaptchaPlaceholderView: View {
     var body: some View {
         #if DEBUG
         Text("reCAPTCHA (\(field.identifier)) — not implemented")
-            .font(.caption)
-            .foregroundColor(theme.textSecondary)
+            .jackpotTextStyle(\.error, color: \.textSecondary)
             .frame(maxWidth: .infinity, minHeight: 60)
-            .jackpotFieldBorder(isInvalid: false)
+            .jackpotFieldBackground()
         #else
         EmptyView()
         #endif
     }
 }
 
+// MARK: - Keyboard focus order
+
+extension FormField {
+    /// Only single-line text entry joins return-key navigation. A date opens a picker, and a
+    /// text area needs the return key for newlines.
+    var acceptsKeyboardFocus: Bool {
+        type == .input && inputType != .calendar
+    }
+}
+
 extension DynamicFormModel {
+    /// The current section's text fields, in the order the return key walks them.
+    var focusableIdentifiers: [String] {
+        (currentSection?.rows ?? [])
+            .flatMap(\.fields)
+            .filter { $0.isVisible && $0.acceptsKeyboardFocus }
+            .map(\.identifier)
+    }
+
+    /// Returns the field after `identifier`, or nil at the end so the keyboard dismisses.
+    func fieldAfter(_ identifier: String?) -> String? {
+        let ids = focusableIdentifiers
+        guard let identifier, let index = ids.firstIndex(of: identifier) else { return nil }
+        let next = ids.index(after: index)
+        return next < ids.endIndex ? ids[next] : nil
+    }
+}
+
+// MARK: - Shared bindings
+
+extension DynamicFormModel {
+    /// Text binding for a field, writing back as `.text`.
     func text(for field: FormField) -> Binding<String> {
         Binding(get: { self.value(for: field).stringValue },
                 set: { self.setValue(.text($0), for: field) })
     }
 
+    // The three below mark the field touched as they write. A discrete choice is a complete
+    // answer, so validating it immediately is right — unlike typing, where `text(for:)` stays
+    // silent and the field reports blur through `onEditingEnded`.
+
+    /// Selection binding for dropdowns and radio groups. An empty selection is `.option("")`.
     func selection(for field: FormField) -> Binding<String?> {
         Binding(get: { let v = self.value(for: field).stringValue; return v.isEmpty ? nil : v },
-                set: { self.setValue(.option($0 ?? ""), for: field) })
+                set: { self.setValue(.option($0 ?? ""), for: field); self.markTouched(field) })
     }
 
     func bool(for field: FormField) -> Binding<Bool> {
         Binding(get: { self.value(for: field).boolValue },
-                set: { self.setValue(.bool($0), for: field) })
+                set: { self.setValue(.bool($0), for: field); self.markTouched(field) })
     }
 
     func date(for field: FormField) -> Binding<Date?> {
         Binding(get: { self.value(for: field).dateValue },
-                set: { self.setValue($0.map(FormValue.date) ?? .empty, for: field) })
+                set: { self.setValue($0.map(FormValue.date) ?? .empty, for: field); self.markTouched(field) })
     }
 
     func options(for field: FormField) -> [JackpotOption] {
@@ -2786,11 +3063,14 @@ extension DynamicFormModel {
 }
 ```
 
-**37.** `Packages/JackpotForms/Sources/JackpotFormsUI/Fields/InputFieldView.swift`
+Registration asks for Input, Dropdown and Checkbox only, so the text area, radio, toggle,
+welcome offer and divider types render nothing here — each is additive and gets its own field
+view when a schema needs it.
+
+**38.** `JackpotKit/Sources/JackpotFormsUI/Fields/InputFieldView.swift`
 
 ```swift
 import SwiftUI
-import UIKit
 import JackpotUI
 import JackpotFormsDomain
 
@@ -2798,65 +3078,65 @@ struct InputFieldView: View {
     let field: FormField
     @ObservedObject var model: DynamicFormModel
 
+    @State private var isEditing = false
+
     var body: some View {
         if field.inputType == .calendar {
             DateFieldView(field: field, model: model)
         } else {
             JackpotLabeledField(error: model.error(for: field)) {
                 VStack(spacing: 6) {
-                    JackpotTextField(
-                        model.localized(field.placeholderKey),
-                        text: model.text(for: field),
-                        prefix: field.prefix,
-                        suffix: field.suffix,
-                        keyboard: keyboard,
-                        contentType: contentType,
-                        autocapitalization: autocapitalization,
-                        isSecure: field.isSecure,
-                        isInvalid: model.error(for: field) != nil,
-                        isDisabled: field.isReadOnly,
-                        onEditingEnded: { model.markTouched(field) }
-                    )
-                    if field.isSecure {
-                        JackpotChecklist(
-                            title: "Password Validity",
-                            items: model.passwordRules(for: field).map { rule in
-                                JackpotChecklistItem(id: rule.id,
-                                                     text: rule.fallbackDescription,
-                                                     isSatisfied: rule.isSatisfied(by: model.value(for: field).stringValue))
-                            }
-                        )
+                    JackpotTextField(model.localized(field.placeholderKey),
+                                     text: model.text(for: field))
+                        .onEditingEnded { model.markTouched(field) }
+                        .onFocusChange { isEditing = $0 }
+                        .jackpotField(kind)
+                        .jackpotFieldPrefix(field.prefix)
+                        .jackpotFieldSuffix(field.suffix)
+                        .jackpotFieldIdentity(field.identifier)
+                        .jackpotSubmitLabel(isLastFocusable ? .done : .next)
+                        .disabled(field.isReadOnly)
+
+                    // The rules are guidance while composing a password, not a permanent
+                    // fixture — once the field is left the error line carries the verdict.
+                    if field.isSecure, isEditing {
+                        JackpotChecklist("Password Validity", items: passwordItems)
+                            .transition(.scale(scale: 0.97, anchor: .top).combined(with: .opacity))
                     }
                 }
+                .animation(.spring(response: 0.35, dampingFraction: 0.9), value: isEditing)
             }
         }
     }
 
-    private var keyboard: UIKeyboardType {
-        switch field.inputType {
-        case .number:  return .numberPad
-        case .phone:   return .phonePad
-        case .email:   return .emailAddress
-        default:       return .default
+    private var isLastFocusable: Bool {
+        model.focusableIdentifiers.last == field.identifier
+    }
+
+    private var passwordItems: [JackpotChecklistItem] {
+        model.passwordRules(for: field).map { rule in
+            JackpotChecklistItem(id: rule.id,
+                                 text: rule.fallbackDescription,
+                                 isSatisfied: rule.isSatisfied(by: model.value(for: field).stringValue))
         }
     }
 
-    private var autocapitalization: TextInputAutocapitalization {
+    private var kind: JackpotFieldKind {
+        if field.isSecure { return .newPassword }
         switch field.inputType {
-        case .email, .password, .number: return .never
-        default:                         return .words
+        case .email:  return .email
+        case .phone:  return .phoneNumber
+        case .number: return .number
+        default:      break
         }
-    }
-
-    private var contentType: UITextContentType? {
+        // Falls back to the identifier, because the schema's `inputType` is coarser than the
+        // autofill hints iOS can use.
         switch field.identifier.lowercased() {
-        case "username", "mobile", "mobilenumber": return .telephoneNumber
-        case "password":                            return .newPassword
-        case "firstname":                           return .givenName
-        case "lastname", "surname":                 return .familyName
-        case "email":                               return .emailAddress
-        case "otp", "pin", "code":                  return .oneTimeCode
-        default:                                    return nil
+        case "username", "mobile", "mobilenumber": return .phoneNumber
+        case "firstname":                          return .givenName
+        case "lastname", "surname":                return .familyName
+        case "email":                              return .email
+        default:                                   return .text.with { $0.capitalization = .words }
         }
     }
 }
@@ -2872,10 +3152,12 @@ struct InputFieldView_Previews: PreviewProvider {
                 InputFieldView(field: FormPreview.mobile,
                                model: FormPreview.model([FormPreview.mobile], values: ["username": .text("123")], touched: ["username"]))
             }.previewDisplayName("Mobile — invalid")
-            JackpotPreviewPanel("Password · 7 chars") {
+            // The checklist is focus-gated, so it stays hidden here; focus the field in the
+            // live preview to see it.
+            JackpotPreviewPanel("Password · 7 chars · unfocused") {
                 InputFieldView(field: FormPreview.password,
                                model: FormPreview.model([FormPreview.password], values: ["password": .text("Passwo1")], touched: ["password"]))
-            }.previewDisplayName("Password — checklist")
+            }.previewDisplayName("Password — rules hidden")
             JackpotPreviewPanel("Optional · empty is fine") {
                 InputFieldView(field: FormPreview.referralCode,
                                model: FormPreview.model([FormPreview.referralCode], touched: ["referralCode"]))
@@ -2887,7 +3169,7 @@ struct InputFieldView_Previews: PreviewProvider {
 #endif
 ```
 
-**38.** `Packages/JackpotForms/Sources/JackpotFormsUI/Fields/DropdownFieldView.swift`
+**39.** `JackpotKit/Sources/JackpotFormsUI/Fields/DropdownFieldView.swift`
 
 ```swift
 import SwiftUI
@@ -2899,15 +3181,11 @@ struct DropdownFieldView: View {
     @ObservedObject var model: DynamicFormModel
 
     var body: some View {
-        JackpotLabeledField(label: model.localized(field.labelKey), error: model.error(for: field)) {
-            JackpotDropdown(
-                model.localized(field.placeholderKey),
-                selection: model.selection(for: field),
-                options: model.options(for: field),
-                isInvalid: model.error(for: field) != nil,
-                isDisabled: field.isReadOnly,
-                onSelect: { model.markTouched(field) }
-            )
+        JackpotLabeledField(model.localized(field.labelKey), error: model.error(for: field)) {
+            JackpotDropdown(model.localized(field.placeholderKey),
+                            selection: model.selection(for: field),
+                            options: model.options(for: field))
+                .disabled(field.isReadOnly)
         }
     }
 }
@@ -2934,127 +3212,27 @@ struct DropdownFieldView_Previews: PreviewProvider {
 #endif
 ```
 
-**39.** `Packages/JackpotForms/Sources/JackpotFormsUI/Fields/CheckboxFieldView.swift`
+**40.** `JackpotKit/Sources/JackpotFormsUI/Fields/DateFieldView.swift`
 
 ```swift
 import SwiftUI
 import JackpotUI
 import JackpotFormsDomain
 
-struct CheckboxFieldView: View {
-    let field: FormField
-    @ObservedObject var model: DynamicFormModel
-
-    var body: some View {
-        JackpotLabeledField(error: model.error(for: field)) {
-            JackpotCheckbox(
-                model.localized(field.labelKey),
-                isOn: model.bool(for: field),
-                isInvalid: model.error(for: field) != nil,
-                isDisabled: field.isReadOnly,
-                onToggle: { model.markTouched(field) }
-            )
-        }
-    }
-}
-
-struct ToggleFieldView: View {
-    let field: FormField
-    @ObservedObject var model: DynamicFormModel
-
-    var body: some View {
-        JackpotLabeledField(error: model.error(for: field)) {
-            JackpotToggleRow(model.localized(field.labelKey),
-                             isOn: model.bool(for: field),
-                             isDisabled: field.isReadOnly,
-                             onToggle: { model.markTouched(field) })
-        }
-    }
-}
-
-#if DEBUG
-struct CheckboxFieldView_Previews: PreviewProvider {
-    static var previews: some View {
-        Group {
-            JackpotPreviewPanel("Unticked · required · touched") {
-                CheckboxFieldView(field: FormPreview.terms, model: FormPreview.model([FormPreview.terms], touched: ["terms"]))
-            }.previewDisplayName("Terms — must be ticked")
-            JackpotPreviewPanel("Ticked") {
-                CheckboxFieldView(field: FormPreview.terms,
-                                  model: FormPreview.model([FormPreview.terms], values: ["terms": .bool(true)]))
-            }.previewDisplayName("Terms — accepted")
-            JackpotPreviewPanel("Optional · wraps") {
-                CheckboxFieldView(field: FormPreview.promoOptIn, model: FormPreview.model([FormPreview.promoOptIn]))
-            }.previewDisplayName("Promotions opt-in")
-        }
-        .previewLayout(.sizeThatFits)
-    }
-}
-#endif
-```
-
-**40.** `Packages/JackpotForms/Sources/JackpotFormsUI/Fields/RadioGroupFieldView.swift`
-
-```swift
-import SwiftUI
-import JackpotUI
-import JackpotFormsDomain
-
-struct RadioGroupFieldView: View {
-    let field: FormField
-    @ObservedObject var model: DynamicFormModel
-
-    var body: some View {
-        JackpotLabeledField(label: model.localized(field.labelKey), error: model.error(for: field)) {
-            JackpotRadioGroup(selection: model.selection(for: field),
-                              options: model.radioOptions(for: field),
-                              isDisabled: field.isReadOnly,
-                              onSelect: { model.markTouched(field) })
-        }
-    }
-}
-
-#if DEBUG
-struct RadioGroupFieldView_Previews: PreviewProvider {
-    static var previews: some View {
-        Group {
-            JackpotPreviewPanel("Nothing chosen") {
-                RadioGroupFieldView(field: FormPreview.contactMethod, model: FormPreview.model([FormPreview.contactMethod]))
-            }.previewDisplayName("Radio — empty")
-            JackpotPreviewPanel("Chosen") {
-                RadioGroupFieldView(field: FormPreview.contactMethod,
-                                    model: FormPreview.model([FormPreview.contactMethod], values: ["contactMethod": .option("email")]))
-            }.previewDisplayName("Radio — selected")
-        }
-        .previewLayout(.sizeThatFits)
-    }
-}
-#endif
-```
-
-**41.** `Packages/JackpotForms/Sources/JackpotFormsUI/Fields/DateFieldView.swift`
-
-```swift
-import SwiftUI
-import JackpotUI
-import JackpotFormsDomain
-
+/// `inputType: "Calender"`. The schema validates against an ISO-8601 date-time, so the
+/// picker's `Date` is serialised through `FormValue.iso8601` rather than a display format.
 struct DateFieldView: View {
     let field: FormField
     @ObservedObject var model: DynamicFormModel
 
     var body: some View {
-        JackpotLabeledField(label: model.localized(field.labelKey), error: model.error(for: field)) {
-            JackpotDateField(
-                model.localized(field.placeholderKey),
-                title: model.localized(field.labelKey),
-                date: model.date(for: field),
-
-                in: ...model.maximumDateOfBirth,
-                isInvalid: model.error(for: field) != nil,
-                isDisabled: field.isReadOnly,
-                onCommit: { model.markTouched(field) }
-            )
+        JackpotLabeledField(model.localized(field.labelKey), error: model.error(for: field)) {
+            // The form's only age gate is the T&C checkbox; capping the picker stops an
+            // under-18 date being entered at all.
+            JackpotDateField(model.localized(field.placeholderKey),
+                             selection: model.date(for: field),
+                             in: ...model.maximumDateOfBirth)
+                .disabled(field.isReadOnly)
         }
     }
 }
@@ -3082,98 +3260,42 @@ struct DateFieldView_Previews: PreviewProvider {
 #endif
 ```
 
-**42.** `Packages/JackpotForms/Sources/JackpotFormsUI/Fields/TextAreaFieldView.swift`
+**41.** `JackpotKit/Sources/JackpotFormsUI/Fields/CheckboxFieldView.swift`
 
 ```swift
 import SwiftUI
 import JackpotUI
 import JackpotFormsDomain
 
-struct TextAreaFieldView: View {
+/// Checkbox values validate as the strings "true"/"false" — the schema's `terms` field
+/// literally uses the pattern `^true$` to mean "must be ticked".
+struct CheckboxFieldView: View {
     let field: FormField
     @ObservedObject var model: DynamicFormModel
 
     var body: some View {
-        JackpotLabeledField(label: model.localized(field.labelKey), error: model.error(for: field)) {
-            JackpotTextArea(model.localized(field.placeholderKey),
-                            text: model.text(for: field),
-                            isInvalid: model.error(for: field) != nil,
-                            isDisabled: field.isReadOnly,
-                            onEditingEnded: { model.markTouched(field) })
+        JackpotLabeledField(error: model.error(for: field)) {
+            Toggle(model.localized(field.labelKey), isOn: model.bool(for: field))
+                .toggleStyle(.jackpotCheckbox)
+                .disabled(field.isReadOnly)
         }
     }
 }
 
 #if DEBUG
-struct TextAreaFieldView_Previews: PreviewProvider {
-    static var previews: some View {
-        JackpotPreviewPanel("Empty") {
-            TextAreaFieldView(field: FormPreview.notes, model: FormPreview.model([FormPreview.notes]))
-        }
-        .previewLayout(.sizeThatFits)
-    }
-}
-#endif
-```
-
-**43.** `Packages/JackpotForms/Sources/JackpotFormsUI/Fields/WelcomeOfferFieldView.swift`
-
-```swift
-import SwiftUI
-import JackpotUI
-import JackpotFormsDomain
-
-struct WelcomeOfferFieldView: View {
-    let field: FormField
-    @ObservedObject var model: DynamicFormModel
-    @Environment(\.jackpotTheme) private var theme
-
-    private var isUnlocked: Bool { model.isFormValid }
-    private var selected: String { model.value(for: field).stringValue }
-
-    var body: some View {
-        VStack(spacing: 10) {
-            Text(model.localized(field.labelKey))
-                .font(.subheadline.weight(.semibold))
-                .foregroundColor(theme.textPrimary)
-
-            HStack(spacing: 10) {
-                ForEach(model.options(for: field)) { option in
-                    JackpotSelectableCard(isSelected: selected == option.id, isEnabled: isUnlocked) {
-                        model.setValue(.option(option.id), for: field)
-                        model.markTouched(field)
-                    } content: {
-                        Text(option.label)
-                            .font(.headline)
-                            .foregroundColor(theme.textPrimary)
-                            .multilineTextAlignment(.center)
-                    }
-                }
-            }
-            .jackpotLocked(!isUnlocked, message: "Complete your registration above to unlock your Welcome offer selection")
-
-            JackpotButton("Not yet", kind: .secondary, isEnabled: isUnlocked) {
-                model.setValue(.option(""), for: field)
-                model.markTouched(field)
-            }
-        }
-    }
-}
-
-#if DEBUG
-struct WelcomeOfferFieldView_Previews: PreviewProvider {
-    private static let fields = [FormPreview.mobile, FormPreview.email, FormPreview.welcomeOffer]
-
+struct CheckboxFieldView_Previews: PreviewProvider {
     static var previews: some View {
         Group {
-            JackpotPreviewPanel("Locked") {
-                WelcomeOfferFieldView(field: FormPreview.welcomeOffer, model: FormPreview.model(fields))
-            }.previewDisplayName("Welcome offer — locked")
-            JackpotPreviewPanel("Unlocked · selected") {
-                WelcomeOfferFieldView(field: FormPreview.welcomeOffer, model: FormPreview.model(fields, values: [
-                    "username": .text("849134302"), "email": .text("hi@example.com"), "welcomeOffer": .option("depositMatch"),
-                ]))
-            }.previewDisplayName("Welcome offer — selected")
+            JackpotPreviewPanel("Unticked · required · touched") {
+                CheckboxFieldView(field: FormPreview.terms, model: FormPreview.model([FormPreview.terms], touched: ["terms"]))
+            }.previewDisplayName("Terms — must be ticked")
+            JackpotPreviewPanel("Ticked") {
+                CheckboxFieldView(field: FormPreview.terms,
+                                  model: FormPreview.model([FormPreview.terms], values: ["terms": .bool(true)]))
+            }.previewDisplayName("Terms — accepted")
+            JackpotPreviewPanel("Optional · wraps") {
+                CheckboxFieldView(field: FormPreview.promoOptIn, model: FormPreview.model([FormPreview.promoOptIn]))
+            }.previewDisplayName("Promotions opt-in")
         }
         .previewLayout(.sizeThatFits)
     }
@@ -3181,14 +3303,24 @@ struct WelcomeOfferFieldView_Previews: PreviewProvider {
 #endif
 ```
 
-**44.** `Packages/JackpotForms/Sources/JackpotFormsUI/DynamicFormView.swift`
+**42.** `JackpotKit/Sources/JackpotFormsUI/DynamicFormView.swift`
 
 ```swift
 import SwiftUI
 import JackpotUI
 import JackpotFormsDomain
 
+/// The single component the ticket asks for.
+///
+///     DynamicFormView(formName: .registration) { submission in
+///         try await api.register(submission.stringValues)
+///     }
+///
+/// Two arguments: the form name used to fetch the schema, and the callback that receives the
+/// collected data. Everything else arrives through the environment (`.formDependencies(_:)`,
+/// `.jackpotTheme(_:)`) so no dependency is hidden in a global.
 public struct DynamicFormView: View {
+
     public typealias SubmitHandler = (FormSubmission) async throws -> Void
 
     private let formName: FormName
@@ -3199,10 +3331,12 @@ public struct DynamicFormView: View {
     @StateObject private var model: DynamicFormModel
     @State private var hasLoaded = false
 
+    /// The two-argument form. Dependencies come from the environment.
     public init(formName: FormName, onSubmit: @escaping SubmitHandler) {
         self.formName = formName
         self.onSubmit = onSubmit
-
+        // @StateObject cannot read @Environment in init, so a placeholder is swapped for the
+        // environment's dependencies on first appearance.
         _model = StateObject(wrappedValue: DynamicFormModel(
             formName: formName,
             dependencies: FormDependencies(repository: UnavailableFormRepository()),
@@ -3210,6 +3344,7 @@ public struct DynamicFormView: View {
         ))
     }
 
+    /// Explicit-dependency form, for previews and tests that don't want an environment.
     public init(formName: FormName, dependencies: FormDependencies, onSubmit: @escaping SubmitHandler) {
         self.formName = formName
         self.onSubmit = onSubmit
@@ -3227,34 +3362,41 @@ public struct DynamicFormView: View {
     }
 }
 
+/// The rendered form for a given model. Separate from `DynamicFormView` so previews can drive
+/// it from a seeded model without a fetch.
 struct DynamicFormBody: View {
     @ObservedObject var model: DynamicFormModel
     let onSubmit: DynamicFormView.SubmitHandler
     @Environment(\.jackpotTheme) private var theme
+    @State private var focusedField: String?
 
     var body: some View {
         switch model.viewState {
         case .loading:
-            JackpotSkeleton().padding(16)
+            ProgressView()
+                .frame(maxWidth: .infinity, minHeight: 220)
+                .accessibilityLabel("Loading form")
 
         case .failed(let message):
-            JackpotErrorView(title: "Couldn't load this form", message: message) { model.load() }
+            JackpotErrorView(message, title: "Couldn't load this form")
+                .onRetry { model.load() }
 
         case .loaded:
             VStack(spacing: 0) {
                 if model.sections.count > 1 {
-                    JackpotProgressBar(progress: model.progress)
+                    ProgressView(value: model.progress)
+                        .progressViewStyle(.jackpotBar)
                         .padding(.horizontal, 16).padding(.top, 12)
                         .accessibilityLabel("Form progress")
                 }
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: theme.spacing) {
+                    VStack(alignment: .leading, spacing: theme.metrics.spacing) {
                         if let section = model.currentSection {
                             ForEach(section.rows) { row in FormRowView(row: row, model: model) }
                         }
                         if let error = model.submitError {
-                            Text(error).font(.footnote).foregroundColor(theme.error)
+                            Text(error).font(.footnote).jackpotForegroundStyle(\.error)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         #if DEBUG
@@ -3270,12 +3412,19 @@ struct DynamicFormBody: View {
                 FormNavigationBar(model: model, onSubmit: onSubmit)
                     .padding(.horizontal, 16).padding(.vertical, 12)
             }
-            .background(theme.surface)
+            .jackpotBackground(\.surface)
             .animation(.easeOut(duration: 0.2), value: model.sectionIndex)
+            .jackpotFocusedField($focusedField)
+            // Fires for whichever field submitted; the shared value says which one that was.
+            .onSubmit { focusedField = model.fieldAfter(focusedField) }
+            .onChange(of: model.sectionIndex) { _ in focusedField = nil }
         }
     }
 }
 
+/// Fields sharing a `rowNumber` render side by side; a single field fills the row. This is
+/// what makes the "+27 | Mobile Number" pairing fall out of the schema rather than being
+/// special-cased.
 struct FormRowView: View {
     let row: FormRow
     @ObservedObject var model: DynamicFormModel
@@ -3299,28 +3448,36 @@ struct FormNavigationBar: View {
     var body: some View {
         HStack(spacing: 12) {
             if !model.isFirstSection {
-                JackpotButton("Previous", kind: .secondary) { model.goBack() }
+                Button("Previous") { model.goBack() }
+                    .buttonStyle(.jackpot(.secondary))
             }
             if model.isLastSection {
-                JackpotButton("Sign Up", isEnabled: model.isFormValid, isLoading: model.isSubmitting) {
-                    Task { await model.submit(onSubmit) }
-                }
+                Button("Sign Up") { Task { await model.submit(onSubmit) } }
+                    .buttonStyle(.jackpot)
+                    .disabled(!model.isFormValid)
+                    .jackpotLoading(model.isSubmitting)
             } else {
-                JackpotButton("Next", isEnabled: model.isCurrentSectionValid) { model.advance() }
+                Button("Next") { _ = model.advance() }
+                    .buttonStyle(.jackpot)
+                    .disabled(!model.isCurrentSectionValid)
             }
         }
     }
 }
 
+
+// MARK: - Previews
+
 #if DEBUG
 struct DynamicFormView_Previews: PreviewProvider {
     private struct Harness: View {
         let model: DynamicFormModel
+        var scheme: ColorScheme = .dark
         var body: some View {
             DynamicFormBody(model: model) { _ in }
                 .frame(height: 620)
-                .background(JackpotTheme.jackpotCity.surface)
-                .preferredColorScheme(.dark)
+                .background(JackpotTheme.jackpotCity.colors.surface)
+                .preferredColorScheme(scheme)
         }
     }
 
@@ -3328,6 +3485,8 @@ struct DynamicFormView_Previews: PreviewProvider {
         Group {
             Harness(model: .preview(schema: FormPreview.registration))
                 .previewDisplayName("Section 1 — empty")
+            Harness(model: .preview(schema: FormPreview.registration), scheme: .light)
+                .previewDisplayName("Section 1 — light")
             Harness(model: .preview(schema: FormPreview.registration, values: FormPreview.validSectionOne))
                 .previewDisplayName("Section 1 — valid, Next enabled")
             Harness(model: .preview(schema: FormPreview.registration,
@@ -3350,16 +3509,18 @@ struct DynamicFormView_Previews: PreviewProvider {
 #endif
 ```
 
-**45.** `Packages/JackpotForms/Sources/JackpotFormsUI/Demo/PreviewSupport.swift`
+**43.** `JackpotKit/Sources/JackpotFormsUI/Demo/PreviewSupport.swift`
 
 ```swift
 import Foundation
 import SwiftUI
 import JackpotFormsDomain
 
+/// Localization table that turns the schema's keys into the copy in the designs.
+/// In production this is fed from the CRM strings endpoint — see the guide.
 public extension ComposedKeyLocalizer {
     static let jpcRegistration = ComposedKeyLocalizer(table: [
-
+        // Placeholders / labels
         "username": "Enter Mobile Number",
         "password": "Password",
         "firstname": "First Name (As it appears on your ID)",
@@ -3374,6 +3535,7 @@ public extension ComposedKeyLocalizer {
         "terms": "I am over 18 years of age & I accept Jackpotcity's Terms & Conditions & Privacy Policy",
         "acceptTermsConditions": "I am over 18 years of age & I accept Jackpotcity's Terms & Conditions & Privacy Policy",
 
+        // Dropdown options
         "jpc-reg-idnumber": "South African ID",
         "jpc-reg-passport": "Passport",
         "jpc-reg-SalaryOrWages": "Salary or Wages",
@@ -3382,6 +3544,7 @@ public extension ComposedKeyLocalizer {
         "jpc-reg-SavingsOrRentalOrOther": "Savings, Rental or Other",
         "jpc-reg-SelfEmployed": "Self Employed",
 
+        // Composed validation messages: jpc-reg-{fieldIdentifier}-{validationMessage}
         "jpc-reg-username-regex": "Enter a valid mobile number",
         "jpc-reg-password-regex": "Password must be 8–20 characters",
         "jpc-reg-firstname-regex": "Enter your first name as it appears on your ID",
@@ -3397,6 +3560,9 @@ public extension ComposedKeyLocalizer {
 }
 
 public enum FormPreviewData {
+    /// Schemas bundled with the package, for the sandbox and previews.
+    /// `Bundle.module` is internal, so it cannot appear in a public default argument —
+    /// hence the explicit overload rather than `bundle: Bundle = .module`.
     public static func bundledJSON(named name: String) -> Data {
         json(named: name, in: .module)
     }
@@ -3410,19 +3576,27 @@ public enum FormPreviewData {
         return data
     }
 
+    /// The two schemas shipped with the package, keyed by `formCodeName` — exactly the
+    /// shape `StubFormRepository(forms:)` wants.
     public static var bundledForms: [FormName: Data] {
         Dictionary(uniqueKeysWithValues: FormName.bundled.map { ($0, bundledJSON(named: $0.rawValue)) })
     }
 }
 ```
 
-**46.** `Packages/JackpotForms/Sources/JackpotFormsUI/Demo/FormSandboxView.swift`
+**44.** `JackpotKit/Sources/JackpotFormsUI/Demo/FormSandboxView.swift`
 
 ```swift
 import SwiftUI
 import JackpotFormsDomain
 
+/// "Create a testing page where we can see this in action." — the ticket.
+///
+/// Pick a form, watch it render from JSON alone, submit it, and read back exactly what
+/// the callback received. Nothing here is app-specific, so it doubles as the review
+/// harness for the PR.
 public struct FormSandboxView: View {
+
     public struct Sample: Identifiable, Hashable {
         public let id: FormName
         public let title: String
@@ -3452,11 +3626,12 @@ public struct FormSandboxView: View {
                 picker
                 Divider()
                 DynamicFormView(formName: selected.id) { submission in
-
+                    // Deliberately not posting anywhere: the sandbox proves the
+                    // callback contract, not the registration endpoint.
                     lastSubmission = submission.stringValues
                     showsSubmission = true
                 }
-                .id(selected.id)
+                .id(selected.id)                 // rebuild the engine when the form changes
                 .formDependencies(dependencies)
             }
             .navigationTitle("Form Sandbox")
@@ -3504,6 +3679,12 @@ struct SubmissionResultView: View {
     }
 }
 
+
+// MARK: - Platform guards
+//
+// The sandbox is an iOS harness, but the package still has to type-check on a macOS
+// host so `swift test` can run the Domain/Data suites from the command line.
+
 extension View {
     @ViewBuilder
     func iOSInlineTitle() -> some View {
@@ -3526,6 +3707,7 @@ extension View {
 
 #if DEBUG
 struct FormSandboxView_Previews: PreviewProvider {
+    /// Serves the hand-built fixtures, so the sandbox previews without the bundle.
     private struct FixtureRepository: FormRepository {
         func form(named name: FormName) async throws -> FormSchema {
             try await Task.sleep(nanoseconds: 300_000_000)
@@ -3546,165 +3728,21 @@ struct FormSandboxView_Previews: PreviewProvider {
 #endif
 ```
 
-**47.** `Packages/JackpotForms/Sources/JackpotFormsUI/Resources/registration.json`
+**45.**
 
-```json
-{
-  "formId": 1052,
-  "formCodeName": "registration",
-  "formTitle": "registration",
-  "formSubTitle": "registration",
-  "regionCode": "JZA",
-  "sections": [
-    {
-      "formSectionId": 45,
-      "formSectionCodeName": "1",
-      "formSectionTitle": "1",
-      "formSectionSubTitle": "1",
-      "formSectionOrder": 1,
-      "rows": [
-        { "rowNumber": 1, "fields": [ { "fieldId": 329, "fieldIdentifier": "username", "fieldName": "username", "fieldLabel": "username", "fieldType": "Input", "inputType": "Number", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^(27|0)?[1-9][0-9]{8}$", "prefix": "+27", "suffix": "", "fieldPlaceholder": "username", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 2, "fields": [ { "fieldId": 330, "fieldIdentifier": "password", "fieldName": "password", "fieldLabel": "password", "fieldType": "Input", "inputType": "Password", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^(.){8,20}$", "prefix": "", "suffix": "", "fieldPlaceholder": "password", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 3, "fields": [ { "fieldId": 331, "fieldIdentifier": "firstname", "fieldName": "first name", "fieldLabel": "firstname", "fieldType": "Input", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[a-zA-Z][a-zA-Z\\-\\.'\\s]{1,20}$", "prefix": "", "suffix": "", "fieldPlaceholder": "firstname", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 4, "fields": [ { "fieldId": 332, "fieldIdentifier": "lastname", "fieldName": "last name", "fieldLabel": "lastname", "fieldType": "Input", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[a-zA-Z][a-zA-Z\\-\\.'\\s]{1,20}$", "prefix": "", "suffix": "", "fieldPlaceholder": "lastname", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 5, "fields": [ { "fieldId": 333, "fieldIdentifier": "email", "fieldName": "email", "fieldLabel": "email", "fieldType": "Input", "inputType": "Email", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$", "prefix": "", "suffix": "", "fieldPlaceholder": "email", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 6, "fields": [ { "fieldId": 334, "fieldIdentifier": "referralCode", "fieldName": "referral code", "fieldLabel": "referralCode", "fieldType": "Input", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[a-zA-Z0-9]{3,25}$|^$", "prefix": "", "suffix": "", "fieldPlaceholder": "referralCode", "fieldDropdowns": [], "fieldRadioGroup": [] } ] }
-      ]
-    },
-    {
-      "formSectionId": 46,
-      "formSectionCodeName": "2",
-      "formSectionTitle": "2",
-      "formSectionSubTitle": "2",
-      "formSectionOrder": 2,
-      "rows": [
-        { "rowNumber": 1, "fields": [ { "fieldId": 335, "fieldIdentifier": "idNumberType", "fieldName": "id number type", "fieldLabel": "idNumberType", "fieldType": "Dropdown", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[a-zA-Z]+$", "prefix": "", "suffix": "", "fieldPlaceholder": "idNumberType", "fieldDropdowns": [ { "value": "idNumber", "text": "jpc-reg-idnumber", "regex": "idNumberRegex" }, { "value": "passport", "text": "jpc-reg-passport", "regex": "passportNumberRegex" } ], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 2, "fields": [ { "fieldId": 336, "fieldIdentifier": "idNumber", "fieldName": "id number", "fieldLabel": "idNumber", "fieldType": "Input", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[0-9]{13}$", "prefix": "", "suffix": "", "fieldPlaceholder": "idNumber", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 3, "fields": [ { "fieldId": 337, "fieldIdentifier": "dateOfBirth", "fieldName": "date of birth", "fieldLabel": "dateOfBirth", "fieldType": "Input", "inputType": "Calender", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2}(?:\\.\\d*)?)((-(\\d{2}):(\\d{2})|Z)?)$", "prefix": "", "suffix": "", "fieldPlaceholder": "dateOfBirth", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 4, "fields": [ { "fieldId": 338, "fieldIdentifier": "sourceOfFunds", "fieldName": "source of funds", "fieldLabel": "sourceOfFunds", "fieldType": "Dropdown", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[a-zA-Z]+$", "prefix": "", "suffix": "", "fieldPlaceholder": "sourceOfFunds", "fieldDropdowns": [ { "value": "SalaryOrWages", "text": "jpc-reg-SalaryOrWages", "regex": "[a-zA-Z]" }, { "value": "PensionOrGrant", "text": "jpc-reg-PensionOrGrant", "regex": "[a-zA-Z]" }, { "value": "AllowanceOrBursary", "text": "jpc-reg-AllowanceOrBursary", "regex": "[a-zA-Z]" }, { "value": "SavingsOrRentalOrOther", "text": "jpc-reg-SavingsOrRentalOrOther", "regex": "[a-zA-Z]" }, { "value": "SelfEmployed", "text": "jpc-reg-SelfEmployed", "regex": "[a-zA-Z]" } ], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 5, "fields": [ { "fieldId": 339, "fieldIdentifier": "receivePromotionalInformation", "fieldName": "receive promotional information", "fieldLabel": "receivePromotionalInformation-jza", "fieldType": "Checkbox", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "^true|^false$", "prefix": "", "suffix": "", "fieldPlaceholder": "receivePromotionalInformation", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 6, "fields": [ { "fieldId": 340, "fieldIdentifier": "terms", "fieldName": "terms", "fieldLabel": "terms", "fieldType": "Checkbox", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^true$", "prefix": "", "suffix": "", "fieldPlaceholder": "acceptTermsConditions", "fieldDropdowns": [], "fieldRadioGroup": [] } ] }
-      ]
-    }
-  ]
-}
+```bash
+cp registration.json JackpotKit/Sources/JackpotFormsUI/Resources/registration.json
+cp JackpotKit/Sources/JackpotFormsUI/Resources/registration.json \
+   JackpotKit/Tests/JackpotFormsTests/Fixtures/registration.json
 ```
 
-**48.** `Packages/JackpotForms/Sources/JackpotFormsUI/Resources/kitchenSink.json`
+The schema fixture is the CRM's `registration` response saved verbatim — 12 fields over two
+sections — copied to `JackpotKit/Sources/JackpotFormsUI/Resources/registration.json`, which
+the target processes as a resource. It is mirrored at
+`JackpotKit/Tests/JackpotFormsTests/Fixtures/registration.json` so the suites below load it
+from their own `Bundle.module` rather than reaching into another target's.
 
-```json
-{
-  "formId": 9001,
-  "formCodeName": "kitchenSink",
-  "formTitle": "Every field type",
-  "formSubTitle": "renderer coverage",
-  "regionCode": "JZA",
-  "sections": [
-    {
-      "formSectionId": 1, "formSectionCodeName": "1", "formSectionTitle": "Inputs", "formSectionSubTitle": "",
-      "formSectionOrder": 1,
-      "rows": [
-        { "rowNumber": 1, "fields": [ { "fieldId": 1, "fieldIdentifier": "plainText", "fieldName": "plain text", "fieldLabel": "Plain text", "fieldType": "Input", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^.{2,}$", "prefix": "", "suffix": "", "fieldPlaceholder": "Type something", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 2, "fields": [ { "fieldId": 2, "fieldIdentifier": "withPrefix", "fieldName": "prefixed", "fieldLabel": "Prefixed number", "fieldType": "Input", "inputType": "Number", "textStyle": "Regular", "validationMessage": "regex", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[0-9]{0,9}$", "prefix": "+27", "suffix": "", "fieldPlaceholder": "Mobile", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 3, "fields": [ { "fieldId": 3, "fieldIdentifier": "secret", "fieldName": "password", "fieldLabel": "Password", "fieldType": "Input", "inputType": "Password", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^(.){8,20}$", "prefix": "", "suffix": "", "fieldPlaceholder": "Password", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 4, "fields": [ { "fieldId": 4, "fieldIdentifier": "notes", "fieldName": "notes", "fieldLabel": "Notes", "fieldType": "Text Area", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "", "prefix": "", "suffix": "", "fieldPlaceholder": "Anything else?", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 5, "fields": [ { "fieldId": 5, "fieldIdentifier": "spacer", "fieldName": "divider", "fieldLabel": "", "fieldType": "Divider", "inputType": "Text", "textStyle": "Regular", "validationMessage": "", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "", "prefix": "", "suffix": "", "fieldPlaceholder": "", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 6, "fields": [ { "fieldId": 6, "fieldIdentifier": "futureThing", "fieldName": "future", "fieldLabel": "Not shipped yet", "fieldType": "SignaturePad", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^.+$", "prefix": "", "suffix": "", "fieldPlaceholder": "", "fieldDropdowns": [], "fieldRadioGroup": [] } ] }
-      ]
-    },
-    {
-      "formSectionId": 2, "formSectionCodeName": "2", "formSectionTitle": "Choices", "formSectionSubTitle": "",
-      "formSectionOrder": 2,
-      "rows": [
-        { "rowNumber": 1, "fields": [ { "fieldId": 7, "fieldIdentifier": "pickOne", "fieldName": "dropdown", "fieldLabel": "Dropdown", "fieldType": "Dropdown", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[a-zA-Z]+$", "prefix": "", "suffix": "", "fieldPlaceholder": "Choose one", "fieldDropdowns": [ { "value": "alpha", "text": "Alpha", "regex": "[a-zA-Z]" }, { "value": "beta", "text": "Beta", "regex": "[a-zA-Z]" } ], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 2, "fields": [ { "fieldId": 8, "fieldIdentifier": "radio", "fieldName": "radio group", "fieldLabel": "Radio group", "fieldType": "Radio Group", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^.+$", "prefix": "", "suffix": "", "fieldPlaceholder": "", "fieldDropdowns": [], "fieldRadioGroup": [ { "value": "one", "text": "Option one" }, { "value": "two", "text": "Option two" } ] } ] },
-        { "rowNumber": 3, "fields": [ { "fieldId": 9, "fieldIdentifier": "when", "fieldName": "date", "fieldLabel": "A date", "fieldType": "Input", "inputType": "Calender", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2}(?:\\.\\d*)?)((-(\\d{2}):(\\d{2})|Z)?)$", "prefix": "", "suffix": "", "fieldPlaceholder": "Pick a date", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 4, "fields": [ { "fieldId": 10, "fieldIdentifier": "optIn", "fieldName": "toggle", "fieldLabel": "A toggle", "fieldType": "Toggle", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "^true|^false$", "prefix": "", "suffix": "", "fieldPlaceholder": "", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 5, "fields": [ { "fieldId": 11, "fieldIdentifier": "agree", "fieldName": "checkbox", "fieldLabel": "I agree to the thing", "fieldType": "Checkbox", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^true$", "prefix": "", "suffix": "", "fieldPlaceholder": "", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 6, "fields": [ { "fieldId": 12, "fieldIdentifier": "welcomeOffer", "fieldName": "welcome offer", "fieldLabel": "Select your Welcome Offer:", "fieldType": "Welcome Offer", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "", "prefix": "", "suffix": "", "fieldPlaceholder": "", "fieldDropdowns": [ { "value": "depositMatch", "text": "100% Deposit Match", "regex": "" }, { "value": "freeSpins", "text": "50 Free Spins", "regex": "" } ], "fieldRadioGroup": [] } ] }
-      ]
-    }
-  ]
-}
-```
-
-**49.** `Packages/JackpotForms/Sources/JackpotForms/JackpotForms.swift`
-
-```swift
-import Foundation
-import JackpotFormsDomain
-import JackpotFormsUI
-import JackpotFormsData
-
-public extension FormDependencies {
-    static func mock(delay: TimeInterval = 0.35,
-                     error: (any Error)? = nil,
-                     localizer: (any FormLocalizing)? = nil) -> FormDependencies {
-        FormDependencies(
-            repository: StubFormRepository(forms: FormPreviewData.bundledForms, delay: delay, error: error),
-            localizer: localizer ?? ComposedKeyLocalizer.jpcRegistration
-        )
-    }
-}
-
-public extension FormSandboxView {
-    static func mocked() -> FormSandboxView {
-        FormSandboxView(
-            samples: [
-                .init(id: .registration, title: "Registration"),
-                .init(id: .kitchenSink, title: "All field types"),
-            ],
-            dependencies: .mock()
-        )
-    }
-}
-```
-
-**50.** `Packages/JackpotForms/Tests/JackpotFormsTests/Fixtures/registration.json`
-
-```json
-{
-  "formId": 1052,
-  "formCodeName": "registration",
-  "formTitle": "registration",
-  "formSubTitle": "registration",
-  "regionCode": "JZA",
-  "sections": [
-    {
-      "formSectionId": 45,
-      "formSectionCodeName": "1",
-      "formSectionTitle": "1",
-      "formSectionSubTitle": "1",
-      "formSectionOrder": 1,
-      "rows": [
-        { "rowNumber": 1, "fields": [ { "fieldId": 329, "fieldIdentifier": "username", "fieldName": "username", "fieldLabel": "username", "fieldType": "Input", "inputType": "Number", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^(27|0)?[1-9][0-9]{8}$", "prefix": "+27", "suffix": "", "fieldPlaceholder": "username", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 2, "fields": [ { "fieldId": 330, "fieldIdentifier": "password", "fieldName": "password", "fieldLabel": "password", "fieldType": "Input", "inputType": "Password", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^(.){8,20}$", "prefix": "", "suffix": "", "fieldPlaceholder": "password", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 3, "fields": [ { "fieldId": 331, "fieldIdentifier": "firstname", "fieldName": "first name", "fieldLabel": "firstname", "fieldType": "Input", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[a-zA-Z][a-zA-Z\\-\\.'\\s]{1,20}$", "prefix": "", "suffix": "", "fieldPlaceholder": "firstname", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 4, "fields": [ { "fieldId": 332, "fieldIdentifier": "lastname", "fieldName": "last name", "fieldLabel": "lastname", "fieldType": "Input", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[a-zA-Z][a-zA-Z\\-\\.'\\s]{1,20}$", "prefix": "", "suffix": "", "fieldPlaceholder": "lastname", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 5, "fields": [ { "fieldId": 333, "fieldIdentifier": "email", "fieldName": "email", "fieldLabel": "email", "fieldType": "Input", "inputType": "Email", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$", "prefix": "", "suffix": "", "fieldPlaceholder": "email", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 6, "fields": [ { "fieldId": 334, "fieldIdentifier": "referralCode", "fieldName": "referral code", "fieldLabel": "referralCode", "fieldType": "Input", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[a-zA-Z0-9]{3,25}$|^$", "prefix": "", "suffix": "", "fieldPlaceholder": "referralCode", "fieldDropdowns": [], "fieldRadioGroup": [] } ] }
-      ]
-    },
-    {
-      "formSectionId": 46,
-      "formSectionCodeName": "2",
-      "formSectionTitle": "2",
-      "formSectionSubTitle": "2",
-      "formSectionOrder": 2,
-      "rows": [
-        { "rowNumber": 1, "fields": [ { "fieldId": 335, "fieldIdentifier": "idNumberType", "fieldName": "id number type", "fieldLabel": "idNumberType", "fieldType": "Dropdown", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[a-zA-Z]+$", "prefix": "", "suffix": "", "fieldPlaceholder": "idNumberType", "fieldDropdowns": [ { "value": "idNumber", "text": "jpc-reg-idnumber", "regex": "idNumberRegex" }, { "value": "passport", "text": "jpc-reg-passport", "regex": "passportNumberRegex" } ], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 2, "fields": [ { "fieldId": 336, "fieldIdentifier": "idNumber", "fieldName": "id number", "fieldLabel": "idNumber", "fieldType": "Input", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[0-9]{13}$", "prefix": "", "suffix": "", "fieldPlaceholder": "idNumber", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 3, "fields": [ { "fieldId": 337, "fieldIdentifier": "dateOfBirth", "fieldName": "date of birth", "fieldLabel": "dateOfBirth", "fieldType": "Input", "inputType": "Calender", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2}(?:\\.\\d*)?)((-(\\d{2}):(\\d{2})|Z)?)$", "prefix": "", "suffix": "", "fieldPlaceholder": "dateOfBirth", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 4, "fields": [ { "fieldId": 338, "fieldIdentifier": "sourceOfFunds", "fieldName": "source of funds", "fieldLabel": "sourceOfFunds", "fieldType": "Dropdown", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[a-zA-Z]+$", "prefix": "", "suffix": "", "fieldPlaceholder": "sourceOfFunds", "fieldDropdowns": [ { "value": "SalaryOrWages", "text": "jpc-reg-SalaryOrWages", "regex": "[a-zA-Z]" }, { "value": "PensionOrGrant", "text": "jpc-reg-PensionOrGrant", "regex": "[a-zA-Z]" }, { "value": "AllowanceOrBursary", "text": "jpc-reg-AllowanceOrBursary", "regex": "[a-zA-Z]" }, { "value": "SavingsOrRentalOrOther", "text": "jpc-reg-SavingsOrRentalOrOther", "regex": "[a-zA-Z]" }, { "value": "SelfEmployed", "text": "jpc-reg-SelfEmployed", "regex": "[a-zA-Z]" } ], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 5, "fields": [ { "fieldId": 339, "fieldIdentifier": "receivePromotionalInformation", "fieldName": "receive promotional information", "fieldLabel": "receivePromotionalInformation-jza", "fieldType": "Checkbox", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "^true|^false$", "prefix": "", "suffix": "", "fieldPlaceholder": "receivePromotionalInformation", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
-        { "rowNumber": 6, "fields": [ { "fieldId": 340, "fieldIdentifier": "terms", "fieldName": "terms", "fieldLabel": "terms", "fieldType": "Checkbox", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^true$", "prefix": "", "suffix": "", "fieldPlaceholder": "acceptTermsConditions", "fieldDropdowns": [], "fieldRadioGroup": [] } ] }
-      ]
-    }
-  ]
-}
-```
-
-**51.** `Packages/JackpotForms/Tests/JackpotFormsTests/FormDecodingTests.swift`
+**46.** `JackpotKit/Tests/JackpotFormsTests/FormDecodingTests.swift`
 
 ```swift
 import XCTest
@@ -3712,6 +3750,7 @@ import XCTest
 import JackpotFormsDomain
 
 final class FormDecodingTests: XCTestCase {
+
     private func loadRegistration() throws -> FormSchema {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "registration", withExtension: "json"))
         return try StubFormRepository.decode(try Data(contentsOf: url))
@@ -3743,12 +3782,17 @@ final class FormDecodingTests: XCTestCase {
         XCTAssertEqual(form.field(identifiedBy: "terms")?.type, .checkbox)
     }
 
+    /// The schema spells it "Calender". If the backend ever fixes the typo we must not
+    /// silently downgrade the date picker to a text box.
     func testCalendarInputTypeAcceptsBothSpellings() {
         XCTAssertEqual(InputType(raw: "Calender"), .calendar)
         XCTAssertEqual(InputType(raw: "Calendar"), .calendar)
         XCTAssertEqual(InputType(raw: "date"), .calendar)
     }
 
+    /// The single most important behaviour in the decoder: a field type this build has
+    /// never heard of must not fail the decode, because product edits the schema in a
+    /// CMS without shipping an app.
     func testUnknownFieldTypeDoesNotFailTheDecode() throws {
         let json = Data("""
         {"formId":1,"formCodeName":"x","sections":[{"formSectionId":1,"rows":[
@@ -3771,7 +3815,7 @@ final class FormDecodingTests: XCTestCase {
         XCTAssertEqual(field.labelKey, "solo")
         XCTAssertEqual(field.placeholderKey, "solo")
         XCTAssertEqual(field.validationMessageKey, "regex")
-        XCTAssertFalse(field.isRequired)
+        XCTAssertFalse(field.isRequired)     // unspecified must not block submission
         XCTAssertTrue(field.isVisible)
         XCTAssertNil(field.regex)
     }
@@ -3786,11 +3830,14 @@ final class FormDecodingTests: XCTestCase {
 }
 
 final class FormNameTests: XCTestCase {
+
     func testKnownNamesMapToTheirCodeNames() {
         XCTAssertEqual(FormName.registration.rawValue, "registration")
         XCTAssertEqual(FormName.kitchenSink.rawValue, "kitchenSink")
     }
 
+    /// Forms are authored server-side, so a name this build has never heard of must still
+    /// be constructible — that's why FormName isn't an enum.
     func testServerAuthoredNamesAreConstructible() {
         let deposit = FormName("deposit")
         XCTAssertEqual(deposit.rawValue, "deposit")
@@ -3814,7 +3861,9 @@ final class FormNameTests: XCTestCase {
 }
 ```
 
-**52.** `Packages/JackpotForms/Tests/JackpotFormsTests/FieldValidatorTests.swift`
+PR 3 appends the remote and localisation suites to this same file.
+
+**47.** `JackpotKit/Tests/JackpotFormsTests/FieldValidatorTests.swift`
 
 ```swift
 import XCTest
@@ -3822,6 +3871,7 @@ import XCTest
 import JackpotFormsDomain
 
 final class FieldValidatorTests: XCTestCase {
+
     private let validator = FieldValidator()
 
     private func field(_ identifier: String,
@@ -3836,12 +3886,14 @@ final class FieldValidatorTests: XCTestCase {
                   dropdownOptions: [], radioOptions: [])
     }
 
+    // MARK: Real patterns from the registration schema
+
     func testMobileNumberPattern() {
         let mobile = field("username", inputType: .number, regex: "^(27|0)?[1-9][0-9]{8}$")
         XCTAssertTrue(validator.validate(.text("849134302"), against: mobile).isValid)
         XCTAssertTrue(validator.validate(.text("0849134302"), against: mobile).isValid)
         XCTAssertTrue(validator.validate(.text("27849134302"), against: mobile).isValid)
-        XCTAssertFalse(validator.validate(.text("049134302"), against: mobile).isValid)
+        XCTAssertFalse(validator.validate(.text("049134302"), against: mobile).isValid)   // leading 0 after prefix
         XCTAssertFalse(validator.validate(.text("12345"), against: mobile).isValid)
     }
 
@@ -3858,17 +3910,23 @@ final class FieldValidatorTests: XCTestCase {
         XCTAssertFalse(validator.validate(.text("900101580008"), against: id).isValid)
     }
 
+    // MARK: Required / optional
+
     func testRequiredEmptyFails() {
         XCTAssertFalse(validator.validate(.text(""), against: field("a", regex: "^.+$")).isValid)
         XCTAssertFalse(validator.validate(.text("   "), against: field("a", regex: "^.+$")).isValid)
     }
 
     func testOptionalEmptyPassesEvenWhenTheRegexWouldNot() {
+        // referralCode's own regex allows empty, but many optional fields' won't —
+        // the empty short-circuit is what makes "optional" mean optional.
         let optional = field("referralCode", required: false, regex: "^[a-zA-Z0-9]{3,25}$")
         XCTAssertTrue(validator.validate(.text(""), against: optional).isValid)
         XCTAssertFalse(validator.validate(.text("ab"), against: optional).isValid)
         XCTAssertTrue(validator.validate(.text("WELCOME50"), against: optional).isValid)
     }
+
+    // MARK: Checkboxes validate as strings
 
     func testRequiredCheckboxMustBeTicked() {
         let terms = field("terms", type: .checkbox, regex: "^true$")
@@ -3876,8 +3934,10 @@ final class FieldValidatorTests: XCTestCase {
         XCTAssertTrue(validator.validate(.bool(true), against: terms).isValid)
     }
 
+    // MARK: Server-supplied patterns are untrusted input
+
     func testMalformedServerPatternDoesNotBlockTheUser() {
-        let broken = field("oops", regex: "^[a-z")
+        let broken = field("oops", regex: "^[a-z")     // will not compile
         XCTAssertTrue(validator.validate(.text("anything"), against: broken).isValid)
     }
 
@@ -3896,11 +3956,17 @@ final class FieldValidatorTests: XCTestCase {
         XCTAssertTrue(validator.validate(.text(""), against: f).isValid)
     }
 
+    // MARK: Named regexes (the ID-type → ID-number dependency)
+
     func testNamedRegexResolvesFromTheCatalogue() {
         XCTAssertEqual(validator.optionPattern("idNumberRegex"), "^[0-9]{13}$")
         XCTAssertNotNil(validator.optionPattern("passportNumberRegex"))
     }
 
+    /// The passport pattern is invented (see `RegexCatalog.jpcDefaults`), so this asserts the
+    /// *property* that matters rather than the literal: it must accept the shapes real
+    /// passport numbers take. Rejecting a valid passport blocks a registration outright;
+    /// accepting a bad one only costs a server round trip.
     func testPassportPatternAcceptsRealisticNumbers() {
         let pattern = validator.optionPattern("passportNumberRegex")!
         let expression = try! NSRegularExpression(pattern: pattern)
@@ -3921,11 +3987,13 @@ final class FieldValidatorTests: XCTestCase {
 
     func testOverrideRegexReplacesTheFieldRule() {
         let id = field("idNumber", regex: "^[0-9]{13}$")
-
+        // Passport selected → 13-digit rule no longer applies.
         XCTAssertTrue(validator.validate(.text("A1234567"), against: id,
                                         overrideRegex: "^[a-zA-Z0-9]{6,12}$").isValid)
         XCTAssertFalse(validator.validate(.text("A1234567"), against: id).isValid)
     }
+
+    // MARK: Password policy parsing
 
     func testPasswordRulesAreDerivedFromTheQuantifier() {
         let rules = PasswordPolicy().rules(for: field("password", inputType: .password, regex: "^(.){8,20}$"))
@@ -3945,7 +4013,7 @@ final class FieldValidatorTests: XCTestCase {
 }
 ```
 
-**53.** `Packages/JackpotForms/Tests/JackpotFormsTests/DynamicFormModelTests.swift`
+**48.** `JackpotKit/Tests/JackpotFormsTests/DynamicFormModelTests.swift`
 
 ```swift
 import XCTest
@@ -3953,8 +4021,11 @@ import XCTest
 import JackpotFormsData
 import JackpotFormsDomain
 
+/// End-to-end validation behaviour against the real registration schema: what the user
+/// actually experiences, rather than the regexes in isolation.
 @MainActor
 final class DynamicFormModelTests: XCTestCase {
+
     private func makeModel(delay: TimeInterval = 0) -> DynamicFormModel {
         let url = Bundle.module.url(forResource: "registration", withExtension: "json")!
         let data = try! Data(contentsOf: url)
@@ -3986,34 +4057,40 @@ final class DynamicFormModelTests: XCTestCase {
         try XCTUnwrap(model.form?.field(identifiedBy: id))
     }
 
+    // MARK: Loading
+
     func testLoadsSchemaAndSeedsEveryField() async throws {
         let model = try await loaded()
         XCTAssertEqual(model.sections.count, 2)
         XCTAssertEqual(model.sectionIndex, 0)
         XCTAssertTrue(model.isFirstSection)
         XCTAssertFalse(model.isLastSection)
-
+        // Checkboxes start false, not empty — so `terms` is correctly invalid up front.
         XCTAssertEqual(model.value(for: try field(model, "terms")), .bool(false))
     }
+
+    // MARK: Errors appear only after the user has engaged
 
     func testUntouchedFieldsShowNoErrorEvenWhenInvalid() async throws {
         let model = try await loaded()
         let mobile = try field(model, "username")
-        XCTAssertNil(model.error(for: mobile))
+        XCTAssertNil(model.error(for: mobile))          // empty + required, but untouched
         model.markTouched(mobile)
         XCTAssertNotNil(model.error(for: mobile))
     }
 
     func testAdvancingRevealsEveryErrorInTheSection() async throws {
         let model = try await loaded()
-        XCTAssertFalse(model.advance())
+        XCTAssertFalse(model.advance())                  // blocked
         XCTAssertEqual(model.sectionIndex, 0)
         for id in ["username", "password", "firstname", "lastname", "email"] {
             XCTAssertNotNil(model.error(for: try field(model, id)), "\(id) should show an error")
         }
-
+        // The optional referral code must NOT be flagged.
         XCTAssertNil(model.error(for: try field(model, "referralCode")))
     }
+
+    // MARK: Section gating
 
     func testCannotAdvanceUntilSectionOneIsValid() async throws {
         let model = try await loaded()
@@ -4029,6 +4106,8 @@ final class DynamicFormModelTests: XCTestCase {
         model.goBack()
         XCTAssertEqual(model.sectionIndex, 0)
     }
+
+    // MARK: The ID-type → ID-number dependency
 
     func testPassportSelectionRelaxesTheThirteenDigitIdRule() async throws {
         let model = try await loaded()
@@ -4049,6 +4128,8 @@ final class DynamicFormModelTests: XCTestCase {
         model.setValue(.option("idNumber"), for: type)
         XCTAssertNotNil(model.error(for: number), "switching back must re-apply the 13-digit rule")
     }
+
+    // MARK: Submission
 
     func testSubmitIsBlockedWhileAnythingIsInvalid() async throws {
         let model = try await loaded()
@@ -4075,7 +4156,7 @@ final class DynamicFormModelTests: XCTestCase {
         XCTAssertEqual(submission["idNumberType"].stringValue, "idNumber")
         XCTAssertEqual(submission["terms"].stringValue, "true")
         XCTAssertEqual(submission["receivePromotionalInformation"].stringValue, "false")
-
+        // Untouched optional field still present, as an empty string.
         XCTAssertEqual(submission["referralCode"].stringValue, "")
     }
 
@@ -4090,6 +4171,8 @@ final class DynamicFormModelTests: XCTestCase {
         XCTAssertEqual(model.submitError, "Registration failed")
     }
 
+    // MARK: Progress
+
     func testProgressTracksSatisfiedRequiredFields() async throws {
         let model = try await loaded()
         XCTAssertEqual(model.progress, 0, accuracy: 0.001)
@@ -4100,6 +4183,8 @@ final class DynamicFormModelTests: XCTestCase {
         try fillSectionTwo(model)
         XCTAssertEqual(model.progress, 1.0, accuracy: 0.001)
     }
+
+    // MARK: Helpers
 
     private func fillSectionOne(_ model: DynamicFormModel) throws {
         model.setValue(.text("849134302"), for: try field(model, "username"))
@@ -4116,10 +4201,45 @@ final class DynamicFormModelTests: XCTestCase {
         model.setValue(.option("SalaryOrWages"), for: try field(model, "sourceOfFunds"))
         model.setValue(.bool(true), for: try field(model, "terms"))
     }
+
+    // MARK: Return-key focus order
+
+    func testFocusOrderCoversOnlyTextEntryInSchemaOrder() async throws {
+        let model = try await loaded()
+        XCTAssertEqual(model.focusableIdentifiers,
+                       ["username", "password", "firstname", "lastname", "email", "referralCode"])
+    }
+
+    func testReturnWalksToTheNextFieldAndStopsAtTheEnd() async throws {
+        let model = try await loaded()
+        XCTAssertEqual(model.fieldAfter("username"), "password")
+        XCTAssertEqual(model.fieldAfter("email"), "referralCode")
+        XCTAssertNil(model.fieldAfter("referralCode"), "The last field dismisses rather than wrapping")
+    }
+
+    func testFocusOrderIgnoresUnknownAndAbsentFields() async throws {
+        let model = try await loaded()
+        XCTAssertNil(model.fieldAfter(nil))
+        XCTAssertNil(model.fieldAfter("notAField"))
+    }
+
+    func testDateAndPickerFieldsAreNotKeyboardFocusable() async throws {
+        let model = try await loaded()
+        for identifier in ["dateOfBirth", "idNumberType", "sourceOfFunds", "terms"] {
+            XCTAssertFalse(try field(model, identifier).acceptsKeyboardFocus,
+                           "\(identifier) opens a picker or toggles, so the return key should skip it")
+        }
+    }
 }
 
+/// Confirmed behaviour: the ID Number Type dropdown selects whether the user is entering a
+/// South African ID or a passport, and the ID Number field validates accordingly.
+///
+/// The link is declared in `FormDependencies.regexDependencies` rather than inferred from
+/// field order, so a CRM reorder can't silently disable it on a regulated field.
 @MainActor
 final class IDTypeRegexDependencyTests: XCTestCase {
+
     private func loadedSectionTwo(
         regexDependencies: [String: String] = ["idNumberType": "idNumber"],
         appliesOptionRegex: Bool = true
@@ -4170,6 +4290,8 @@ final class IDTypeRegexDependencyTests: XCTestCase {
         XCTAssertNil(model.error(for: number))
     }
 
+    /// Switching type revalidates immediately — the user shouldn't have to re-type to see the
+    /// rule change.
     func testSwitchingTypeRevalidatesWithoutRetyping() async throws {
         let model = try await loadedSectionTwo()
         let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
@@ -4186,6 +4308,8 @@ final class IDTypeRegexDependencyTests: XCTestCase {
         XCTAssertNotNil(model.error(for: number), "switching back must re-apply the 13-digit rule")
     }
 
+    /// A literal pattern on a dropdown option describes the *selection*, not another field.
+    /// `sourceOfFunds` options carry `"[a-zA-Z]"`; that must never leak onto its neighbour.
     func testLiteralOptionPatternsDoNotLeakOntoOtherFields() async throws {
         let model = try await loadedSectionTwo()
         let source = try field(model, "sourceOfFunds")
@@ -4197,6 +4321,8 @@ final class IDTypeRegexDependencyTests: XCTestCase {
         XCTAssertNil(model.error(for: promo))
     }
 
+    /// With the link declared, the rule survives a schema reorder. Without it, resolution falls
+    /// back to field order — which is exactly the fragility the declaration removes.
     func testExplicitLinkIsNotPositional() async throws {
         let model = try await loadedSectionTwo(regexDependencies: ["idNumberType": "idNumber"])
         let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
@@ -4217,19 +4343,20 @@ final class IDTypeRegexDependencyTests: XCTestCase {
 }
 ```
 
-**54.**
+**49.**
 
 ```bash
-xcodebuild -scheme JackpotForms -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+cd JackpotKit
+xcodebuild -scheme JackpotKit-Package -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
 
 ---
 
 ### ▶ Create PR — JackpotForms
 
-`Executed 41 tests, with 0 failures`
+`Executed 46 tests, with 0 failures`
 
-Open `Previews.swift` in `JackpotFormsUI` and resume the whole-form previews.
+Open `DynamicFormView.swift` and resume the whole-form previews.
 
 ---
 

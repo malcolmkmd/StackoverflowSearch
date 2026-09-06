@@ -35,8 +35,22 @@ public struct JackpotDateField: View {
         .buttonStyle(.plain)
         .accessibilityLabel(fieldLabel ?? placeholder)
         .accessibilityValue(selection == nil ? "None" : displayedValue)
-        .sheet(isPresented: $isPresented) { sheet }
+        .sheet(isPresented: $isPresented) {
+            if #available(iOS 16.0, *) {
+                sheet
+                    .presentationDetents([.height(sheetHeight)])
+                    .presentationDragIndicator(.visible)
+            } else {
+                sheet
+            }
+        }
     }
+
+    /// Wheel plus title and button. Before iOS 16 there are no detents, so the sheet is full
+    /// height and the spacer pins the button to the bottom instead.
+    private var sheetHeight: CGFloat { wheelHeight + 160 }
+
+    private var wheelHeight: CGFloat { 216 }
 
     private var sheet: some View {
         ZStack {
@@ -52,9 +66,12 @@ public struct JackpotDateField: View {
                                               set: { selection = $0 }),
                            in: range,
                            displayedComponents: .date)
-                    .datePickerStyle(.graphical)
+                    .datePickerStyle(.wheel)
                     .labelsHidden()
+                    .frame(height: wheelHeight)
                     .padding(.horizontal)
+
+                Spacer(minLength: 0)
 
                 Button("Done") {
                     // Confirming without dragging still counts as a choice, otherwise the
