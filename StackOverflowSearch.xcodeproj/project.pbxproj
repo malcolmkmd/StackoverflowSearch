@@ -6,6 +6,16 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		8450E26D304D517900A3A1CA /* JackpotAppData in Frameworks */ = {isa = PBXBuildFile; productRef = 8450E26C304D517900A3A1CA /* JackpotAppData */; };
+		8450E26F304D517900A3A1CA /* JackpotForms in Frameworks */ = {isa = PBXBuildFile; productRef = 8450E26E304D517900A3A1CA /* JackpotForms */; };
+		8450E271304D517900A3A1CA /* JackpotKit in Frameworks */ = {isa = PBXBuildFile; productRef = 8450E270304D517900A3A1CA /* JackpotKit */; };
+		8450E273304D517900A3A1CA /* JackpotLocalization in Frameworks */ = {isa = PBXBuildFile; productRef = 8450E272304D517900A3A1CA /* JackpotLocalization */; };
+		8450E275304D517900A3A1CA /* JackpotNetworking in Frameworks */ = {isa = PBXBuildFile; productRef = 8450E274304D517900A3A1CA /* JackpotNetworking */; };
+		8450E277304D517900A3A1CA /* JackpotRegistration in Frameworks */ = {isa = PBXBuildFile; productRef = 8450E276304D517900A3A1CA /* JackpotRegistration */; };
+		8450E279304D517900A3A1CA /* JackpotUI in Frameworks */ = {isa = PBXBuildFile; productRef = 8450E278304D517900A3A1CA /* JackpotUI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		53C185B9300CF5E50009260F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -19,8 +29,6 @@
 /* Begin PBXFileReference section */
 		53C185AB300CF5E20009260F /* StackOverflowSearch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StackOverflowSearch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		53C185B8300CF5E50009260F /* StackOverflowSearchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StackOverflowSearchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		8450DFF7304B1ECA00A3A1CA /* JCCore */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = JCCore; sourceTree = "<group>"; };
-		8450DFF8304B1ECA00A3A1CA /* JCForms */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = JCForms; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -41,6 +49,13 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8450E273304D517900A3A1CA /* JackpotLocalization in Frameworks */,
+				8450E26D304D517900A3A1CA /* JackpotAppData in Frameworks */,
+				8450E277304D517900A3A1CA /* JackpotRegistration in Frameworks */,
+				8450E275304D517900A3A1CA /* JackpotNetworking in Frameworks */,
+				8450E26F304D517900A3A1CA /* JackpotForms in Frameworks */,
+				8450E279304D517900A3A1CA /* JackpotUI in Frameworks */,
+				8450E271304D517900A3A1CA /* JackpotKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -57,7 +72,6 @@
 		53C185A2300CF5E20009260F = {
 			isa = PBXGroup;
 			children = (
-				8450DFF9304B1ECA00A3A1CA /* Packages */,
 				53C185AD300CF5E20009260F /* StackOverflowSearch */,
 				53C185BB300CF5E50009260F /* StackOverflowSearchTests */,
 				53C185AC300CF5E20009260F /* Products */,
@@ -71,15 +85,6 @@
 				53C185B8300CF5E50009260F /* StackOverflowSearchTests.xctest */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		8450DFF9304B1ECA00A3A1CA /* Packages */ = {
-			isa = PBXGroup;
-			children = (
-				8450DFF7304B1ECA00A3A1CA /* JCCore */,
-				8450DFF8304B1ECA00A3A1CA /* JCForms */,
-			);
-			path = Packages;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -102,6 +107,13 @@
 			);
 			name = StackOverflowSearch;
 			packageProductDependencies = (
+				8450E26C304D517900A3A1CA /* JackpotAppData */,
+				8450E26E304D517900A3A1CA /* JackpotForms */,
+				8450E270304D517900A3A1CA /* JackpotKit */,
+				8450E272304D517900A3A1CA /* JackpotLocalization */,
+				8450E274304D517900A3A1CA /* JackpotNetworking */,
+				8450E276304D517900A3A1CA /* JackpotRegistration */,
+				8450E278304D517900A3A1CA /* JackpotUI */,
 			);
 			productName = StackOverflowSearch;
 			productReference = 53C185AB300CF5E20009260F /* StackOverflowSearch.app */;
@@ -158,6 +170,9 @@
 			);
 			mainGroup = 53C185A2300CF5E20009260F;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8450E26B304D517900A3A1CA /* XCLocalSwiftPackageReference "JackpotKit" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 53C185AC300CF5E20009260F /* Products */;
 			projectDirPath = "";
@@ -480,6 +495,44 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		8450E26B304D517900A3A1CA /* XCLocalSwiftPackageReference "JackpotKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = JackpotKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8450E26C304D517900A3A1CA /* JackpotAppData */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = JackpotAppData;
+		};
+		8450E26E304D517900A3A1CA /* JackpotForms */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = JackpotForms;
+		};
+		8450E270304D517900A3A1CA /* JackpotKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = JackpotKit;
+		};
+		8450E272304D517900A3A1CA /* JackpotLocalization */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = JackpotLocalization;
+		};
+		8450E274304D517900A3A1CA /* JackpotNetworking */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = JackpotNetworking;
+		};
+		8450E276304D517900A3A1CA /* JackpotRegistration */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = JackpotRegistration;
+		};
+		8450E278304D517900A3A1CA /* JackpotUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = JackpotUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 53C185A3300CF5E20009260F /* Project object */;
 }

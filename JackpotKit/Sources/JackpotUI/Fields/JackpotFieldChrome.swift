@@ -1,0 +1,106 @@
+import SwiftUI
+
+public struct JackpotFieldBackground: ViewModifier {
+    private let isFocused: Bool
+
+    @Environment(\.jackpotTheme) private var theme
+    @Environment(\.jackpotValidationMessage) private var validationMessage
+    @Environment(\.isEnabled) private var isEnabled
+
+    public init(isFocused: Bool = false) {
+        self.isFocused = isFocused
+    }
+
+    public func body(content: Content) -> some View {
+        content
+            .jackpotBackground(\.fieldBackground, in: theme.metrics.fieldShape)
+            .overlay {
+                theme.metrics.fieldShape
+                    .strokeBorder(borderColor, lineWidth: borderWidth)
+                    .animation(.easeOut(duration: 0.15), value: emphasis)
+            }
+            .opacity(isEnabled ? 1 : 0.6)
+    }
+
+    private enum Emphasis: Equatable { case none, focused, invalid }
+
+    private var emphasis: Emphasis {
+        if validationMessage != nil { return .invalid }
+        return isFocused ? .focused : .none
+    }
+
+    private var borderColor: Color {
+        switch emphasis {
+        case .invalid: return theme.colors.fieldBorderInvalid
+        case .focused: return theme.colors.fieldBorderFocused
+        case .none:    return theme.colors.fieldBorder
+        }
+    }
+
+    /// Width as well as colour, so focus and errors are not carried by colour alone.
+    private var borderWidth: CGFloat {
+        emphasis == .none ? theme.metrics.borderWidth : theme.metrics.emphasizedBorderWidth
+    }
+}
+
+public extension View {
+    func jackpotFieldBackground(isFocused: Bool = false) -> some View {
+        modifier(JackpotFieldBackground(isFocused: isFocused))
+    }
+}
+
+// MARK: - Form row
+
+public struct JackpotLabeledField<Content: View>: View {
+    private let label: String?
+    private let error: String?
+    private let content: Content
+
+    public init(_ label: String? = nil, error: String? = nil, @ViewBuilder content: () -> Content) {
+        self.label = label
+        self.error = error
+        self.content = content()
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let label, !label.isEmpty {
+                Text(label).jackpotTextStyle(\.label, color: \.textSecondary)
+            }
+
+            content
+                .jackpotValidationMessage(error)
+                .environment(\.jackpotFieldLabel, label)
+
+            if let error, !error.isEmpty {
+                Text(error)
+                    .jackpotTextStyle(\.error, color: \.error)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Error: \(error)")
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: error)
+    }
+}
+
+public extension View {
+    func jackpotLabeled(_ label: String? = nil, error: String? = nil) -> some View {
+        JackpotLabeledField(label, error: error) { self }
+    }
+}
+
+// MARK: - Divider
+
+public struct JackpotDivider: View {
+    @Environment(\.jackpotTheme) private var theme
+
+    public init() {}
+
+    public var body: some View {
+        Rectangle()
+            .fill(theme.colors.fieldBorder)
+            .frame(height: 1)
+            .padding(.vertical, 4)
+            .accessibilityHidden(true)
+    }
+}

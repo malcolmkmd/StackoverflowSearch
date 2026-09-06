@@ -2,10 +2,10 @@
 
 Create the files in the order given. Run the commands where they appear. Open a PR where marked.
 
-103 tests when complete: 3 + 61 + 34 + 5.
+61 tests when complete.
 
-`JackpotCore` is pure Foundation and runs under `swift test`. The other three contain iOS views,
-so their suites run in a simulator via `xcodebuild`.
+`JackpotKit` is one package, so the whole suite runs in a simulator via
+`xcodebuild -scheme JackpotKit-Package`.
 
 ---
 
@@ -14,19 +14,20 @@ so their suites run in a simulator via `xcodebuild`.
 **1.**
 
 ```bash
-mkdir -p Packages/JackpotUI/Sources/JackpotUI/Preview Packages/JackpotUI/Tests/JackpotUITests
-cd Packages/JackpotUI
+mkdir -p JackpotKit/Sources/JackpotUI/{Theme,Styles,Fields,Components,Preview}
+mkdir -p JackpotKit/Tests/JackpotUITests
+cd JackpotKit
 printf '.build/\n.swiftpm/\n*.xcuserdatad\n' > .gitignore
 ```
 
-**2.** `Packages/JackpotUI/Package.swift`
+**2.** `JackpotKit/Package.swift`
 
 ```swift
-// swift-tools-version: 5.7
+// swift-tools-version: 5.9
 import PackageDescription
 
 let package = Package(
-    name: "JackpotUI",
+    name: "JackpotKit",
     platforms: [.iOS(.v15)],
     products: [
         .library(name: "JackpotUI", targets: ["JackpotUI"]),
@@ -38,129 +39,553 @@ let package = Package(
 )
 ```
 
-**3.** `Packages/JackpotUI/Sources/JackpotUI/JackpotTheme.swift`
+Later PRs append their targets to this same manifest rather than creating new packages.
+
+**3.** `JackpotKit/Sources/JackpotUI/Theme/JackpotTheme.swift`
+
+```swift
+import SwiftUI
+import UIKit
+
+public struct JackpotTheme: Equatable, Sendable {
+    public var colors: JackpotColors = .jackpotCity
+    public var metrics: JackpotMetrics = .standard
+    public var typography: JackpotTypography = .standard
+
+    public static let jackpotCity = JackpotTheme()
+
+    public func with(_ transform: (inout JackpotTheme) -> Void) -> JackpotTheme {
+        var copy = self
+        transform(&copy)
+        return copy
+    }
+}
+
+// MARK: - Colours
+
+public struct JackpotColors: Equatable, Sendable {
+    public var surface = Palette.surface
+    public var surfaceElevated = Palette.surfaceElevated
+
+    public var fieldBackground = Palette.fieldBackground
+    public var fieldBorder = Palette.fieldBorder
+    public var fieldBorderFocused = Palette.accent
+    public var fieldBorderInvalid = Palette.error
+
+    public var textPrimary = Palette.textPrimary
+    public var textSecondary = Palette.textSecondary
+    public var textOnAccent = Palette.textOnAccent
+
+    public var accent = Palette.accent
+    public var actionPrimary = Palette.actionPrimary
+    public var currency = Palette.actionPrimary
+
+    public var error = Palette.error
+    public var warning = Palette.warning
+    public var success = Palette.success
+
+    public static let jackpotCity = JackpotColors()
+}
+
+/// Held as shared constants rather than inline literals so two separately built
+/// `JackpotColors` still compare equal — a dynamic `Color` compares by identity.
+enum Palette {
+    static let surface = Color.adaptive(light: Color(red: 1.00, green: 1.00, blue: 1.00),
+                                        dark: Color(red: 0.07, green: 0.08, blue: 0.09))
+
+    static let surfaceElevated = Color.adaptive(light: Color(red: 0.96, green: 0.97, blue: 0.98),
+                                                dark: Color(red: 0.11, green: 0.12, blue: 0.14))
+
+    static let fieldBackground = Color.adaptive(light: Color(red: 1.00, green: 1.00, blue: 1.00),
+                                                dark: Color(red: 0.13, green: 0.14, blue: 0.16))
+
+    static let fieldBorder = Color.adaptive(light: Color(red: 0.80, green: 0.82, blue: 0.85),
+                                            dark: Color.white.opacity(0.18))
+
+    static let textPrimary = Color.adaptive(light: Color(red: 0.07, green: 0.09, blue: 0.12),
+                                            dark: .white)
+
+    static let textSecondary = Color.adaptive(light: Color(red: 0.42, green: 0.45, blue: 0.50),
+                                              dark: Color.white.opacity(0.6))
+
+    /// Sits on the accent and action fills, never on the surface, so it does not invert.
+    static let textOnAccent = Color.white
+
+    static let accent = Color.adaptive(light: Color(red: 0.13, green: 0.40, blue: 0.87),
+                                       dark: Color(red: 0.16, green: 0.47, blue: 0.96))
+
+    static let actionPrimary = Color.adaptive(light: Color(red: 0.85, green: 0.60, blue: 0.05),
+                                              dark: Color(red: 0.96, green: 0.71, blue: 0.13))
+
+    static let error = Color.adaptive(light: Color(red: 0.80, green: 0.16, blue: 0.10),
+                                      dark: Color(red: 0.94, green: 0.28, blue: 0.16))
+
+    static let warning = Color.adaptive(light: Color(red: 0.72, green: 0.45, blue: 0.02),
+                                        dark: Color(red: 0.96, green: 0.62, blue: 0.13))
+
+    static let success = Color.adaptive(light: Color(red: 0.10, green: 0.55, blue: 0.32),
+                                        dark: Color(red: 0.20, green: 0.72, blue: 0.44))
+}
+
+extension Color {
+    /// Resolves against the trait collection, so one palette serves both appearances and
+    /// honours a `preferredColorScheme` override anywhere in the hierarchy.
+    static func adaptive(light: Color, dark: Color) -> Color {
+        let light = UIColor(light)
+        let dark = UIColor(dark)
+        return Color(UIColor { $0.userInterfaceStyle == .dark ? dark : light })
+    }
+}
+
+// MARK: - Metrics
+
+public struct JackpotMetrics: Equatable, Sendable {
+    public var cornerRadius: CGFloat = 10
+    public var controlHeight: CGFloat = 52
+    public var spacing: CGFloat = 12
+    public var contentPadding: CGFloat = 14
+    public var borderWidth: CGFloat = 1
+    public var emphasizedBorderWidth: CGFloat = 2
+    public var minimumHitTarget: CGFloat = 44
+    public var progressBarHeight: CGFloat = 4
+    public var textAreaMinHeight: CGFloat = 110
+    public var cardMinHeight: CGFloat = 140
+
+    public static let standard = JackpotMetrics()
+
+    public var fieldShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    }
+}
+
+// MARK: - Typography
+
+public struct JackpotTypography: Equatable, Sendable {
+    public var fieldText = Font.body
+    public var label = Font.footnote
+    public var error = Font.caption
+    public var rowLabel = Font.subheadline
+    public var sectionTitle = Font.subheadline.weight(.semibold)
+    public var button = Font.headline
+
+    public static let standard = JackpotTypography()
+}
+```
+
+**4.** `JackpotKit/Sources/JackpotUI/Theme/JackpotEnvironment.swift`
+
+The environment carries the theme and the per-field configuration, so the fields themselves stay
+free of configuration parameters.
 
 ```swift
 import SwiftUI
 
-public struct JackpotTheme: Equatable {
-    public var surface: Color
-    public var surfaceElevated: Color
-    public var fieldBackground: Color
-    public var fieldBorder: Color
-    public var fieldBorderFocused: Color
-    public var fieldBorderInvalid: Color
-    public var textPrimary: Color
-    public var textSecondary: Color
-    public var accent: Color
-    public var actionPrimary: Color
-    public var currency: Color
-    public var error: Color
-    public var success: Color
-    public var cornerRadius: CGFloat
-    public var controlHeight: CGFloat
-    public var spacing: CGFloat
-
-    public init(surface: Color = Color(red: 0.07, green: 0.08, blue: 0.09),
-                surfaceElevated: Color = Color(red: 0.11, green: 0.12, blue: 0.14),
-                fieldBackground: Color = Color(red: 0.13, green: 0.14, blue: 0.16),
-                fieldBorder: Color = Color.white.opacity(0.18),
-                fieldBorderFocused: Color = Color(red: 0.16, green: 0.47, blue: 0.96),
-                fieldBorderInvalid: Color = Color(red: 0.94, green: 0.28, blue: 0.16),
-                textPrimary: Color = .white,
-                textSecondary: Color = Color.white.opacity(0.6),
-                accent: Color = Color(red: 0.16, green: 0.47, blue: 0.96),
-                actionPrimary: Color = Color(red: 0.96, green: 0.71, blue: 0.13),
-                currency: Color = Color(red: 0.96, green: 0.71, blue: 0.13),
-                error: Color = Color(red: 0.94, green: 0.28, blue: 0.16),
-                success: Color = Color(red: 0.20, green: 0.72, blue: 0.44),
-                cornerRadius: CGFloat = 10,
-                controlHeight: CGFloat = 52,
-                spacing: CGFloat = 12) {
-        self.surface = surface
-        self.surfaceElevated = surfaceElevated
-        self.fieldBackground = fieldBackground
-        self.fieldBorder = fieldBorder
-        self.fieldBorderFocused = fieldBorderFocused
-        self.fieldBorderInvalid = fieldBorderInvalid
-        self.textPrimary = textPrimary
-        self.textSecondary = textSecondary
-        self.accent = accent
-        self.actionPrimary = actionPrimary
-        self.currency = currency
-        self.error = error
-        self.success = success
-        self.cornerRadius = cornerRadius
-        self.controlHeight = controlHeight
-        self.spacing = spacing
-    }
-
-    public static let jackpotCity = JackpotTheme()
+extension EnvironmentValues {
+    @Entry public var jackpotTheme: JackpotTheme = .jackpotCity
+    @Entry public var jackpotValidationMessage: String? = nil
+    @Entry public var jackpotFieldLabel: String? = nil
+    @Entry public var jackpotFieldPrefix: String = ""
+    @Entry public var jackpotFieldSuffix: String = ""
+    @Entry public var jackpotSecureEntry: Bool = false
+    @Entry public var jackpotIsLoading: Bool = false
+    @Entry public var jackpotFocusedField: Binding<String?>? = nil
+    @Entry public var jackpotFieldIdentity: String? = nil
+    @Entry public var jackpotSubmitLabel: SubmitLabel = .return
 }
 
-private struct JackpotThemeKey: EnvironmentKey {
-    static let defaultValue = JackpotTheme.jackpotCity
-}
-
-public extension EnvironmentValues {
-    var jackpotTheme: JackpotTheme {
-        get { self[JackpotThemeKey.self] }
-        set { self[JackpotThemeKey.self] = newValue }
-    }
-}
+// MARK: - Theme
 
 public extension View {
     func jackpotTheme(_ theme: JackpotTheme) -> some View {
-        environment(\.jackpotTheme, theme)
+        environment(\.jackpotTheme, theme).tint(theme.colors.accent)
+    }
+
+    func jackpotTheme(_ transform: @escaping (inout JackpotTheme) -> Void) -> some View {
+        modifier(JackpotThemeTransform(transform: transform))
+    }
+}
+
+private struct JackpotThemeTransform: ViewModifier {
+    let transform: (inout JackpotTheme) -> Void
+    @Environment(\.jackpotTheme) private var inherited
+
+    func body(content: Content) -> some View {
+        var theme = inherited
+        transform(&theme)
+        return content.jackpotTheme(theme)
+    }
+}
+
+// MARK: - Field configuration
+
+public extension View {
+    func jackpotValidationMessage(_ message: String?) -> some View {
+        environment(\.jackpotValidationMessage, message?.isEmpty == false ? message : nil)
+    }
+
+    func jackpotFieldPrefix(_ text: String) -> some View {
+        environment(\.jackpotFieldPrefix, text)
+    }
+
+    func jackpotFieldSuffix(_ text: String) -> some View {
+        environment(\.jackpotFieldSuffix, text)
+    }
+
+    func jackpotSecureEntry(_ isEnabled: Bool = true) -> some View {
+        environment(\.jackpotSecureEntry, isEnabled)
+    }
+}
+
+// MARK: - Control state
+
+public extension View {
+    /// Disables as well as spins: a button that spins but still fires is a double submit.
+    func jackpotLoading(_ isLoading: Bool = true) -> some View {
+        environment(\.jackpotIsLoading, isLoading).disabled(isLoading)
+    }
+}
+
+// MARK: - Keyboard focus
+
+public extension View {
+    /// Shares one "which field is focused" value across a group of fields so the return key
+    /// can walk them. Tag each field with `jackpotFieldIdentity(_:)`.
+    func jackpotFocusedField(_ binding: Binding<String?>) -> some View {
+        environment(\.jackpotFocusedField, binding)
+    }
+
+    func jackpotFieldIdentity(_ identity: String) -> some View {
+        environment(\.jackpotFieldIdentity, identity)
+    }
+
+    func jackpotSubmitLabel(_ label: SubmitLabel) -> some View {
+        environment(\.jackpotSubmitLabel, label)
     }
 }
 ```
 
-**4.** `Packages/JackpotUI/Sources/JackpotUI/JackpotFieldChrome.swift`
+**5.** `JackpotKit/Sources/JackpotUI/Theme/JackpotStyling.swift`
 
 ```swift
 import SwiftUI
 
-public struct JackpotFieldBorder: ViewModifier {
-    private let isInvalid: Bool
-    private let isFocused: Bool
+public extension View {
+    func jackpotForegroundStyle(_ color: KeyPath<JackpotColors, Color>) -> some View {
+        modifier(JackpotForegroundStyle(color: color))
+    }
+
+    func jackpotBackground(_ color: KeyPath<JackpotColors, Color>) -> some View {
+        modifier(JackpotBackgroundStyle(color: color, shape: Rectangle()))
+    }
+
+    func jackpotBackground<S: Shape>(_ color: KeyPath<JackpotColors, Color>, in shape: S) -> some View {
+        modifier(JackpotBackgroundStyle(color: color, shape: shape))
+    }
+
+    func jackpotFont(_ font: KeyPath<JackpotTypography, Font>) -> some View {
+        modifier(JackpotFontStyle(font: font))
+    }
+
+    func jackpotTextStyle(_ font: KeyPath<JackpotTypography, Font>,
+                          color: KeyPath<JackpotColors, Color> = \.textPrimary) -> some View {
+        jackpotFont(font).jackpotForegroundStyle(color)
+    }
+}
+
+private struct JackpotForegroundStyle: ViewModifier {
+    let color: KeyPath<JackpotColors, Color>
     @Environment(\.jackpotTheme) private var theme
 
-    public init(isInvalid: Bool, isFocused: Bool = false) {
-        self.isInvalid = isInvalid
+    func body(content: Content) -> some View {
+        content.foregroundStyle(theme.colors[keyPath: color])
+    }
+}
+
+private struct JackpotBackgroundStyle<S: Shape>: ViewModifier {
+    let color: KeyPath<JackpotColors, Color>
+    let shape: S
+    @Environment(\.jackpotTheme) private var theme
+
+    func body(content: Content) -> some View {
+        content.background(theme.colors[keyPath: color], in: shape)
+    }
+}
+
+private struct JackpotFontStyle: ViewModifier {
+    let font: KeyPath<JackpotTypography, Font>
+    @Environment(\.jackpotTheme) private var theme
+
+    func body(content: Content) -> some View {
+        content.font(theme.typography[keyPath: font])
+    }
+}
+```
+
+**6.** `JackpotKit/Sources/JackpotUI/Styles/JackpotButtonStyle.swift`
+
+```swift
+import SwiftUI
+
+public struct JackpotButtonStyle: ButtonStyle {
+    public enum Prominence: Hashable, Sendable {
+        case primary
+        case secondary
+        case tertiary
+    }
+
+    private let prominence: Prominence
+
+    public init(_ prominence: Prominence = .primary) {
+        self.prominence = prominence
+    }
+
+    public func makeBody(configuration: Configuration) -> some View {
+        // A ButtonStyle is not a View, so @Environment on the style itself never updates.
+        ButtonBody(prominence: prominence, configuration: configuration)
+    }
+
+    private struct ButtonBody: View {
+        let prominence: Prominence
+        let configuration: ButtonStyleConfiguration
+
+        @Environment(\.jackpotTheme) private var theme
+        @Environment(\.isEnabled) private var isEnabled
+        @Environment(\.jackpotIsLoading) private var isLoading
+
+        var body: some View {
+            configuration.label
+                .jackpotFont(\.button)
+                .opacity(isLoading ? 0 : 1)
+                .overlay {
+                    if isLoading {
+                        ProgressView().tint(foreground).accessibilityHidden(true)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: theme.metrics.controlHeight)
+                .foregroundStyle(foreground)
+                .background(background, in: theme.metrics.fieldShape)
+                .contentShape(theme.metrics.fieldShape)
+                .opacity(configuration.isPressed ? 0.85 : 1)
+                .scaleEffect(configuration.isPressed ? 0.98 : 1)
+                .animation(.spring(response: 0.3, dampingFraction: 1), value: configuration.isPressed)
+                .accessibilityValue(isLoading ? Text("Loading") : Text(verbatim: ""))
+        }
+
+        /// `jackpotLoading(_:)` disables the button, but mid-submit it should still look live.
+        private var isDimmed: Bool { !isEnabled && !isLoading }
+
+        private var background: Color {
+            switch prominence {
+            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accent
+            case .secondary: return theme.colors.fieldBackground
+            case .tertiary:  return .clear
+            }
+        }
+
+        private var foreground: Color {
+            switch prominence {
+            case .primary:   return isDimmed ? theme.colors.textSecondary : theme.colors.textOnAccent
+            case .secondary: return isDimmed ? theme.colors.textSecondary : theme.colors.textPrimary
+            case .tertiary:  return isDimmed ? theme.colors.textSecondary : theme.colors.accent
+            }
+        }
+    }
+}
+
+public extension ButtonStyle where Self == JackpotButtonStyle {
+    static var jackpot: JackpotButtonStyle { JackpotButtonStyle(.primary) }
+
+    static func jackpot(_ prominence: JackpotButtonStyle.Prominence) -> JackpotButtonStyle {
+        JackpotButtonStyle(prominence)
+    }
+}
+```
+
+**7.** `JackpotKit/Sources/JackpotUI/Styles/JackpotToggleStyle.swift`
+
+```swift
+import SwiftUI
+
+public struct JackpotToggleStyle: ToggleStyle {
+    public enum Appearance: Hashable, Sendable {
+        case checkbox
+    }
+
+    private let appearance: Appearance
+
+    public init(_ appearance: Appearance = .checkbox) {
+        self.appearance = appearance
+    }
+
+    public func makeBody(configuration: Configuration) -> some View {
+        ToggleBody(appearance: appearance, configuration: configuration)
+    }
+
+    private struct ToggleBody: View {
+        let appearance: Appearance
+        let configuration: ToggleStyleConfiguration
+
+        @Environment(\.jackpotTheme) private var theme
+        @Environment(\.jackpotValidationMessage) private var validationMessage
+
+        var body: some View {
+            switch appearance {
+            case .checkbox: checkbox
+            }
+        }
+
+        private var checkbox: some View {
+            Button {
+                configuration.isOn.toggle()
+            } label: {
+                HStack(alignment: .top, spacing: theme.metrics.spacing) {
+                    Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
+                        .font(.title3)
+                        .foregroundStyle(boxColor)
+                        .frame(width: 24, height: 24)
+                        .animation(.easeOut(duration: 0.15), value: configuration.isOn)
+                    configuration.label
+                        .jackpotTextStyle(\.rowLabel)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: theme.metrics.minimumHitTarget)
+            }
+            .buttonStyle(.plain)
+            .accessibilityRepresentation {
+                // The explicit style stops the stand-in resolving back to this one.
+                Toggle(isOn: configuration.$isOn) { configuration.label }
+                    .toggleStyle(.switch)
+            }
+        }
+
+        private var boxColor: Color {
+            if configuration.isOn { return theme.colors.accent }
+            return validationMessage == nil ? theme.colors.textSecondary : theme.colors.fieldBorderInvalid
+        }
+    }
+}
+
+public extension ToggleStyle where Self == JackpotToggleStyle {
+    static var jackpotCheckbox: JackpotToggleStyle { JackpotToggleStyle(.checkbox) }
+}
+```
+
+**8.** `JackpotKit/Sources/JackpotUI/Styles/JackpotProgressViewStyle.swift`
+
+```swift
+import SwiftUI
+
+public struct JackpotBarProgressViewStyle: ProgressViewStyle {
+    private let height: CGFloat?
+
+    public init(height: CGFloat? = nil) {
+        self.height = height
+    }
+
+    public func makeBody(configuration: Configuration) -> some View {
+        BarBody(height: height, fraction: configuration.fractionCompleted ?? 0)
+    }
+
+    private struct BarBody: View {
+        let height: CGFloat?
+        let fraction: Double
+
+        @Environment(\.jackpotTheme) private var theme
+
+        var body: some View {
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(theme.colors.fieldBorder)
+                    Capsule()
+                        .fill(.tint)
+                        .frame(width: proxy.size.width * fraction.clampedToUnitInterval)
+                }
+            }
+            .frame(height: height ?? theme.metrics.progressBarHeight)
+            .animation(.easeOut(duration: 0.25), value: fraction)
+        }
+    }
+}
+
+public extension ProgressViewStyle where Self == JackpotBarProgressViewStyle {
+    static var jackpotBar: JackpotBarProgressViewStyle { JackpotBarProgressViewStyle() }
+
+    static func jackpotBar(height: CGFloat) -> JackpotBarProgressViewStyle {
+        JackpotBarProgressViewStyle(height: height)
+    }
+}
+
+private extension Double {
+    var clampedToUnitInterval: Double { min(max(self, 0), 1) }
+}
+```
+
+**9.** `JackpotKit/Sources/JackpotUI/Fields/JackpotFieldChrome.swift`
+
+The shared field background and the label/error row every field sits in.
+
+```swift
+import SwiftUI
+
+public struct JackpotFieldBackground: ViewModifier {
+    private let isFocused: Bool
+
+    @Environment(\.jackpotTheme) private var theme
+    @Environment(\.jackpotValidationMessage) private var validationMessage
+    @Environment(\.isEnabled) private var isEnabled
+
+    public init(isFocused: Bool = false) {
         self.isFocused = isFocused
     }
 
     public func body(content: Content) -> some View {
         content
-            .background(theme.fieldBackground)
-            .cornerRadius(theme.cornerRadius)
-            .overlay(
-                RoundedRectangle(cornerRadius: theme.cornerRadius)
-                    .stroke(borderColor, lineWidth: isInvalid || isFocused ? 2 : 1)
-            )
+            .jackpotBackground(\.fieldBackground, in: theme.metrics.fieldShape)
+            .overlay {
+                theme.metrics.fieldShape
+                    .strokeBorder(borderColor, lineWidth: borderWidth)
+                    .animation(.easeOut(duration: 0.15), value: emphasis)
+            }
+            .opacity(isEnabled ? 1 : 0.6)
+    }
+
+    private enum Emphasis: Equatable { case none, focused, invalid }
+
+    private var emphasis: Emphasis {
+        if validationMessage != nil { return .invalid }
+        return isFocused ? .focused : .none
     }
 
     private var borderColor: Color {
-        if isInvalid { return theme.fieldBorderInvalid }
-        if isFocused { return theme.fieldBorderFocused }
-        return theme.fieldBorder
+        switch emphasis {
+        case .invalid: return theme.colors.fieldBorderInvalid
+        case .focused: return theme.colors.fieldBorderFocused
+        case .none:    return theme.colors.fieldBorder
+        }
+    }
+
+    /// Width as well as colour, so focus and errors are not carried by colour alone.
+    private var borderWidth: CGFloat {
+        emphasis == .none ? theme.metrics.borderWidth : theme.metrics.emphasizedBorderWidth
     }
 }
 
 public extension View {
-    func jackpotFieldBorder(isInvalid: Bool, isFocused: Bool = false) -> some View {
-        modifier(JackpotFieldBorder(isInvalid: isInvalid, isFocused: isFocused))
+    func jackpotFieldBackground(isFocused: Bool = false) -> some View {
+        modifier(JackpotFieldBackground(isFocused: isFocused))
     }
 }
+
+// MARK: - Form row
 
 public struct JackpotLabeledField<Content: View>: View {
     private let label: String?
     private let error: String?
     private let content: Content
-    @Environment(\.jackpotTheme) private var theme
 
-    public init(label: String? = nil, error: String? = nil, @ViewBuilder content: () -> Content) {
+    public init(_ label: String? = nil, error: String? = nil, @ViewBuilder content: () -> Content) {
         self.label = label
         self.error = error
         self.content = content()
@@ -169,259 +594,239 @@ public struct JackpotLabeledField<Content: View>: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let label, !label.isEmpty {
-                Text(label).font(.footnote).foregroundColor(theme.textSecondary)
+                Text(label).jackpotTextStyle(\.label, color: \.textSecondary)
             }
+
             content
+                .jackpotValidationMessage(error)
+                .environment(\.jackpotFieldLabel, label)
+
             if let error, !error.isEmpty {
                 Text(error)
-                    .font(.caption)
-                    .foregroundColor(theme.error)
+                    .jackpotTextStyle(\.error, color: \.error)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityLabel("Error: \(error)")
             }
         }
+        .animation(.easeOut(duration: 0.2), value: error)
     }
 }
 
-public struct JackpotDivider: View {
-    @Environment(\.jackpotTheme) private var theme
-    public init() {}
-    public var body: some View {
-        Rectangle().fill(theme.fieldBorder).frame(height: 1).padding(.vertical, 4)
-    }
-}
-```
-
-**5.** `Packages/JackpotUI/Sources/JackpotUI/JackpotButton.swift`
-
-```swift
-import SwiftUI
-
-public struct JackpotButtonStyle: ButtonStyle {
-    public enum Kind { case primary, secondary, tertiary }
-
-    private let kind: Kind
-    private let isEnabled: Bool
-    @Environment(\.jackpotTheme) private var theme
-
-    public init(_ kind: Kind = .primary, isEnabled: Bool = true) {
-        self.kind = kind
-        self.isEnabled = isEnabled
-    }
-
-    public func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.headline)
-            .frame(maxWidth: .infinity, minHeight: theme.controlHeight)
-            .background(background)
-            .foregroundColor(foreground)
-            .cornerRadius(theme.cornerRadius)
-            .opacity(configuration.isPressed ? 0.85 : 1)
-    }
-
-    private var background: Color {
-        switch kind {
-        case .primary:   return isEnabled ? theme.accent : theme.fieldBackground
-        case .secondary: return theme.fieldBackground
-        case .tertiary:  return .clear
-        }
-    }
-
-    private var foreground: Color {
-        switch kind {
-        case .primary:   return isEnabled ? .white : theme.textSecondary
-        case .secondary: return theme.textPrimary
-        case .tertiary:  return theme.accent
-        }
-    }
-}
-
-public struct JackpotButton: View {
-    private let title: String
-    private let kind: JackpotButtonStyle.Kind
-    private let isEnabled: Bool
-    private let isLoading: Bool
-    private let action: () -> Void
-
-    public init(_ title: String,
-                kind: JackpotButtonStyle.Kind = .primary,
-                isEnabled: Bool = true,
-                isLoading: Bool = false,
-                action: @escaping () -> Void) {
-        self.title = title
-        self.kind = kind
-        self.isEnabled = isEnabled
-        self.isLoading = isLoading
-        self.action = action
-    }
-
-    public var body: some View {
-        Button(action: action) {
-            ZStack {
-                Text(title).opacity(isLoading ? 0 : 1)
-                if isLoading { ProgressView().tint(.white) }
-            }
-        }
-        .buttonStyle(JackpotButtonStyle(kind, isEnabled: isEnabled))
-        .disabled(!isEnabled || isLoading)
+public extension View {
+    func jackpotLabeled(_ label: String? = nil, error: String? = nil) -> some View {
+        JackpotLabeledField(label, error: error) { self }
     }
 }
 ```
 
-**6.** `Packages/JackpotUI/Sources/JackpotUI/JackpotTextField.swift`
+**10.** `JackpotKit/Sources/JackpotUI/Fields/JackpotFieldKind.swift`
+
+One value per input type the registration schema asks for, applied to a field with `jackpotField(_:)`.
 
 ```swift
 import SwiftUI
-import UIKit
+
+/// `TextInputAutocapitalization` is neither `Equatable` nor inspectable, so the kind stores
+/// its own case and converts when applying.
+public enum JackpotCapitalization: Equatable, Sendable {
+    case never, words, sentences, characters
+
+    var textInput: TextInputAutocapitalization {
+        switch self {
+        case .never:      return .never
+        case .words:      return .words
+        case .sentences:  return .sentences
+        case .characters: return .characters
+        }
+    }
+}
+
+public struct JackpotFieldKind: Equatable, Sendable {
+    public var keyboard: UIKeyboardType = .default
+    public var contentType: UITextContentType?
+    public var capitalization: JackpotCapitalization = .sentences
+    public var disablesAutocorrection = false
+    public var isSecure = false
+
+    public static let text = JackpotFieldKind()
+
+    public static let givenName = JackpotFieldKind(contentType: .givenName,
+                                                   capitalization: .words,
+                                                   disablesAutocorrection: true)
+
+    public static let familyName = JackpotFieldKind(contentType: .familyName,
+                                                    capitalization: .words,
+                                                    disablesAutocorrection: true)
+
+    public static let email = JackpotFieldKind(keyboard: .emailAddress,
+                                               contentType: .emailAddress,
+                                               capitalization: .never,
+                                               disablesAutocorrection: true)
+
+    public static let phoneNumber = JackpotFieldKind(keyboard: .phonePad,
+                                                    contentType: .telephoneNumber,
+                                                    capitalization: .never,
+                                                    disablesAutocorrection: true)
+
+    public static let newPassword = JackpotFieldKind(contentType: .newPassword,
+                                                     capitalization: .never,
+                                                     disablesAutocorrection: true,
+                                                     isSecure: true)
+
+    public static let number = JackpotFieldKind(keyboard: .numberPad,
+                                                capitalization: .never,
+                                                disablesAutocorrection: true)
+
+    public func with(_ transform: (inout JackpotFieldKind) -> Void) -> JackpotFieldKind {
+        var copy = self
+        transform(&copy)
+        return copy
+    }
+}
+
+public extension View {
+    func jackpotField(_ kind: JackpotFieldKind) -> some View {
+        modifier(JackpotFieldKindModifier(kind: kind))
+    }
+}
+
+private struct JackpotFieldKindModifier: ViewModifier {
+    let kind: JackpotFieldKind
+
+    func body(content: Content) -> some View {
+        content
+            .keyboardType(kind.keyboard)
+            .textContentType(kind.contentType)
+            .textInputAutocapitalization(kind.capitalization.textInput)
+            .autocorrectionDisabled(kind.disablesAutocorrection)
+            .jackpotSecureEntry(kind.isSecure)
+    }
+}
+```
+
+**11.** `JackpotKit/Sources/JackpotUI/Fields/JackpotTextField.swift`
+
+```swift
+import SwiftUI
 
 public struct JackpotTextField: View {
     @Binding private var text: String
     private let placeholder: String
-    private let prefix: String
-    private let suffix: String
-    private let keyboard: UIKeyboardType
-    private let contentType: UITextContentType?
-    private let autocapitalization: TextInputAutocapitalization
-    private let isSecure: Bool
-    private let isInvalid: Bool
-    private let isDisabled: Bool
-    private let onEditingEnded: () -> Void
+    private var editingEndedAction: (() -> Void)?
+    private var focusChangedAction: ((Bool) -> Void)?
 
     @Environment(\.jackpotTheme) private var theme
+    @Environment(\.jackpotFieldPrefix) private var prefix
+    @Environment(\.jackpotFieldSuffix) private var suffix
+    @Environment(\.jackpotSecureEntry) private var isSecure
+    @Environment(\.jackpotFocusedField) private var focusedField
+    @Environment(\.jackpotFieldIdentity) private var identity
+    @Environment(\.jackpotSubmitLabel) private var submitLabel
     @FocusState private var isFocused: Bool
     @State private var isRevealed = false
 
-    public init(_ placeholder: String,
-                text: Binding<String>,
-                prefix: String = "",
-                suffix: String = "",
-                keyboard: UIKeyboardType = .default,
-                contentType: UITextContentType? = nil,
-                autocapitalization: TextInputAutocapitalization = .sentences,
-                isSecure: Bool = false,
-                isInvalid: Bool = false,
-                isDisabled: Bool = false,
-                onEditingEnded: @escaping () -> Void = {}) {
+    private var requestedFocus: String? { focusedField?.wrappedValue }
+
+    public init(_ placeholder: String, text: Binding<String>) {
         self.placeholder = placeholder
         self._text = text
-        self.prefix = prefix
-        self.suffix = suffix
-        self.keyboard = keyboard
-        self.contentType = contentType
-        self.autocapitalization = autocapitalization
-        self.isSecure = isSecure
-        self.isInvalid = isInvalid
-        self.isDisabled = isDisabled
-        self.onEditingEnded = onEditingEnded
+    }
+
+    /// Fires on blur. Chain it before any `View` modifier, like `Gesture.onEnded`.
+    public func onEditingEnded(_ action: @escaping () -> Void) -> Self {
+        var copy = self
+        copy.editingEndedAction = action
+        return copy
+    }
+
+    /// Fires on both focus and blur. The field owns its `FocusState`, so this is the only way
+    /// out for callers that reveal supporting content while the field is being edited.
+    public func onFocusChange(_ action: @escaping (Bool) -> Void) -> Self {
+        var copy = self
+        copy.focusChangedAction = action
+        return copy
     }
 
     public var body: some View {
         HStack(spacing: 0) {
             if !prefix.isEmpty {
                 Text(prefix)
-                    .font(.body)
-                    .foregroundColor(theme.textPrimary)
-                    .padding(.horizontal, 14)
-                    .frame(height: theme.controlHeight)
-                    .overlay(Rectangle().fill(theme.fieldBorder).frame(width: 1), alignment: .trailing)
+                    .jackpotTextStyle(\.fieldText)
+                    .padding(.horizontal, theme.metrics.contentPadding)
+                    .frame(height: theme.metrics.controlHeight)
+                    .overlay(alignment: .trailing) {
+                        Rectangle().fill(theme.colors.fieldBorder).frame(width: 1)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { isFocused = true }
+                    .accessibilityHidden(true)
             }
 
-            Group {
-                if isSecure, !isRevealed {
-                    SecureField(placeholder, text: $text)
-                } else {
-                    TextField(placeholder, text: $text)
-                }
-            }
-            .font(.body)
-            .foregroundColor(theme.textPrimary)
-            .focused($isFocused)
-            .disabled(isDisabled)
-            .keyboardType(keyboard)
-            .textContentType(contentType)
-            .textInputAutocapitalization(autocapitalization)
-            .autocorrectionDisabled(keyboard != .default)
-            .padding(.horizontal, 14)
-            .frame(height: theme.controlHeight)
+            input
+                .jackpotTextStyle(\.fieldText)
+                .focused($isFocused)
+                .submitLabel(submitLabel)
+                .padding(.horizontal, theme.metrics.contentPadding)
+                .frame(height: theme.metrics.controlHeight)
+                // The prefix cell is hidden above, so fold it in rather than leaving
+                // VoiceOver to stumble over a stray "+27".
+                .accessibilityLabel(prefix.isEmpty ? Text(placeholder) : Text("\(placeholder), \(prefix)"))
 
             if !suffix.isEmpty {
-                Text(suffix).foregroundColor(theme.textSecondary).padding(.trailing, 14)
+                Text(suffix)
+                    .jackpotTextStyle(\.fieldText, color: \.textSecondary)
+                    .padding(.trailing, theme.metrics.contentPadding)
+                    .contentShape(Rectangle())
+                    .onTapGesture { isFocused = true }
             }
 
             if isSecure {
-                Button { isRevealed.toggle() } label: {
-                    Image(systemName: isRevealed ? "eye.slash" : "eye").foregroundColor(theme.textPrimary)
+                Button {
+                    isRevealed.toggle()
+                } label: {
+                    Image(systemName: isRevealed ? "eye.slash" : "eye")
+                        .jackpotForegroundStyle(\.textPrimary)
                 }
-                .frame(width: 44, height: 44)
+                .frame(width: theme.metrics.minimumHitTarget, height: theme.metrics.minimumHitTarget)
                 .padding(.trailing, 6)
                 .accessibilityLabel(isRevealed ? "Hide password" : "Show password")
             }
         }
-        .jackpotFieldBorder(isInvalid: isInvalid, isFocused: isFocused)
+        .jackpotFieldBackground(isFocused: isFocused)
         .onChange(of: isFocused) { focused in
-            if !focused { onEditingEnded() }
-        }
-    }
-}
-```
-
-**7.** `Packages/JackpotUI/Sources/JackpotUI/JackpotTextArea.swift`
-
-```swift
-import SwiftUI
-
-public struct JackpotTextArea: View {
-    @Binding private var text: String
-    private let placeholder: String
-    private let isInvalid: Bool
-    private let isDisabled: Bool
-    private let onEditingEnded: () -> Void
-
-    @Environment(\.jackpotTheme) private var theme
-    @FocusState private var isFocused: Bool
-
-    public init(_ placeholder: String,
-                text: Binding<String>,
-                isInvalid: Bool = false,
-                isDisabled: Bool = false,
-                onEditingEnded: @escaping () -> Void = {}) {
-        self.placeholder = placeholder
-        self._text = text
-        self.isInvalid = isInvalid
-        self.isDisabled = isDisabled
-        self.onEditingEnded = onEditingEnded
-    }
-
-    public var body: some View {
-        ZStack(alignment: .topLeading) {
-            TextEditor(text: $text)
-                .focused($isFocused)
-                .frame(minHeight: 110)
-                .padding(8)
-                .foregroundColor(theme.textPrimary)
-                .disabled(isDisabled)
-            if text.isEmpty {
-                Text(placeholder)
-                    .foregroundColor(theme.textSecondary)
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 16)
-                    .allowsHitTesting(false)
+            focusChangedAction?(focused)
+            if focused {
+                if let identity { focusedField?.wrappedValue = identity }
+            } else {
+                editingEndedAction?()
             }
         }
-        .jackpotFieldBorder(isInvalid: isInvalid, isFocused: isFocused)
-        .onChange(of: isFocused) { focused in
-            if !focused { onEditingEnded() }
+        // The other half of the sync: the form moves the shared value, the field follows.
+        // Guarded both ways so the two `onChange`s cannot ping-pong.
+        .onChange(of: requestedFocus) { requested in
+            guard focusedField != nil, let identity else { return }
+            let shouldFocus = requested == identity
+            if isFocused != shouldFocus { isFocused = shouldFocus }
+        }
+    }
+
+    @ViewBuilder
+    private var input: some View {
+        if isSecure, !isRevealed {
+            SecureField(placeholder, text: $text)
+        } else {
+            TextField(placeholder, text: $text)
         }
     }
 }
 ```
 
-**8.** `Packages/JackpotUI/Sources/JackpotUI/JackpotDropdown.swift`
+**12.** `JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift`
 
 ```swift
 import SwiftUI
 
-public struct JackpotOption: Identifiable, Hashable {
+public struct JackpotOption: Identifiable, Hashable, Sendable {
     public let id: String
     public let label: String
 
@@ -433,287 +838,150 @@ public struct JackpotOption: Identifiable, Hashable {
 
 public struct JackpotDropdown: View {
     @Binding private var selection: String?
-    private let options: [JackpotOption]
     private let placeholder: String
-    private let isInvalid: Bool
-    private let isDisabled: Bool
-    private let onSelect: () -> Void
+    private let options: [JackpotOption]
 
     @Environment(\.jackpotTheme) private var theme
 
-    public init(_ placeholder: String,
-                selection: Binding<String?>,
-                options: [JackpotOption],
-                isInvalid: Bool = false,
-                isDisabled: Bool = false,
-                onSelect: @escaping () -> Void = {}) {
+    public init(_ placeholder: String, selection: Binding<String?>, options: [JackpotOption]) {
         self.placeholder = placeholder
         self._selection = selection
         self.options = options
-        self.isInvalid = isInvalid
-        self.isDisabled = isDisabled
-        self.onSelect = onSelect
     }
 
     public var body: some View {
         Menu {
             ForEach(options) { option in
-                Button(option.label) {
+                Button {
                     selection = option.id
-                    onSelect()
+                } label: {
+                    if option.id == selection {
+                        Label(option.label, systemImage: "checkmark")
+                    } else {
+                        Text(option.label)
+                    }
                 }
             }
         } label: {
             HStack {
                 Text(selected?.label ?? placeholder)
-                    .foregroundColor(selected == nil ? theme.textSecondary : theme.textPrimary)
+                    .jackpotForegroundStyle(valueColor)
                 Spacer()
-                Image(systemName: "chevron.down").foregroundColor(theme.textPrimary)
+                Image(systemName: "chevron.down").jackpotForegroundStyle(\.textPrimary)
             }
-            .padding(.horizontal, 14)
-            .frame(height: theme.controlHeight)
-            .jackpotFieldBorder(isInvalid: isInvalid)
+            .jackpotFont(\.fieldText)
+            .padding(.horizontal, theme.metrics.contentPadding)
+            .frame(height: theme.metrics.controlHeight)
+            .jackpotFieldBackground()
         }
-        .disabled(isDisabled)
-        .accessibilityValue(selected?.label ?? placeholder)
+        .accessibilityLabel(placeholder)
+        .accessibilityValue(selected?.label ?? "None")
     }
 
     private var selected: JackpotOption? {
         options.first { $0.id == selection }
     }
-}
-```
 
-**9.** `Packages/JackpotUI/Sources/JackpotUI/JackpotChoice.swift`
-
-```swift
-import SwiftUI
-
-public struct JackpotCheckbox: View {
-    @Binding private var isOn: Bool
-    private let label: String
-    private let isInvalid: Bool
-    private let isDisabled: Bool
-    private let onToggle: () -> Void
-
-    @Environment(\.jackpotTheme) private var theme
-
-    public init(_ label: String,
-                isOn: Binding<Bool>,
-                isInvalid: Bool = false,
-                isDisabled: Bool = false,
-                onToggle: @escaping () -> Void = {}) {
-        self.label = label
-        self._isOn = isOn
-        self.isInvalid = isInvalid
-        self.isDisabled = isDisabled
-        self.onToggle = onToggle
-    }
-
-    public var body: some View {
-        Button {
-            isOn.toggle()
-            onToggle()
-        } label: {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: isOn ? "checkmark.square.fill" : "square")
-                    .font(.title3)
-                    .foregroundColor(isOn ? theme.accent : (isInvalid ? theme.fieldBorderInvalid : theme.textSecondary))
-                    .frame(width: 24, height: 24)
-                Text(label)
-                    .font(.subheadline)
-                    .foregroundColor(theme.textPrimary)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-            }
-            .frame(minHeight: 44)
-        }
-        .buttonStyle(.plain)
-        .disabled(isDisabled)
-        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-public struct JackpotToggleRow: View {
-    @Binding private var isOn: Bool
-    private let label: String
-    private let isDisabled: Bool
-    private let onToggle: () -> Void
-
-    @Environment(\.jackpotTheme) private var theme
-
-    public init(_ label: String, isOn: Binding<Bool>, isDisabled: Bool = false,
-                onToggle: @escaping () -> Void = {}) {
-        self.label = label
-        self._isOn = isOn
-        self.isDisabled = isDisabled
-        self.onToggle = onToggle
-    }
-
-    public var body: some View {
-        Toggle(isOn: Binding(get: { isOn }, set: { isOn = $0; onToggle() })) {
-            Text(label).font(.subheadline).foregroundColor(theme.textPrimary)
-        }
-        .tint(theme.accent)
-        .disabled(isDisabled)
-    }
-}
-
-public struct JackpotRadioGroup: View {
-    @Binding private var selection: String?
-    private let options: [JackpotOption]
-    private let isDisabled: Bool
-    private let onSelect: () -> Void
-
-    @Environment(\.jackpotTheme) private var theme
-
-    public init(selection: Binding<String?>, options: [JackpotOption],
-                isDisabled: Bool = false, onSelect: @escaping () -> Void = {}) {
-        self._selection = selection
-        self.options = options
-        self.isDisabled = isDisabled
-        self.onSelect = onSelect
-    }
-
-    public var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(options) { option in
-                let isSelected = selection == option.id
-                Button {
-                    selection = option.id
-                    onSelect()
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                            .foregroundColor(isSelected ? theme.accent : theme.textSecondary)
-                        Text(option.label).font(.subheadline).foregroundColor(theme.textPrimary)
-                        Spacer(minLength: 0)
-                    }
-                    .frame(minHeight: 44)
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-            }
-        }
-        .disabled(isDisabled)
+    private var valueColor: KeyPath<JackpotColors, Color> {
+        selected == nil ? \.textSecondary : \.textPrimary
     }
 }
 ```
 
-**10.** `Packages/JackpotUI/Sources/JackpotUI/JackpotDateField.swift`
+**13.** `JackpotKit/Sources/JackpotUI/Fields/JackpotDateField.swift`
+
+The Calender input type: a read-only field that presents a graphical picker in a sheet.
 
 ```swift
 import SwiftUI
 
 public struct JackpotDateField: View {
-    @Binding private var date: Date?
+    @Binding private var selection: Date?
     private let placeholder: String
-    private let title: String
     private let range: PartialRangeThrough<Date>
-    private let isInvalid: Bool
-    private let isDisabled: Bool
-    private let onCommit: () -> Void
 
     @Environment(\.jackpotTheme) private var theme
+    @Environment(\.jackpotFieldLabel) private var fieldLabel
     @State private var isPresented = false
 
     public init(_ placeholder: String,
-                title: String,
-                date: Binding<Date?>,
-                in range: PartialRangeThrough<Date> = ...Date(),
-                isInvalid: Bool = false,
-                isDisabled: Bool = false,
-                onCommit: @escaping () -> Void = {}) {
+                selection: Binding<Date?>,
+                in range: PartialRangeThrough<Date> = ...Date()) {
         self.placeholder = placeholder
-        self.title = title
-        self._date = date
+        self._selection = selection
         self.range = range
-        self.isInvalid = isInvalid
-        self.isDisabled = isDisabled
-        self.onCommit = onCommit
     }
 
     public var body: some View {
-        Button { isPresented = true } label: {
+        Button {
+            isPresented = true
+        } label: {
             HStack {
-                Text(date.map(Self.display.string(from:)) ?? placeholder)
-                    .foregroundColor(date == nil ? theme.textSecondary : theme.textPrimary)
+                Text(displayedValue)
+                    .jackpotForegroundStyle(valueColor)
                 Spacer()
-                Image(systemName: "calendar").foregroundColor(theme.textPrimary)
+                Image(systemName: "calendar").jackpotForegroundStyle(\.textPrimary)
             }
-            .padding(.horizontal, 14)
-            .frame(height: theme.controlHeight)
-            .jackpotFieldBorder(isInvalid: isInvalid)
+            .jackpotFont(\.fieldText)
+            .padding(.horizontal, theme.metrics.contentPadding)
+            .frame(height: theme.metrics.controlHeight)
+            .jackpotFieldBackground()
         }
-        .disabled(isDisabled)
+        .buttonStyle(.plain)
+        .accessibilityLabel(fieldLabel ?? placeholder)
+        .accessibilityValue(selection == nil ? "None" : displayedValue)
         .sheet(isPresented: $isPresented) { sheet }
     }
 
     private var sheet: some View {
-        VStack(spacing: 16) {
-            Text(title).font(.headline).padding(.top, 20)
-            DatePicker("",
-                       selection: Binding(get: { date ?? range.upperBound }, set: { date = $0 }),
-                       in: range,
-                       displayedComponents: .date)
-                .datePickerStyle(.graphical)
-                .labelsHidden()
-                .padding(.horizontal)
-            JackpotButton("Done") {
-                if date == nil { date = range.upperBound }
-                onCommit()
-                isPresented = false
+        ZStack {
+            theme.colors.surface.ignoresSafeArea()
+
+            VStack(spacing: theme.metrics.spacing) {
+                Text(fieldLabel ?? placeholder)
+                    .jackpotTextStyle(\.button)
+                    .padding(.top, 20)
+
+                DatePicker("",
+                           selection: Binding(get: { selection ?? range.upperBound },
+                                              set: { selection = $0 }),
+                           in: range,
+                           displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
+                    .padding(.horizontal)
+
+                Button("Done") {
+                    // Confirming without dragging still counts as a choice, otherwise the
+                    // field silently stays empty.
+                    if selection == nil { selection = range.upperBound }
+                    isPresented = false
+                }
+                .buttonStyle(.jackpot)
+                .padding([.horizontal, .bottom], 16)
             }
-            .padding([.horizontal, .bottom], 16)
         }
     }
 
-    private static let display: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .none
-        return f
-    }()
-}
-```
-
-**11.** `Packages/JackpotUI/Sources/JackpotUI/JackpotProgressBar.swift`
-
-```swift
-import SwiftUI
-
-public struct JackpotProgressBar: View {
-    private let progress: Double
-    private let tint: Color?
-    @Environment(\.jackpotTheme) private var theme
-
-    public init(progress: Double, tint: Color? = nil) {
-        self.progress = progress
-        self.tint = tint
+    private var displayedValue: String {
+        guard let selection else { return placeholder }
+        return selection.formatted(date: .abbreviated, time: .omitted)
     }
 
-    public var body: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule().fill(theme.fieldBorder)
-                Capsule().fill(tint ?? theme.accent)
-                    .frame(width: max(0, min(1, progress)) * proxy.size.width)
-            }
-        }
-        .frame(height: 4)
-        .animation(.easeOut(duration: 0.25), value: progress)
-        .accessibilityValue("\(Int(progress * 100)) percent")
+    private var valueColor: KeyPath<JackpotColors, Color> {
+        selection == nil ? \.textSecondary : \.textPrimary
     }
 }
 ```
 
-**12.** `Packages/JackpotUI/Sources/JackpotUI/JackpotChecklist.swift`
+**14.** `JackpotKit/Sources/JackpotUI/Components/JackpotChecklist.swift`
+
+The live password-rules panel.
 
 ```swift
 import SwiftUI
 
-public struct JackpotChecklistItem: Identifiable, Equatable {
+public struct JackpotChecklistItem: Identifiable, Equatable, Sendable {
     public let id: String
     public let text: String
     public let isSatisfied: Bool
@@ -727,53 +995,56 @@ public struct JackpotChecklistItem: Identifiable, Equatable {
 
 public struct JackpotChecklist: View {
     private let title: String
-    private let sectionTitle: String
+    private let section: String
     private let items: [JackpotChecklistItem]
 
     @Environment(\.jackpotTheme) private var theme
     @State private var isExpanded = true
 
-    public init(title: String, sectionTitle: String = "Required", items: [JackpotChecklistItem]) {
+    public init(_ title: String, section: String = "Required", items: [JackpotChecklistItem]) {
         self.title = title
-        self.sectionTitle = sectionTitle
+        self.section = section
         self.items = items
     }
 
     public var body: some View {
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                Button {
-                    withAnimation(.easeOut(duration: 0.2)) { isExpanded.toggle() }
-                } label: {
-                    HStack {
-                        Text(title).font(.subheadline.weight(.semibold))
-                        Spacer()
-                        Image(systemName: "chevron.up").rotationEffect(.degrees(isExpanded ? 0 : 180))
-                    }
-                    .foregroundColor(theme.textPrimary)
-                }
+            DisclosureGroup(isExpanded: $isExpanded) {
+                VStack(alignment: .leading, spacing: 10) {
+                    ProgressView(value: satisfiedFraction)
+                        .progressViewStyle(.jackpotBar(height: 6))
+                        .tint(satisfiedFraction < 1 ? theme.colors.warning : theme.colors.success)
+                        .accessibilityLabel("Requirements met")
 
-                if isExpanded {
-                    JackpotProgressBar(progress: satisfiedFraction,
-                                       tint: satisfiedFraction < 1 ? .orange : theme.success)
-                        .frame(height: 6)
-                    Text(sectionTitle).font(.subheadline.weight(.semibold)).foregroundColor(theme.textPrimary)
+                    Text(section).jackpotTextStyle(\.sectionTitle)
+
                     ForEach(items) { item in
-                        HStack(spacing: 10) {
-                            Image(systemName: item.isSatisfied ? "checkmark.circle.fill" : "circle")
-                                .foregroundColor(item.isSatisfied ? theme.accent : theme.textSecondary)
-                            Text(item.text).font(.subheadline).foregroundColor(theme.textPrimary)
-                            Spacer()
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityValue(item.isSatisfied ? "Met" : "Not met")
+                        row(for: item)
                     }
                 }
+                .padding(.top, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } label: {
+                Text(title).jackpotTextStyle(\.sectionTitle)
             }
-            .padding(14)
-            .background(theme.fieldBackground)
-            .cornerRadius(theme.cornerRadius)
+            // The chevron follows the tint, which the theme points at the accent colour.
+            .tint(theme.colors.textPrimary)
+            .padding(theme.metrics.contentPadding)
+            .jackpotBackground(\.fieldBackground, in: theme.metrics.fieldShape)
+            .animation(.spring(response: 0.3, dampingFraction: 1), value: isExpanded)
         }
+    }
+
+    private func row(for item: JackpotChecklistItem) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: item.isSatisfied ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(item.isSatisfied ? theme.colors.accent : theme.colors.textSecondary)
+                .animation(.easeOut(duration: 0.15), value: item.isSatisfied)
+            Text(item.text).jackpotTextStyle(\.rowLabel)
+            Spacer()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(item.isSatisfied ? "Met" : "Not met")
     }
 
     private var satisfiedFraction: Double {
@@ -783,121 +1054,49 @@ public struct JackpotChecklist: View {
 }
 ```
 
-**13.** `Packages/JackpotUI/Sources/JackpotUI/JackpotSelectableCard.swift`
+**15.** `JackpotKit/Sources/JackpotUI/Components/JackpotErrorView.swift`
+
+Shown when the form fails to load.
 
 ```swift
 import SwiftUI
-
-public struct JackpotSelectableCard<Content: View>: View {
-    private let isSelected: Bool
-    private let isEnabled: Bool
-    private let action: () -> Void
-    private let content: Content
-    @Environment(\.jackpotTheme) private var theme
-
-    public init(isSelected: Bool, isEnabled: Bool = true, action: @escaping () -> Void,
-                @ViewBuilder content: () -> Content) {
-        self.isSelected = isSelected
-        self.isEnabled = isEnabled
-        self.action = action
-        self.content = content()
-    }
-
-    public var body: some View {
-        Button(action: action) {
-            content
-                .frame(maxWidth: .infinity, minHeight: 140)
-                .background(theme.fieldBackground)
-                .cornerRadius(theme.cornerRadius)
-                .overlay(
-                    RoundedRectangle(cornerRadius: theme.cornerRadius)
-                        .stroke(isSelected ? theme.accent : theme.fieldBorder, lineWidth: isSelected ? 2 : 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-public struct JackpotLockedOverlay: ViewModifier {
-    private let isLocked: Bool
-    private let message: String
-    @Environment(\.jackpotTheme) private var theme
-
-    public init(isLocked: Bool, message: String) {
-        self.isLocked = isLocked
-        self.message = message
-    }
-
-    public func body(content: Content) -> some View {
-        ZStack {
-            content.opacity(isLocked ? 0.35 : 1).allowsHitTesting(!isLocked)
-            if isLocked {
-                Text(message)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(theme.textPrimary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .shadow(radius: 4)
-            }
-        }
-    }
-}
-
-public extension View {
-    func jackpotLocked(_ isLocked: Bool, message: String) -> some View {
-        modifier(JackpotLockedOverlay(isLocked: isLocked, message: message))
-    }
-}
-```
-
-**14.** `Packages/JackpotUI/Sources/JackpotUI/JackpotStates.swift`
-
-```swift
-import SwiftUI
-
-public struct JackpotSkeleton: View {
-    private let rows: Int
-    @Environment(\.jackpotTheme) private var theme
-
-    public init(rows: Int = 5) { self.rows = rows }
-
-    public var body: some View {
-        VStack(spacing: theme.spacing) {
-            ForEach(0..<rows, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: theme.cornerRadius)
-                    .fill(theme.fieldBackground)
-                    .frame(height: theme.controlHeight)
-            }
-        }
-        .redacted(reason: .placeholder)
-    }
-}
 
 public struct JackpotErrorView: View {
-    private let title: String
     private let message: String
-    private let retryTitle: String
-    private let retry: () -> Void
-    @Environment(\.jackpotTheme) private var theme
+    private let title: String
+    private var retryAction: (() -> Void)?
 
-    public init(title: String = "Something went wrong",
-                message: String,
-                retryTitle: String = "Retry",
-                retry: @escaping () -> Void) {
-        self.title = title
+    public init(_ message: String, title: String = "Something went wrong") {
         self.message = message
-        self.retryTitle = retryTitle
-        self.retry = retry
+        self.title = title
+    }
+
+    /// Adds the retry button. Without it the view is message-only.
+    public func onRetry(_ action: @escaping () -> Void) -> Self {
+        var copy = self
+        copy.retryAction = action
+        return copy
     }
 
     public var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundColor(theme.textSecondary)
-            Text(title).font(.headline).foregroundColor(theme.textPrimary)
-            Text(message).font(.footnote).foregroundColor(theme.textSecondary).multilineTextAlignment(.center)
-            JackpotButton(retryTitle, action: retry).frame(width: 160)
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .jackpotForegroundStyle(\.textSecondary)
+                .accessibilityHidden(true)
+
+            Text(title).jackpotTextStyle(\.button)
+
+            Text(message)
+                .jackpotTextStyle(\.label, color: \.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let retryAction {
+                Button("Retry", action: retryAction)
+                    .buttonStyle(.jackpot)
+                    .frame(width: 160)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(24)
@@ -905,7 +1104,10 @@ public struct JackpotErrorView: View {
 }
 ```
 
-**15.** `Packages/JackpotUI/Sources/JackpotUI/Preview/JackpotPreviewPanel.swift`
+**16.** `JackpotKit/Sources/JackpotUI/Preview/JackpotPreviewPanel.swift`
+
+The panel wraps a preview in the themed surface; the gallery below is how you check the components
+without running the app.
 
 ```swift
 #if DEBUG
@@ -922,70 +1124,102 @@ public struct JackpotPreviewPanel<Content: View>: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let title { Text(title).font(.caption).foregroundColor(.white.opacity(0.5)) }
+            if let title {
+                Text(title).font(.caption).jackpotForegroundStyle(\.textSecondary)
+            }
             content
         }
         .padding(16)
         .frame(width: 390)
-        .background(JackpotTheme.jackpotCity.surface)
-        .preferredColorScheme(.dark)
+        .jackpotTheme(.jackpotCity)
+        .jackpotBackground(\.surface)
     }
 }
 
+// MARK: - Component gallery
+
 struct JackpotUI_Previews: PreviewProvider {
     struct Harness: View {
-        @State var text = ""
-        @State var secret = "Passwo1"
-        @State var isOn = false
-        @State var agreed = true
-        @State var choice: String? = nil
-        @State var radio: String? = "email"
-        @State var date: Date? = nil
+        @State private var mobile = ""
+        @State private var email = ""
+        @State private var secret = "Passwo1"
+        @State private var touched = false
+        @State private var promotions = false
+        @State private var agreed = true
+        @State private var income: String? = nil
+        @State private var dateOfBirth: Date? = nil
 
         var body: some View {
             ScrollView {
                 JackpotPreviewPanel("Gallery") {
-                    JackpotLabeledField(label: "Mobile", error: nil) {
-                        JackpotTextField("Enter Mobile Number", text: $text, prefix: "+27", keyboard: .numberPad)
+                    JackpotLabeledField("Mobile") {
+                        JackpotTextField("Enter Mobile Number", text: $mobile)
+                            .onEditingEnded { touched = true }
+                            .jackpotField(.phoneNumber)
+                            .jackpotFieldPrefix("+27")
                     }
+
+                    JackpotLabeledField("Email") {
+                        JackpotTextField("Enter Email Address", text: $email)
+                            .jackpotField(.email)
+                    }
+
                     JackpotLabeledField(error: "Password must be 8–20 characters") {
-                        JackpotTextField("Password", text: $secret, isSecure: true, isInvalid: true)
+                        JackpotTextField("Password", text: $secret)
+                            .jackpotField(.newPassword)
                     }
-                    JackpotChecklist(title: "Password Validity", items: [
+
+                    JackpotChecklist("Password Validity", items: [
                         .init(id: "min", text: "Minimum of 8 characters", isSatisfied: false),
                         .init(id: "max", text: "Maximum of 20 characters", isSatisfied: true),
                     ])
-                    JackpotDropdown("Enter Source Of Income", selection: $choice, options: [
-                        .init(id: "salary", label: "Salary or Wages"), .init(id: "pension", label: "Pension or Grant"),
-                    ], isInvalid: true)
-                    JackpotDateField("Enter Date Of Birth", title: "Date of Birth", date: $date)
-                    JackpotRadioGroup(selection: $radio, options: [
-                        .init(id: "sms", label: "SMS"), .init(id: "email", label: "Email"),
-                    ])
-                    JackpotCheckbox("Send Jackpot City Promotions to me", isOn: $isOn)
-                    JackpotCheckbox("I am over 18 years of age & I accept the Terms & Conditions", isOn: $agreed)
-                    JackpotToggleRow("Keep me logged in", isOn: $isOn)
-                    JackpotProgressBar(progress: 0.45)
-                    HStack(spacing: 10) {
-                        JackpotSelectableCard(isSelected: true, action: {}) { Text("100% Deposit Match").foregroundColor(.white) }
-                        JackpotSelectableCard(isSelected: false, action: {}) { Text("50 Free Spins").foregroundColor(.white) }
+
+                    JackpotLabeledField("Source Of Income", error: "Please choose one") {
+                        JackpotDropdown("Enter Source Of Income", selection: $income, options: [
+                            .init(id: "salary", label: "Salary or Wages"),
+                            .init(id: "pension", label: "Pension or Grant"),
+                        ])
                     }
-                    .jackpotLocked(true, message: "Complete your registration above to unlock your Welcome offer selection")
-                    JackpotButton("Next", isEnabled: false) {}
-                    JackpotButton("Sign Up", isLoading: true) {}
-                    JackpotButton("Previous", kind: .secondary) {}
+
+                    JackpotLabeledField("Date Of Birth") {
+                        JackpotDateField("Enter Date Of Birth", selection: $dateOfBirth)
+                    }
+
+                    Toggle("Send Jackpot City Promotions to me", isOn: $promotions)
+                        .toggleStyle(.jackpotCheckbox)
+                    Toggle("I am over 18 years of age & I accept the Terms & Conditions", isOn: $agreed)
+                        .toggleStyle(.jackpotCheckbox)
+
+                    ProgressView(value: 0.45).progressViewStyle(.jackpotBar)
+
+                    Button("Next") {}.buttonStyle(.jackpot).disabled(true)
+                    Button("Sign Up") {}.buttonStyle(.jackpot).jackpotLoading()
+                    Button("Previous") {}.buttonStyle(.jackpot(.secondary))
+                    Button("Skip for now") {}.buttonStyle(.jackpot(.tertiary))
                 }
             }
-            .background(JackpotTheme.jackpotCity.surface)
+            .jackpotTheme(.jackpotCity)
+            .jackpotBackground(\.surface)
         }
     }
 
     static var previews: some View {
         Group {
-            Harness().previewDisplayName("Gallery")
-            JackpotPreviewPanel("Skeleton") { JackpotSkeleton() }.previewDisplayName("Skeleton")
-            JackpotPreviewPanel("Error") { JackpotErrorView(message: "The network connection was lost.") {} }
-                .previewDisplayName("Error")
+            Harness().preferredColorScheme(.dark).previewDisplayName("Gallery — dark")
+            Harness().preferredColorScheme(.light).previewDisplayName("Gallery — light")
+            JackpotPreviewPanel("Error") {
+                JackpotErrorView("The network connection was lost.").onRetry {}
+            }
+            .preferredColorScheme(.dark)
+            .previewDisplayName("Error — dark")
+            JackpotPreviewPanel("Error") {
+                JackpotErrorView("The network connection was lost.").onRetry {}
+            }
+            .preferredColorScheme(.light)
+            .previewDisplayName("Error — light")
+            Harness()
+                .environment(\.sizeCategory, .accessibilityLarge)
+                .previewDisplayName("Gallery — XL text")
         }
         .previewLayout(.sizeThatFits)
     }
@@ -993,17 +1227,107 @@ struct JackpotUI_Previews: PreviewProvider {
 #endif
 ```
 
-**16.** `Packages/JackpotUI/Tests/JackpotUITests/JackpotThemeTests.swift`
+**17.** `JackpotKit/Tests/JackpotUITests/JackpotThemeTests.swift`
 
 ```swift
+import SwiftUI
 import XCTest
 @testable import JackpotUI
 
 final class JackpotThemeTests: XCTestCase {
-    func testDefaultThemeIsTheBrand() {
-        XCTAssertEqual(JackpotTheme(), .jackpotCity)
+    func testBrandThemeComposesTheStandardPresets() {
+        XCTAssertEqual(JackpotTheme.jackpotCity.colors, .jackpotCity)
+        XCTAssertEqual(JackpotTheme.jackpotCity.metrics, .standard)
+        XCTAssertEqual(JackpotTheme.jackpotCity.typography, .standard)
     }
 
+    func testWithReturnsACopyAndLeavesTheOriginalAlone() {
+        let brand = JackpotTheme.jackpotCity
+        let roomy = brand.with { $0.metrics.cornerRadius = 24 }
+
+        XCTAssertEqual(roomy.metrics.cornerRadius, 24)
+        XCTAssertEqual(brand.metrics.cornerRadius, 10)
+        XCTAssertEqual(roomy.colors, brand.colors, "An unrelated slice should carry over untouched")
+    }
+
+    func testFieldShapeFollowsCornerRadius() {
+        let theme = JackpotTheme.jackpotCity.with { $0.metrics.cornerRadius = 4 }
+        XCTAssertEqual(theme.metrics.fieldShape.cornerSize, CGSize(width: 4, height: 4))
+        XCTAssertEqual(theme.metrics.fieldShape.style, .continuous)
+    }
+}
+
+final class JackpotColorSchemeTests: XCTestCase {
+    private let light = UITraitCollection(userInterfaceStyle: .light)
+    private let dark = UITraitCollection(userInterfaceStyle: .dark)
+
+    func testSurfaceAndTextInvertBetweenAppearances() {
+        let colors = JackpotColors.jackpotCity
+        for keyPath in [\JackpotColors.surface, \.fieldBackground, \.textPrimary, \.textSecondary] {
+            let color = UIColor(colors[keyPath: keyPath])
+            XCTAssertNotEqual(color.resolvedColor(with: light),
+                              color.resolvedColor(with: dark),
+                              "\(keyPath) should differ per appearance")
+        }
+    }
+
+    func testTextOnAccentDoesNotInvert() {
+        let color = UIColor(JackpotColors.jackpotCity.textOnAccent)
+        XCTAssertEqual(color.resolvedColor(with: light), color.resolvedColor(with: dark))
+    }
+
+    func testBodyTextClearsWCAGContrastInBothAppearances() {
+        let colors = JackpotColors.jackpotCity
+        for traits in [light, dark] {
+            let text = UIColor(colors.textPrimary).resolvedColor(with: traits)
+            let background = UIColor(colors.surface).resolvedColor(with: traits)
+            XCTAssertGreaterThan(contrastRatio(text, background), 4.5,
+                                 "textPrimary on surface, \(traits.userInterfaceStyle.rawValue)")
+
+            let secondary = UIColor(colors.textSecondary).resolvedColor(with: traits)
+            XCTAssertGreaterThan(contrastRatio(secondary, background), 4.5,
+                                 "textSecondary on surface, \(traits.userInterfaceStyle.rawValue)")
+        }
+    }
+
+    /// WCAG 2.1 relative luminance.
+    private func contrastRatio(_ a: UIColor, _ b: UIColor) -> CGFloat {
+        let lighter = max(luminance(a), luminance(b))
+        let darker = min(luminance(a), luminance(b))
+        return (lighter + 0.05) / (darker + 0.05)
+    }
+
+    private func luminance(_ color: UIColor) -> CGFloat {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        color.getRed(&r, green: &g, blue: &b, alpha: &a)
+        func channel(_ value: CGFloat) -> CGFloat {
+            value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+    }
+}
+
+final class JackpotFieldKindTests: XCTestCase {
+    func testEmailOptsOutOfCapitalisationAndAutocorrection() {
+        XCTAssertEqual(JackpotFieldKind.email.keyboard, .emailAddress)
+        XCTAssertEqual(JackpotFieldKind.email.contentType, .emailAddress)
+        XCTAssertTrue(JackpotFieldKind.email.disablesAutocorrection)
+        XCTAssertFalse(JackpotFieldKind.email.isSecure)
+    }
+
+    func testPasswordKindsAreSecure() {
+        XCTAssertTrue(JackpotFieldKind.newPassword.isSecure)
+        XCTAssertEqual(JackpotFieldKind.newPassword.contentType, .newPassword)
+    }
+
+    func testWithOverridesASingleTrait() {
+        let kind = JackpotFieldKind.text.with { $0.capitalization = .words }
+        XCTAssertEqual(kind.capitalization, .words)
+        XCTAssertEqual(kind.keyboard, JackpotFieldKind.text.keyboard)
+    }
+}
+
+final class JackpotOptionTests: XCTestCase {
     func testOptionsAreIdentifiedByTheirStoredValue() {
         let option = JackpotOption(id: "SalaryOrWages", label: "Salary or Wages")
         XCTAssertEqual(option.id, "SalaryOrWages")
@@ -1017,17 +1341,18 @@ final class JackpotThemeTests: XCTestCase {
 }
 ```
 
-**17.**
+**18.**
 
 ```bash
-xcodebuild -scheme JackpotUI -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+cd JackpotKit
+xcodebuild -scheme JackpotKit-Package -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
 
 ---
 
 ### ▶ Create PR — JackpotUI
 
-`Executed 3 tests, with 0 failures`
+`Executed 11 tests, with 0 failures`
 
 Open `JackpotPreviewPanel.swift` and resume the **Gallery** preview.
 
