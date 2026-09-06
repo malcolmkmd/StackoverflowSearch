@@ -275,7 +275,11 @@ public final class DynamicFormModel: ObservableObject {
         defer { isSubmitting = false }
 
         do {
-            try await handler(FormSubmission(formCodeName: form.codeName, values: values))
+            try await handler(FormSubmission(
+                formCodeName: form.codeName,
+                values: values,
+                formId: String(form.id)
+            ))
         } catch is CancellationError {
         } catch {
             submitError = Self.message(for: error)

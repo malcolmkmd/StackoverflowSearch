@@ -93,7 +93,8 @@ public struct Translations: Sendable, Equatable {
     // in their own language.
 
     public func message(forErrorCode code: Int) -> String? {
-        string(forKey: String(code), regional: false)
+        string(forKey: "jpc-reg-error.\(code)", regional: false)
+            ?? string(forKey: String(code), regional: false)
     }
 
 }

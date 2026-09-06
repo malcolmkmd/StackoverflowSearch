@@ -5,48 +5,50 @@ Everything the registration work assumed rather than knew. Grouped by who can an
 Each entry says what we assumed, what breaks if the assumption is wrong, and — where it exists —
 the switch to flip once you have the answer.
 
-**Nothing currently blocks PR 5.** Q1 and Q2 are deferred by decision — the app PR ships with
-`MockRegistrationService` wired, so the screen is live and validated while the submit contract is
-still being confirmed. Flipping to `RemoteRegistrationService` is one line.
-
-**Highest value now: Q4b** — the passport pattern is the only invented value left in a
-confirmed, regulated behaviour.
+**Nothing currently blocks PR 5.** Q1, Q2 and Q4b are answered. `MockRegistrationService`
+can stay for previews; `RemoteRegistrationService` maps the real submit envelope.
 
 ---
 
 ## A · Backend — the registration POST
 
-### Q1 · What does the registration endpoint look like? ⏸ deferred
+### Q1 · What does the registration endpoint look like? ✅ answered
 
 Path, request body shape, and response body shape.
 
-- **Assumed:** `POST {base}/registration`, body is the flat `[String: String]` of field
-  identifiers → values, response is `{ accountNumber, requiresOtp }`.
-- **Why it matters:** `RemoteRegistrationService` compiles but is a guess. PR 5 ships with
-  `MockRegistrationService` wired until this is answered, so the *screen* is live but the
-  *submit* isn't.
-- **Where:** `JackpotRegistration/RegistrationService.swift` → `RegisterRequest`, marked `TODO`.
-- **Status:** deferred by decision. PR 5 ships with the mock service; swap is one line.
+- **Fetch** (by name *or* by id — same helper):
+  `GET https://config.jpc.africa/cron/forms/jackpotcity/{wmsNavigationRegionCode}/{identifier}?api-version=2.0`
+  The earlier `/crm/forms/...` ticket URL was wrong. Production `buildFormURL` is cron.
+- **Submit:** `POST https://config.jpc.africa/cron/forms/submit` (no `api-version`).
+  Body is `FormSubmission`: `form_id`, `form_name`, `submitted_at`, typed `fields`, optional `metadata`.
+- **Response is not a boolean.** HTTP 200 with:
+  `{ data, isSuccessful, error, metadata, httpStatusCode }`.
+  The iOS `submitForm` that only looked for `"success"` would treat a failed create as OK.
+- Drafts: `saveDraft` / `loadDraft` exist and are stubs (`true` / `nil`).
+- **Assumed:** `submitted_at` encodes as ISO-8601 (the production encoder wasn't visible).
 
-### Q2 · What happens after a successful registration? ⏸ deferred
+### Q2 · What happens after a successful registration? ✅ answered
 
-Auto-login (does the response carry a session)? Straight to OTP? Back to Login?
+- **Auto-login: yes.** `data.complianceResponse.accessToken` is a JWT (`_act-jwt-…`).
+- **Account:** `data.accountId` (UUID), `data.message` `"User Created Successfully."`, `data.status` `"Success."`.
+- **FICA is a second gate.** Success can still be partial:
+  `partialRegistrationStatus: 1`, `complianceStatus` 512 vs `requiredComplianceStatus` 1,
+  message `"Auto FICA Verification Failed, Manual Upload / Override…"`,
+  locale key `jpc-partially-complete-profile`.
+- **Failure is also HTTP 200:** `isSuccessful: false`, `error.code` / `displayCode` /
+  `message`. Look up `jpc-reg-error.{code}` (e.g. 153008, 153006 invalid ID).
+- **Where:** `FormSubmitResult`, `RemoteFormRepository.submitForm`, `RegistrationResult`.
 
-- **Assumed:** `RegistrationResult(accountNumber:requiresOTP:)` and the app routes. A placeholder.
-- **Why it matters:** it's the completion callback's entire contract, and it decides whether
-  registration needs the session layer at all.
-- **Where:** `RegistrationResult` in the same file.
+### Q3 · Are the error `code` values a documented catalogue? ✅ answered (shape)
 
-### Q3 · Are the error `code` values a documented catalogue?
+Codes are localisation keys. Registration errors live at `jpc-reg-error.{code}`
+(153006, 153008, 132002, …). Bare numeric keys like `6000328` still exist for other
+surfaces. Lookup tries the prefixed key first, then the bare number.
 
-The app-data `locales` table has entries keyed by number — `6000328` → "Maximum OTP tries
-reached…" — so codes are localisation keys. But is `code: 0` a real code, or "no specific code"?
+`code: 0` still hasn't shown up. Unknown codes fall back to `error.message`.
 
-- **Assumed:** codes are looked up in the locale table; unknown codes fall back to the
-  envelope's `message`. `0` is treated as "no specific code".
-- **Why it matters:** if `0` *is* meaningful, players get the wrong copy for the most common error.
-- **Ask for:** the code list, or at least the registration-relevant ones (duplicate mobile,
-  underage, blocked ID, etc.).
+HTTP status is **not** the contract for this call — 200 + `isSuccessful: false` is a
+failed registration.
 
 ---
 
@@ -71,21 +73,15 @@ FormDependencies(regexDependencies: ["idNumberType": "idNumber"])   // default
 Field order is still the fallback for links nobody has told us about. Six tests cover it,
 including that switching type revalidates without the user re-typing.
 
-### Q4b · What is the actual passport regex? 🔴 highest priority
+### Q4b · What is the actual passport regex? ✅ answered
 
-The schema references `passportNumberRegex` **by name** and never sends the pattern.
-`idNumberRegex` is safe — it matches the `idNumber` field's own schema regex, `^[0-9]{13}$`.
-**`passportNumberRegex` is invented by us.**
+Not a character-class regex. Length only: any 5–20 characters (`^.{5,20}$`), same idea as
+the password field's `^(.){8,20}$`. The named key `passportNumberRegex` still redirects
+onto `idNumber` when Passport is selected.
 
-- **Currently:** `^[a-zA-Z0-9]{5,20}$`, chosen deliberately permissive.
-- **Why loose on purpose:** the failure modes aren't symmetric. Too strict and a real passport
-  is rejected client-side and the user *cannot register at all*. Too loose and the server
-  rejects it, the user sees a message and retries. The server validates either way.
-- **Ask:** where do the named regexes live — a config endpoint, a shared constants file, hard-coded
-  in web? Send the pattern.
-- **Where:** `RegexCatalog.jpcDefaults` in `JackpotFormsDomain/RegexResolving.swift`, flagged in
-  source. The test asserts the *property* (accepts realistic passport shapes) rather than the
-  literal, so replacing the pattern won't break it.
+The 5–20 bounds are the ones we already used; say if the real min/max is tighter.
+
+- **Where:** `RegexCatalog.jpcDefaults` in `JackpotFormsDomain/RegexResolving.swift`.
 
 ### Q5 · How is a validation message key composed?
 
@@ -152,28 +148,22 @@ Neither appears in the registration schema. Both are implemented.
 The bootstrap response has a `registration` section we don't decode. Most likely home for the
 welcome offers (Q7), possibly other registration configuration.
 
-### Q12 · Which `regionCode` is authoritative?
+### Q12 · Which `regionCode` is authoritative? ✅ answered (for forms)
 
-Two exist: `WMSConfig.regionCode` and `AppSetupData.wmsNavigationRegionCode`. The legacy
-`getTranslation` used the second.
+Production `buildFormURL` uses `AppSetupData.wmsNavigationRegionCode`. Pass that as
+`FormDependencies.live(region:)`. `WMSConfig.regionCode` is a different field; don't mix them
+for form URLs.
 
-- **Assumed:** they agree.
-- **Why it matters:** the region drives the `-jza` suffix in translation lookup. If they can
-  diverge, some copy resolves against the wrong region.
+### Q13 · Where do the app-data URL parameters come from at runtime? ✅ answered
 
-### Q13 · Where do the app-data URL parameters come from at runtime? ⚠️ partly answered
+`https://config.jpc.africa/cron/app-data/JZA/IOS/jackpotcity/en-US?api-version=1.0`
 
-`…/cron/app-data/JZA/IOS/synapse/en-US?api-version=1.0`
-
-- **`en-US` — ✅ answered: the locale is not user-selectable.** So the translation table is
-  fetched once per session and never refetched, and no screen needs to re-render on a locale
-  change. That removes a design constraint from `TranslationsStore` — it can stay a simple
-  load-once store.
-- **`synapse` — still open.** What is it? A tenant, a brand, a platform build? It's hard-coded in
-  our call. Worth knowing whether it ever varies (a second brand on the same platform would
-  change it).
-- **`JZA` — presumed the region code**, same value as the `-jza` translation suffix. Confirm they
-  are always the same value; see Q12.
+- **`en-US` — not user-selectable.** Table loads once per session.
+- **`jackpotcity` — the brand / tenant.** Not `synapse`. A second brand would change this path
+  component; it is a parameter, default it to the brand.
+- **`JZA` — `wmsNavigationRegionCode`** (see Q12).
+- **`IOS` — platform.**
+- **`cache-control: public, max-age=300`** on this response (Q15 for *forms* is still open).
 
 ### Q14 · Can `locales` ever be null?
 
@@ -222,11 +212,22 @@ We keep everything; going back and forward loses nothing.
 
 - ~~Do named option regexes drive a dependent field?~~ **Yes** — ID vs passport selects which
   rule `idNumber` validates against. Link now declared explicitly rather than inferred from
-  field order. (Q4 — but the passport *pattern* is still unknown, see Q4b.)
+  field order. (Q4)
+- ~~What is the passport rule?~~ Length only, `^.{5,20}$` — not alphanumeric. (Q4b)
 - ~~Is the locale user-selectable?~~ **No.** `TranslationsStore` loads once per session; no
   refetch, no re-render on switch.
 - ~~Is the password strength panel used elsewhere?~~ Registration only — so deriving rules from
   the registration schema's regex is contained.
 - ~~Is `code` a String or Int?~~ `Int`. Was typed `String?`, which meant `{"code": 0}` silently
   decoded to nil and every error message rendered empty.
-- ~~Which status codes does the API use?~~ 200 / 400 / 401 / 500.
+- ~~Which status codes does the API use?~~ **It depends.** Generic problem envelopes still
+  use 200 / 400 / 401 / 500. Form submit uses HTTP 200 for *both* outcomes and puts the
+  truth in `isSuccessful`.
+- ~~What does the registration POST look like?~~ `POST /cron/forms/submit` with
+  `FormSubmission`. Response is `{ data, isSuccessful, error }`, not a boolean. (Q1)
+- ~~What happens after a successful registration?~~ Account id + JWT on
+  `complianceResponse.accessToken`. FICA can still require a manual upload. (Q2)
+- ~~Are error codes a catalogue?~~ Yes — `jpc-reg-error.{code}` for registration,
+  bare numbers for others. (Q3)
+- ~~Which regionCode is authoritative for forms?~~ `AppSetupData.wmsNavigationRegionCode`. (Q12)
+- ~~What is the app-data tenant?~~ `jackpotcity`, not `synapse`. (Q13)

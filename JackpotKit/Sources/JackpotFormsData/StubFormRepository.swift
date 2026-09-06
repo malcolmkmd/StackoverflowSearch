@@ -16,16 +16,34 @@ public struct StubFormRepository: FormRepository {
     }
 
     public func form(named name: FormName) async throws -> FormSchema {
-        if delay > 0 {
-            try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-        }
-        if let error { throw error }
+        try await prepare()
         guard let data = forms[name] else { throw FormLoadError.notFound(name) }
         return FormMapper.map(try JSONDecoder().decode(FormDTO.self, from: data))
+    }
+
+    public func form(id: String) async throws -> FormSchema {
+        try await prepare()
+        for data in forms.values {
+            let form = FormMapper.map(try JSONDecoder().decode(FormDTO.self, from: data))
+            if String(form.id) == id { return form }
+        }
+        throw FormLoadError.notFound(FormName(id))
+    }
+
+    public func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
+        try await prepare()
+        return FormSubmitResult()
     }
 
     /// Decodes raw JSON straight to a `form` — handy in tests and previews.
     public static func decode(_ data: Data) throws -> FormSchema {
         FormMapper.map(try JSONDecoder().decode(FormDTO.self, from: data))
+    }
+
+    private func prepare() async throws {
+        if delay > 0 {
+            try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        }
+        if let error { throw error }
     }
 }

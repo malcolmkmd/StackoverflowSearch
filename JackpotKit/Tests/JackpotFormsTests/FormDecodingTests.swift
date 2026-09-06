@@ -119,27 +119,20 @@ final class FormNameTests: XCTestCase {
 
 final class CRMEnvironmentTests: XCTestCase {
 
-    private let baseURL = URL(string: "https://config.jpc.africa/crm")!
+    private let cron = URL(string: "https://config.jpc.africa/cron")!
 
-    /// The exact call from the ticket:
-    /// https://config.jpc.africa/crm/forms/jackpotcity/JZA/registration?api-version=2.0
-    func testBuildsTheURLFromTheTicket() throws {
+    /// Production `buildFormURL`:
+    /// https://config.jpc.africa/cron/forms/jackpotcity/JZA/registration?api-version=2.0
+    func testBuildsTheURLFromProduction() throws {
         let request = try FormRequest(brand: "jackpotcity", region: "JZA", formName: .registration)
-            .urlRequest(in: .crm(baseURL: baseURL))
+            .urlRequest(in: .cron(baseURL: cron))
         XCTAssertEqual(request.url?.absoluteString,
-                       "https://config.jpc.africa/crm/forms/jackpotcity/JZA/registration?api-version=2.0")
-    }
-
-
-    func testApiVersionIsOverridable() throws {
-        let request = try FormRequest(brand: "jackpotcity", region: "JZA", formName: .registration)
-            .urlRequest(in: .crm(baseURL: baseURL, apiVersion: "3.0"))
-        XCTAssertTrue(request.url?.absoluteString.hasSuffix("api-version=3.0") == true)
+                       "https://config.jpc.africa/cron/forms/jackpotcity/JZA/registration?api-version=2.0")
     }
 
     func testServerAuthoredFormNameLandsInThePath() throws {
         let request = try FormRequest(brand: "jackpotcity", region: "JZA", formName: FormName("deposit"))
-            .urlRequest(in: .crm(baseURL: baseURL))
+            .urlRequest(in: .cron(baseURL: cron))
         XCTAssertTrue(request.url?.path.hasSuffix("/deposit") == true)
     }
 }

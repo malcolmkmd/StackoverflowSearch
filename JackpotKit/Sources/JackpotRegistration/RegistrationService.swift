@@ -9,16 +9,44 @@ public protocol RegistrationService: Sendable {
     func register(_ submission: FormSubmission) async throws -> RegistrationResult
 }
 
-/// What the app needs to know afterwards. ⚠️ Provisional: the registration POST's real
-/// response shape is open question #5 in the forms README. Extend when it's confirmed.
+/// What the app needs afterwards: an account, an optional session token, and whether
+/// FICA still needs a manual upload. Mapped from the submit envelope — HTTP 200 is
+/// not enough; `isSuccessful: false` is a thrown `RegistrationError`.
 public struct RegistrationResult: Equatable, Sendable {
-    public let accountNumber: String?
-    public let requiresOTP: Bool
+    public let accountId: String?
+    public let accessToken: String?
+    public let partialRegistrationStatus: Int?
+    public let isValidId: Bool?
+    public let message: String?
+    public let complianceMessage: String?
 
-    public init(accountNumber: String?, requiresOTP: Bool) {
-        self.accountNumber = accountNumber
-        self.requiresOTP = requiresOTP
+    public init(accountId: String?,
+                accessToken: String? = nil,
+                partialRegistrationStatus: Int? = nil,
+                isValidId: Bool? = nil,
+                message: String? = nil,
+                complianceMessage: String? = nil) {
+        self.accountId = accountId
+        self.accessToken = accessToken
+        self.partialRegistrationStatus = partialRegistrationStatus
+        self.isValidId = isValidId
+        self.message = message
+        self.complianceMessage = complianceMessage
     }
+
+    public init(_ submit: FormSubmitResult) {
+        self.init(
+            accountId: submit.accountId,
+            accessToken: submit.compliance?.accessToken,
+            partialRegistrationStatus: submit.partialRegistrationStatus,
+            isValidId: submit.compliance?.isValidId,
+            message: submit.message,
+            complianceMessage: submit.compliance?.message
+        )
+    }
+
+    /// Account exists but auto-FICA didn't finish — `jpc-partially-complete-profile`.
+    public var isPartial: Bool { (partialRegistrationStatus ?? 0) != 0 }
 }
 
 /// Succeeds after a short delay; fails if the mobile is `"0000000000"`. Enough to demo both
@@ -33,41 +61,29 @@ public struct MockRegistrationService: RegistrationService {
         if submission["username"].stringValue == "0000000000" {
             throw RegistrationError.mobileAlreadyRegistered
         }
-        return RegistrationResult(accountNumber: "27\(submission["username"].stringValue)", requiresOTP: true)
+        return RegistrationResult(
+            accountId: "27\(submission["username"].stringValue)",
+            accessToken: "mock-token",
+            message: "User Created Successfully."
+        )
     }
 }
 
-/// Posts the values to the registration endpoint.
-///
-/// ⚠️ The path, body shape and response shape are **not confirmed** — see open question #5.
-/// This compiles and is wired, but `RegisterRequest` is a best guess to be corrected when the
-/// backend contract is known. Keep the mock as the default until then.
+/// Posts through `FormRepository.submitForm` and maps the envelope into a result.
 public struct RemoteRegistrationService: RegistrationService {
-    private let apiClient: any ApiClient
+    private let repository: any FormRepository
 
-    public init(apiClient: any ApiClient) { self.apiClient = apiClient }
+    public init(repository: any FormRepository) { self.repository = repository }
 
     public func register(_ submission: FormSubmission) async throws -> RegistrationResult {
         do {
-            let dto: RegisterResponseDTO = try await apiClient.request(RegisterRequest(fields: submission.stringValues))
-            return RegistrationResult(accountNumber: dto.accountNumber, requiresOTP: dto.requiresOtp ?? false)
-        } catch let error as APIError {
+            return RegistrationResult(try await repository.submitForm(submission))
+        } catch let error as RegistrationError {
+            throw error
+        } catch let error as FormLoadError {
             throw RegistrationError(error)
         }
     }
-}
-
-struct RegisterRequest: APIEndpoint {
-    let fields: [String: String]
-    var path: String { "registration" }              // TODO: confirm with backend
-    var method: HTTPMethod { .POST }
-    var body: RequestBody? { try? .encodable(fields) }
-    var requiresAuth: Bool { false }
-}
-
-struct RegisterResponseDTO: Decodable, Sendable {
-    let accountNumber: String?
-    let requiresOtp: Bool?
 }
 
 /// User-facing failures. `LocalizedError` because that's what the form engine displays.
@@ -85,6 +101,15 @@ public enum RegistrationError: LocalizedError, Equatable {
         case .badRequest, .unauthorized, .server, .unexpectedStatus:
             if let message = apiError.serverMessage { self = .server(message: message) } else { self = .unexpected }
         default:
+            self = .unexpected
+        }
+    }
+
+    init(_ error: FormLoadError) {
+        switch error {
+        case .offline:              self = .offline
+        case .server(let message):  self = .server(message: message)
+        case .notFound, .submissionFailed, .unexpected:
             self = .unexpected
         }
     }

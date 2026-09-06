@@ -134,6 +134,7 @@ final class DynamicFormModelTests: XCTestCase {
 
         let submission = try XCTUnwrap(received)
         XCTAssertEqual(submission.formCodeName, .registration)
+        XCTAssertEqual(submission.formId, "1052")
         XCTAssertEqual(submission["username"].stringValue, "849134302")
         XCTAssertEqual(submission["firstname"].stringValue, "Malcolm")
         XCTAssertEqual(submission["idNumberType"].stringValue, "idNumber")

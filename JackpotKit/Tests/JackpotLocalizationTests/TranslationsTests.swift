@@ -78,6 +78,11 @@ final class TranslationsTests: XCTestCase {
                        "Maximum OTP tries reached, Please contact support on +233 30 825 5838")
     }
 
+    func testPrefixedRegistrationErrorCodeResolves() {
+        let table = Translations(["jpc-reg-error.153008": "An error occurred"], regionCode: "JZA")
+        XCTAssertEqual(table.message(forErrorCode: 153008), "An error occurred")
+    }
+
     func testUnknownErrorCodeIsNil() {
         XCTAssertNil(sample.message(forErrorCode: 999))
     }

@@ -124,6 +124,8 @@ struct FormSandboxView_Previews: PreviewProvider {
             try await Task.sleep(nanoseconds: 300_000_000)
             return FormPreview.registration
         }
+
+        func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult { FormSubmitResult() }
     }
 
     static var previews: some View {

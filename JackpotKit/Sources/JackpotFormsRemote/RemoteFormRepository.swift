@@ -22,14 +22,51 @@ public struct RemoteFormRepository: FormRepository {
     }
 
     public func form(named name: FormName) async throws -> FormSchema {
+        try await fetch(identifier: name.rawValue, formName: name)
+    }
+
+    public func form(id: String) async throws -> FormSchema {
+        try await fetch(identifier: id, formName: FormName(id))
+    }
+
+    public func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
+        do {
+            let data = try await apiClient.requestData(FormSubmitRequest(submission))
+            switch FormSubmitParser.parse(data) {
+            case .accepted(let result):
+                return result
+            case .rejected(let error):
+                throw FormLoadError.server(message: localized(error))
+            }
+        } catch {
+            throw FormErrorMapper.map(error, formName: submission.formCodeName, localizer: localizer)
+        }
+    }
+
+    public func saveDraft(_ submission: FormSubmission) async throws -> Bool {
+        true
+    }
+
+    public func loadDraft(formId: String) async throws -> FormSubmission? {
+        nil
+    }
+
+    private func fetch(identifier: String, formName: FormName) async throws -> FormSchema {
         do {
             let dto: FormDTO = try await apiClient.request(
-                FormRequest(brand: brand, region: region, formName: name)
+                FormRequest(brand: brand, region: region, identifier: identifier)
             )
             return FormMapper.map(dto)
         } catch {
-            // Translate here, at the layer boundary — the UI can't see APIError.
-            throw FormErrorMapper.map(error, formName: name, localizer: localizer)
+            throw FormErrorMapper.map(error, formName: formName, localizer: localizer)
         }
+    }
+
+    private func localized(_ error: FormSubmitErrorDTO?) -> String {
+        if let code = error?.code ?? error?.displayCode,
+           let localized = localizer?.message(forErrorCode: code) {
+            return localized
+        }
+        return error?.message ?? "We couldn't submit the form. Please try again."
     }
 }

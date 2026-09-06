@@ -16,7 +16,7 @@ public extension FormDependencies {
 
     /// **Mock-first, and the default while the endpoint is not wired up.**
     /// Serves the real `registration` schema captured from
-    /// `config.jpc.africa/crm/forms/jackpotcity/JZA/registration?api-version=2.0`
+    /// `config.jpc.africa/cron/forms/jackpotcity/JZA/registration?api-version=2.0`
     /// out of the package bundle, so the whole feature is buildable and reviewable
     /// before the API is reachable from the app.
     ///
@@ -42,6 +42,9 @@ public extension FormDependencies {
     /// because `DynamicFormView` only ever sees the `FormRepository` protocol.
     ///
     ///     .formDependencies(.live(baseURL: URL(string: "https://config.jpc.africa/crm")!))
+    ///
+    /// `baseURL` may be the historical CRM URL; fetch and submit both run on the
+    /// sibling cron service. `region` should be `AppSetupData.wmsNavigationRegionCode`.
     /// - Parameter translations: the session's locale table, from the once-per-session
     ///   app-data call. Supplying it makes the form resolve its labels, placeholders and
     ///   dropdown options through the real CRM copy, and turns API error *codes* into
@@ -57,7 +60,7 @@ public extension FormDependencies {
                      localizer explicitLocalizer: (any FormLocalizing)? = nil) -> FormDependencies {
         let interceptors: [any RequestInterceptor] = bearerToken.map { [BearerTokenInterceptor(token: $0)] } ?? []
         let client = RemoteApiClient(
-            environment: .crm(baseURL: baseURL),
+            environment: .cron(baseURL: APIEnvironment.cronBaseURL(fromCRM: baseURL)),
             interceptors: interceptors
         )
         // An empty table means app-data hasn't landed yet; the bundled placeholder copy keeps

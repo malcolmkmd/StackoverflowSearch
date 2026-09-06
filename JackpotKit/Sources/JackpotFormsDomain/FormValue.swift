@@ -56,21 +56,36 @@ public enum FormValue: Equatable, Hashable, Sendable {
     }()
 }
 
-/// What the host receives in the submit callback: values keyed by `fieldIdentifier`.
+/// What the host receives in the submit callback, and what the cron submit
+/// endpoint expects: identity, timestamp, typed field values, optional metadata.
+///
+/// Wire keys are `form_id`, `form_name`, `submitted_at`, `fields`, `metadata`.
+/// Encoding lives in `JackpotFormsRemote` so this type stays a domain value.
 public struct FormSubmission: Equatable, Sendable {
+    public let formId: String
     public let formCodeName: FormName
+    public let submittedAt: Date
     public let values: [String: FormValue]
+    public let metadata: [String: String]?
 
-    public init(formCodeName: FormName, values: [String: FormValue]) {
+    public init(formCodeName: FormName,
+                values: [String: FormValue],
+                formId: String = "",
+                submittedAt: Date = Date(),
+                metadata: [String: String]? = nil) {
+        self.formId = formId
         self.formCodeName = formCodeName
+        self.submittedAt = submittedAt
         self.values = values
+        self.metadata = metadata
     }
 
     public subscript(identifier: String) -> FormValue {
         values[identifier] ?? .empty
     }
 
-    /// Flat string payload, ready to become a JSON body.
+    /// Flat string payload. Prefer `values` for the real submit body — fields are
+    /// typed on the wire (bool stays bool, empty becomes null).
     public var stringValues: [String: String] {
         values.mapValues(\.stringValue)
     }

@@ -92,25 +92,23 @@ final class FieldValidatorTests: XCTestCase {
 
     func testNamedRegexResolvesFromTheCatalogue() {
         XCTAssertEqual(validator.optionPattern("idNumberRegex"), "^[0-9]{13}$")
-        XCTAssertNotNil(validator.optionPattern("passportNumberRegex"))
+        XCTAssertEqual(validator.optionPattern("passportNumberRegex"), "^.{5,20}$")
     }
 
-    /// The passport pattern is invented (see `RegexCatalog.jpcDefaults`), so this asserts the
-    /// *property* that matters rather than the literal: it must accept the shapes real
-    /// passport numbers take. Rejecting a valid passport blocks a registration outright;
-    /// accepting a bad one only costs a server round trip.
-    func testPassportPatternAcceptsRealisticNumbers() {
+    /// Passport is a length rule, not a character class. Too short fails; any 5–20
+    /// characters pass — including punctuation the old alphanumeric guess would have rejected.
+    func testPassportPatternIsACharacterCount() {
         let pattern = validator.optionPattern("passportNumberRegex")!
         let expression = try! NSRegularExpression(pattern: pattern)
         func matches(_ value: String) -> Bool {
             expression.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil
         }
-        for valid in ["A1234567", "123456789", "ZA1234567", "M12345678901"] {
-            XCTAssertTrue(matches(valid), "should accept \(valid)")
-        }
-        for invalid in ["", "abc", "!!!!!!!!"] {
-            XCTAssertFalse(matches(invalid), "should reject \(invalid)")
-        }
+        XCTAssertTrue(matches("A1234567"))
+        XCTAssertTrue(matches("123456789"))
+        XCTAssertTrue(matches("!!!!!!!!"))
+        XCTAssertFalse(matches(""))
+        XCTAssertFalse(matches("abc"))
+        XCTAssertFalse(matches(String(repeating: "x", count: 21)))
     }
 
     func testLiteralPatternIsUsedAsIs() {

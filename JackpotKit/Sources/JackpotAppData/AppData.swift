@@ -4,12 +4,12 @@ import JackpotNetworking
 /// The once-per-session bootstrap call:
 ///
 ///     GET https://config.jpc.africa/cron/app-data/{region}/{platform}/{tenant}/{locale}?api-version=1.0
-///     GET .../cron/app-data/JZA/IOS/synapse/en-US?api-version=1.0
+///     GET .../cron/app-data/JZA/IOS/jackpotcity/en-US?api-version=1.0
 ///
-/// Note this is a **different service and version** from the forms endpoint
-/// (`/crm/forms/...` at `api-version=2.0`) on the same host — the response advertises
-/// `api-supported-versions: 1.0,2.0`. Two services, one gateway, so the version belongs to the
-/// request rather than to a single shared environment.
+/// `tenant` is the brand (`jackpotcity`). Note this is a **different version** from the
+/// forms fetch (`/cron/forms/...` at `api-version=2.0`) on the same host — the response
+/// advertises `api-supported-versions: 1.0,2.0`. Two resources, one gateway, so the
+/// version belongs to the request rather than to a single shared environment.
 public struct AppDataRequest: APIEndpoint {
     let region: String
     let platform: String

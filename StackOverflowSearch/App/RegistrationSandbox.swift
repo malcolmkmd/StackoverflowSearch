@@ -7,6 +7,7 @@ import SwiftUI
 import JackpotFormsData
 import JackpotFormsDomain
 import JackpotFormsUI
+import JackpotUI
 
 /// On-device harness for the JackpotKit sign-up form.
 ///
@@ -30,6 +31,11 @@ struct RegistrationSandbox: View {
             ],
             dependencies: Self.dependencies
         )
+        // Not decoration. This app's asset catalogue sets an orange `AccentColor`, which is
+        // SwiftUI's app-wide tint and would otherwise colour the form's carets, selection
+        // handles, segmented picker and date wheel. `jackpotTheme` also applies
+        // `.tint(colors.accent)`, so the form keeps the Jackpot blue whatever hosts it.
+        .jackpotTheme(.jackpotCity)
     }
 }
 

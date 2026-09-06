@@ -32,8 +32,6 @@ public struct JackpotColors: Equatable, Sendable {
 
     public var accent = Palette.accent
     public var accentFill = Palette.accentFill
-    public var actionPrimary = Palette.actionPrimary
-    public var currency = Palette.actionPrimary
 
     public var error = Palette.error
     public var warning = Palette.warning
@@ -44,6 +42,9 @@ public struct JackpotColors: Equatable, Sendable {
 
 /// Held as shared constants rather than inline literals so two separately built
 /// `JackpotColors` still compare equal — a dynamic `Color` compares by identity.
+///
+/// The light values are sampled from the Jackpot City sign-up and login sheets, so this
+/// palette owes nothing to whichever app happens to host the form.
 enum Palette {
     static let surface = Color.adaptive(light: Color(red: 1.00, green: 1.00, blue: 1.00),
                                         dark: Color(red: 0.07, green: 0.08, blue: 0.09))
@@ -51,41 +52,40 @@ enum Palette {
     static let surfaceElevated = Color.adaptive(light: Color(red: 0.96, green: 0.97, blue: 0.98),
                                                 dark: Color(red: 0.11, green: 0.12, blue: 0.14))
 
-    /// Light has to be a tint off the surface, not white on white — the fill is what
-    /// identifies a field, a secondary button and a checklist panel, all of which were
-    /// invisible while this matched `surface`.
-    static let fieldBackground = Color.adaptive(light: Color(red: 0.94, green: 0.95, blue: 0.96),
+    /// #F7F8FA. A tint off the surface, not white on white — the fill is what identifies a
+    /// field, a secondary button and a checklist panel.
+    static let fieldBackground = Color.adaptive(light: Color(red: 0.969, green: 0.973, blue: 0.980),
                                                 dark: Color(red: 0.13, green: 0.14, blue: 0.16))
 
-    static let fieldBorder = Color.adaptive(light: Color(red: 0.72, green: 0.75, blue: 0.79),
+    /// #E4E5EA. Deliberately a hairline, as in the reference: the fill carries
+    /// identification and the focused and invalid borders carry state.
+    static let fieldBorder = Color.adaptive(light: Color(red: 0.894, green: 0.898, blue: 0.918),
                                             dark: Color.white.opacity(0.32))
 
-    static let textPrimary = Color.adaptive(light: Color(red: 0.07, green: 0.09, blue: 0.12),
+    /// #22252C.
+    static let textPrimary = Color.adaptive(light: Color(red: 0.133, green: 0.145, blue: 0.173),
                                             dark: .white)
 
-    /// Measured against `fieldBackground`, the tighter of its two backgrounds.
-    static let textSecondary = Color.adaptive(light: Color(red: 0.40, green: 0.43, blue: 0.48),
+    /// #565A63. Measured against `fieldBackground`, the tighter of its two backgrounds.
+    static let textSecondary = Color.adaptive(light: Color(red: 0.337, green: 0.353, blue: 0.388),
                                               dark: Color.white.opacity(0.6))
 
     /// Sits on the accent and action fills, never on the surface, so it does not invert.
     static let textOnAccent = Color.white
 
-    /// Accent as *text* — the tertiary button label, sitting on a dark surface in dark mode,
-    /// so it has to be light. One accent cannot do both jobs: white text needs a fill at or
-    /// below 0.18 luminance, and a label on the dark surface needs 0.20 or above.
-    static let accent = Color.adaptive(light: Color(red: 0.13, green: 0.40, blue: 0.87),
-                                       dark: Color(red: 0.30, green: 0.56, blue: 1.00))
+    /// Accent as *text* — the tertiary button label. In dark mode it sits on the dark
+    /// surface, so it has to be light. One value cannot do both jobs there: white on a fill
+    /// needs the fill at or below 0.18 luminance, a label on the dark surface needs 0.20 up.
+    static let accent = Color.adaptive(light: Color(red: 0.000, green: 0.376, blue: 0.925),
+                                       dark: Color(red: 0.302, green: 0.561, blue: 1.000))
 
-    /// Accent as a *fill*, carrying `textOnAccent`. Dark enough for white to read on it.
-    static let accentFill = Color.adaptive(light: Color(red: 0.13, green: 0.40, blue: 0.87),
-                                           dark: Color(red: 0.13, green: 0.40, blue: 0.88))
+    /// #0060EC, the sign-up sheet's primary button. Carries `textOnAccent` at 5.4:1, which
+    /// is why the same brand blue serves as a fill in both appearances.
+    static let accentFill = Color.adaptive(light: Color(red: 0.000, green: 0.376, blue: 0.925),
+                                           dark: Color(red: 0.000, green: 0.376, blue: 0.925))
 
-    /// The light golds all had to come down a long way: as a currency colour this sits on
-    /// the surface as text, and the brand gold reads at 2.5:1 there.
-    static let actionPrimary = Color.adaptive(light: Color(red: 0.58, green: 0.40, blue: 0.02),
-                                              dark: Color(red: 0.96, green: 0.71, blue: 0.13))
-
-    static let error = Color.adaptive(light: Color(red: 0.80, green: 0.16, blue: 0.10),
+    /// #BC1A1A, sampled from "Please enter your valid mobile number."
+    static let error = Color.adaptive(light: Color(red: 0.737, green: 0.102, blue: 0.102),
                                       dark: Color(red: 0.98, green: 0.45, blue: 0.35))
 
     static let warning = Color.adaptive(light: Color(red: 0.58, green: 0.36, blue: 0.02),

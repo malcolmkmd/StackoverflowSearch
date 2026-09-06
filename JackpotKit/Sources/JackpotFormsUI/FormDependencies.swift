@@ -83,6 +83,13 @@ struct UnavailableFormRepository: FormRepository {
         }
         throw CancellationError()
     }
+
+    func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
+        if assertsWhenCalled {
+            assertionFailure("No FormDependencies in the environment. Call .formDependencies(_:) above DynamicFormView.")
+        }
+        throw CancellationError()
+    }
 }
 
 public extension EnvironmentValues {

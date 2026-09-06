@@ -95,10 +95,10 @@ final class AppDataResponseTests: XCTestCase {
     // MARK: Endpoint
 
     func testBuildsTheURLFromTheCurlCommand() throws {
-        let request = try AppDataRequest(region: "JZA", tenant: "synapse", locale: "en-US")
+        let request = try AppDataRequest(region: "JZA", tenant: "jackpotcity", locale: "en-US")
             .urlRequest(in: .init(baseURL: URL(string: "https://config.jpc.africa")!))
         XCTAssertEqual(request.url?.absoluteString,
-                       "https://config.jpc.africa/cron/app-data/JZA/IOS/synapse/en-US?api-version=1.0")
+                       "https://config.jpc.africa/cron/app-data/JZA/IOS/jackpotcity/en-US?api-version=1.0")
     }
 
     /// Bootstrap runs before login.
