@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import JackpotFormsUI
 import JackpotFormsData
@@ -182,6 +183,35 @@ final class DynamicFormModelTests: XCTestCase {
         model.setValue(.date(Date(timeIntervalSince1970: 631152000)), for: try field(model, "dateOfBirth"))
         model.setValue(.option("SalaryOrWages"), for: try field(model, "sourceOfFunds"))
         model.setValue(.bool(true), for: try field(model, "terms"))
+    }
+
+    // MARK: Render scheduling
+
+    /// The return key marks the field on submit and the blur that follows marks it again.
+    /// A second render there is what made the error appear a beat after focus moved.
+    func testReTouchingAFieldSchedulesNoFurtherRender() async throws {
+        let model = try await loaded()
+        let mobile = try field(model, "username")
+        var renders = 0
+        let subscription = model.objectWillChange.sink { _ in renders += 1 }
+        defer { subscription.cancel() }
+
+        model.markTouched(mobile)
+        XCTAssertEqual(renders, 1)
+        model.markTouched(mobile)
+        XCTAssertEqual(renders, 1)
+    }
+
+    func testTouchingByIdentifierRevealsTheErrorAndIgnoresUnknownFields() async throws {
+        let model = try await loaded()
+        let mobile = try field(model, "username")
+        model.setValue(.text("123"), for: mobile)
+        XCTAssertNil(model.error(for: mobile), "untouched, so still silent")
+
+        model.markTouched(identifiedBy: "username")
+        XCTAssertNotNil(model.error(for: mobile))
+
+        model.markTouched(identifiedBy: "notAField")   // must not trap
     }
 
     // MARK: Return-key focus order

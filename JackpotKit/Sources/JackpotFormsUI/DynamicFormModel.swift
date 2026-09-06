@@ -28,11 +28,14 @@ public final class DynamicFormModel: ObservableObject {
     /// design (see `FieldType.unknown`); surfaced so QA and logs can see them.
     @Published public private(set) var unsupportedFields: [String] = []
 
+    /// Published: `objectWillChange` has to fire *before* the set changes, or the error it
+    /// reveals lands a render late.
+    @Published private var touched: Set<String> = []
+
     // MARK: Inputs
     private let formName: FormName
     private var dependencies: FormDependencies
     private var isConfigured: Bool
-    private var touched: Set<String> = []
     private var loadTask: Task<Void, Never>?
 
     /// - Parameter isConfigured: true when the caller supplied real dependencies. The
@@ -160,9 +163,17 @@ public final class DynamicFormModel: ObservableObject {
     }
 
     /// Call on blur, or on first edit, so errors don't appear before the user has typed.
+    /// Re-touching is a no-op rather than another render — the return key marks a field on
+    /// submit and then again on the blur that follows.
     public func markTouched(_ field: FormField) {
+        guard !touched.contains(field.identifier) else { return }
         touched.insert(field.identifier)
-        objectWillChange.send()
+    }
+
+    /// Focus navigation only carries identifiers.
+    public func markTouched(identifiedBy identifier: String) {
+        guard let field = form?.field(identifiedBy: identifier) else { return }
+        markTouched(field)
     }
 
     // MARK: Validation
@@ -239,12 +250,9 @@ public final class DynamicFormModel: ObservableObject {
     @discardableResult
     public func advance() -> Bool {
         guard let section = currentSection else { return false }
-        section.fields.filter(\.carriesValue).forEach { touched.insert($0.identifier) }
+        touched.formUnion(section.fields.filter(\.carriesValue).map(\.identifier))
         revalidateAll()
-        guard isCurrentSectionValid else {
-            objectWillChange.send()
-            return false
-        }
+        guard isCurrentSectionValid else { return false }
         if !isLastSection { sectionIndex += 1 }
         return true
     }
@@ -258,12 +266,9 @@ public final class DynamicFormModel: ObservableObject {
 
     public func submit(_ handler: @escaping (FormSubmission) async throws -> Void) async {
         guard let form else { return }
-        form.allFields.filter(\.carriesValue).forEach { touched.insert($0.identifier) }
+        touched.formUnion(form.allFields.filter(\.carriesValue).map(\.identifier))
         revalidateAll()
-        guard isFormValid else {
-            objectWillChange.send()
-            return
-        }
+        guard isFormValid else { return }
 
         isSubmitting = true
         submitError = nil

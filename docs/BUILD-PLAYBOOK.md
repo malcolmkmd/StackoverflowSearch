@@ -2496,11 +2496,14 @@ public final class DynamicFormModel: ObservableObject {
     /// design (see `FieldType.unknown`); surfaced so QA and logs can see them.
     @Published public private(set) var unsupportedFields: [String] = []
 
+    /// Published: `objectWillChange` has to fire *before* the set changes, or the error it
+    /// reveals lands a render late.
+    @Published private var touched: Set<String> = []
+
     // MARK: Inputs
     private let formName: FormName
     private var dependencies: FormDependencies
     private var isConfigured: Bool
-    private var touched: Set<String> = []
     private var loadTask: Task<Void, Never>?
 
     /// - Parameter isConfigured: true when the caller supplied real dependencies. The
@@ -2628,9 +2631,17 @@ public final class DynamicFormModel: ObservableObject {
     }
 
     /// Call on blur, or on first edit, so errors don't appear before the user has typed.
+    /// Re-touching is a no-op rather than another render — the return key marks a field on
+    /// submit and then again on the blur that follows.
     public func markTouched(_ field: FormField) {
+        guard !touched.contains(field.identifier) else { return }
         touched.insert(field.identifier)
-        objectWillChange.send()
+    }
+
+    /// Focus navigation only carries identifiers.
+    public func markTouched(identifiedBy identifier: String) {
+        guard let field = form?.field(identifiedBy: identifier) else { return }
+        markTouched(field)
     }
 
     // MARK: Validation
@@ -2707,12 +2718,9 @@ public final class DynamicFormModel: ObservableObject {
     @discardableResult
     public func advance() -> Bool {
         guard let section = currentSection else { return false }
-        section.fields.filter(\.carriesValue).forEach { touched.insert($0.identifier) }
+        touched.formUnion(section.fields.filter(\.carriesValue).map(\.identifier))
         revalidateAll()
-        guard isCurrentSectionValid else {
-            objectWillChange.send()
-            return false
-        }
+        guard isCurrentSectionValid else { return false }
         if !isLastSection { sectionIndex += 1 }
         return true
     }
@@ -2726,12 +2734,9 @@ public final class DynamicFormModel: ObservableObject {
 
     public func submit(_ handler: @escaping (FormSubmission) async throws -> Void) async {
         guard let form else { return }
-        form.allFields.filter(\.carriesValue).forEach { touched.insert($0.identifier) }
+        touched.formUnion(form.allFields.filter(\.carriesValue).map(\.identifier))
         revalidateAll()
-        guard isFormValid else {
-            objectWillChange.send()
-            return
-        }
+        guard isFormValid else { return }
 
         isSubmitting = true
         submitError = nil
@@ -3368,7 +3373,9 @@ struct DynamicFormBody: View {
     @ObservedObject var model: DynamicFormModel
     let onSubmit: DynamicFormView.SubmitHandler
     @Environment(\.jackpotTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var focusedField: String?
+    @State private var isAdvancing = true
 
     var body: some View {
         switch model.viewState {
@@ -3407,18 +3414,61 @@ struct DynamicFormBody: View {
                         #endif
                     }
                     .padding(16)
+                    // New identity per section is what lets the transition run at all; the
+                    // nav bar and progress bar sit outside it so they don't slide too.
+                    .id(model.sectionIndex)
+                    .transition(sectionTransition)
                 }
 
-                FormNavigationBar(model: model, onSubmit: onSubmit)
+                FormNavigationBar(model: model,
+                                  onSubmit: onSubmit,
+                                  advance: advance,
+                                  goBack: goBack)
                     .padding(.horizontal, 16).padding(.vertical, 12)
             }
             .jackpotBackground(\.surface)
-            .animation(.easeOut(duration: 0.2), value: model.sectionIndex)
             .jackpotFocusedField($focusedField)
             // Fires for whichever field submitted; the shared value says which one that was.
-            .onSubmit { focusedField = model.fieldAfter(focusedField) }
+            // Validate before moving, so the error and the new focus land in one update
+            // rather than the error arriving a render after the keyboard has moved on.
+            .onSubmit {
+                guard let current = focusedField else { return }
+                model.markTouched(identifiedBy: current)
+                focusedField = model.fieldAfter(current)
+            }
+            // Covers section changes that don't come from the nav bar.
             .onChange(of: model.sectionIndex) { _ in focusedField = nil }
         }
+    }
+
+    // MARK: Paging
+
+    // Direction has to be set before the index changes, not in an onChange afterwards —
+    // the transition is resolved in the same update that moves the section.
+    private func advance() {
+        isAdvancing = true
+        focusedField = nil
+        withAnimation(pagingAnimation) { _ = model.advance() }
+    }
+
+    private func goBack() {
+        isAdvancing = false
+        focusedField = nil
+        withAnimation(pagingAnimation) { model.goBack() }
+    }
+
+    /// Offset rather than a full `.move`, so the outgoing and incoming sections don't drag
+    /// the scroll view's content width around mid-flight.
+    private var sectionTransition: AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        let travel: CGFloat = isAdvancing ? 60 : -60
+        return .asymmetric(insertion: .offset(x: travel).combined(with: .opacity),
+                           removal: .offset(x: -travel).combined(with: .opacity))
+    }
+
+    private var pagingAnimation: Animation {
+        reduceMotion ? .easeOut(duration: 0.2)
+                     : .spring(response: 0.42, dampingFraction: 0.86)
     }
 }
 
@@ -3444,11 +3494,13 @@ struct FormRowView: View {
 struct FormNavigationBar: View {
     @ObservedObject var model: DynamicFormModel
     let onSubmit: DynamicFormView.SubmitHandler
+    let advance: () -> Void
+    let goBack: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
             if !model.isFirstSection {
-                Button("Previous") { model.goBack() }
+                Button("Previous", action: goBack)
                     .buttonStyle(.jackpot(.secondary))
             }
             if model.isLastSection {
@@ -3457,7 +3509,7 @@ struct FormNavigationBar: View {
                     .disabled(!model.isFormValid)
                     .jackpotLoading(model.isSubmitting)
             } else {
-                Button("Next") { _ = model.advance() }
+                Button("Next", action: advance)
                     .buttonStyle(.jackpot)
                     .disabled(!model.isCurrentSectionValid)
             }
@@ -4016,6 +4068,7 @@ final class FieldValidatorTests: XCTestCase {
 **48.** `JackpotKit/Tests/JackpotFormsTests/DynamicFormModelTests.swift`
 
 ```swift
+import Combine
 import XCTest
 @testable import JackpotFormsUI
 import JackpotFormsData
@@ -4200,6 +4253,35 @@ final class DynamicFormModelTests: XCTestCase {
         model.setValue(.date(Date(timeIntervalSince1970: 631152000)), for: try field(model, "dateOfBirth"))
         model.setValue(.option("SalaryOrWages"), for: try field(model, "sourceOfFunds"))
         model.setValue(.bool(true), for: try field(model, "terms"))
+    }
+
+    // MARK: Render scheduling
+
+    /// The return key marks the field on submit and the blur that follows marks it again.
+    /// A second render there is what made the error appear a beat after focus moved.
+    func testReTouchingAFieldSchedulesNoFurtherRender() async throws {
+        let model = try await loaded()
+        let mobile = try field(model, "username")
+        var renders = 0
+        let subscription = model.objectWillChange.sink { _ in renders += 1 }
+        defer { subscription.cancel() }
+
+        model.markTouched(mobile)
+        XCTAssertEqual(renders, 1)
+        model.markTouched(mobile)
+        XCTAssertEqual(renders, 1)
+    }
+
+    func testTouchingByIdentifierRevealsTheErrorAndIgnoresUnknownFields() async throws {
+        let model = try await loaded()
+        let mobile = try field(model, "username")
+        model.setValue(.text("123"), for: mobile)
+        XCTAssertNil(model.error(for: mobile), "untouched, so still silent")
+
+        model.markTouched(identifiedBy: "username")
+        XCTAssertNotNil(model.error(for: mobile))
+
+        model.markTouched(identifiedBy: "notAField")   // must not trap
     }
 
     // MARK: Return-key focus order

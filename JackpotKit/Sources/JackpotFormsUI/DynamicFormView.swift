@@ -60,7 +60,9 @@ struct DynamicFormBody: View {
     @ObservedObject var model: DynamicFormModel
     let onSubmit: DynamicFormView.SubmitHandler
     @Environment(\.jackpotTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var focusedField: String?
+    @State private var isAdvancing = true
 
     var body: some View {
         switch model.viewState {
@@ -99,18 +101,61 @@ struct DynamicFormBody: View {
                         #endif
                     }
                     .padding(16)
+                    // New identity per section is what lets the transition run at all; the
+                    // nav bar and progress bar sit outside it so they don't slide too.
+                    .id(model.sectionIndex)
+                    .transition(sectionTransition)
                 }
 
-                FormNavigationBar(model: model, onSubmit: onSubmit)
+                FormNavigationBar(model: model,
+                                  onSubmit: onSubmit,
+                                  advance: advance,
+                                  goBack: goBack)
                     .padding(.horizontal, 16).padding(.vertical, 12)
             }
             .jackpotBackground(\.surface)
-            .animation(.easeOut(duration: 0.2), value: model.sectionIndex)
             .jackpotFocusedField($focusedField)
             // Fires for whichever field submitted; the shared value says which one that was.
-            .onSubmit { focusedField = model.fieldAfter(focusedField) }
+            // Validate before moving, so the error and the new focus land in one update
+            // rather than the error arriving a render after the keyboard has moved on.
+            .onSubmit {
+                guard let current = focusedField else { return }
+                model.markTouched(identifiedBy: current)
+                focusedField = model.fieldAfter(current)
+            }
+            // Covers section changes that don't come from the nav bar.
             .onChange(of: model.sectionIndex) { _ in focusedField = nil }
         }
+    }
+
+    // MARK: Paging
+
+    // Direction has to be set before the index changes, not in an onChange afterwards —
+    // the transition is resolved in the same update that moves the section.
+    private func advance() {
+        isAdvancing = true
+        focusedField = nil
+        withAnimation(pagingAnimation) { _ = model.advance() }
+    }
+
+    private func goBack() {
+        isAdvancing = false
+        focusedField = nil
+        withAnimation(pagingAnimation) { model.goBack() }
+    }
+
+    /// Offset rather than a full `.move`, so the outgoing and incoming sections don't drag
+    /// the scroll view's content width around mid-flight.
+    private var sectionTransition: AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        let travel: CGFloat = isAdvancing ? 60 : -60
+        return .asymmetric(insertion: .offset(x: travel).combined(with: .opacity),
+                           removal: .offset(x: -travel).combined(with: .opacity))
+    }
+
+    private var pagingAnimation: Animation {
+        reduceMotion ? .easeOut(duration: 0.2)
+                     : .spring(response: 0.42, dampingFraction: 0.86)
     }
 }
 
@@ -136,11 +181,13 @@ struct FormRowView: View {
 struct FormNavigationBar: View {
     @ObservedObject var model: DynamicFormModel
     let onSubmit: DynamicFormView.SubmitHandler
+    let advance: () -> Void
+    let goBack: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
             if !model.isFirstSection {
-                Button("Previous") { model.goBack() }
+                Button("Previous", action: goBack)
                     .buttonStyle(.jackpot(.secondary))
             }
             if model.isLastSection {
@@ -149,7 +196,7 @@ struct FormNavigationBar: View {
                     .disabled(!model.isFormValid)
                     .jackpotLoading(model.isSubmitting)
             } else {
-                Button("Next") { _ = model.advance() }
+                Button("Next", action: advance)
                     .buttonStyle(.jackpot)
                     .disabled(!model.isCurrentSectionValid)
             }
