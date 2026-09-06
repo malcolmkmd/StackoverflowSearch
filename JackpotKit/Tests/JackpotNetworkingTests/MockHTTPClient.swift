@@ -2,10 +2,9 @@ import Foundation
 import XCTest
 @testable import JackpotNetworking
 
-/// Stubs the *transport*, not the client — so these tests exercise real URL building,
-/// real status handling and real decoding, with only the socket replaced.
-///
-/// An actor because the client calls it from concurrent tasks.
+/// Stubs the *transport*, not the client, so these tests exercise real URL building, real status
+/// handling and real decoding with only the socket replaced. An actor because the client calls
+/// it from concurrent tasks.
 actor MockHTTPClient: HTTPClient {
 
     struct Stub {
@@ -34,7 +33,7 @@ actor MockHTTPClient: HTTPClient {
         self.fallback = fallback
     }
 
-    convenience init(_ stub: Stub) { self.init([stub], fallback: stub) }
+    init(_ stub: Stub) { self.init([stub], fallback: stub) }
 
     var requestCount: Int { requests.count }
 

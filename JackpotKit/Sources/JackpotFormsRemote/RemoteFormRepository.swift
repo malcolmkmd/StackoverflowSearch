@@ -43,14 +43,6 @@ public struct RemoteFormRepository: FormRepository {
         }
     }
 
-    public func saveDraft(_ submission: FormSubmission) async throws -> Bool {
-        true
-    }
-
-    public func loadDraft(formId: String) async throws -> FormSubmission? {
-        nil
-    }
-
     private func fetch(identifier: String, formName: FormName) async throws -> FormSchema {
         do {
             let dto: FormDTO = try await apiClient.request(

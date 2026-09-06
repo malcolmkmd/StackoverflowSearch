@@ -44,14 +44,11 @@ final class JackpotColorSchemeTests: XCTestCase {
         XCTAssertEqual(color.resolvedColor(with: light), color.resolvedColor(with: dark))
     }
 
-    /// Text has to clear 4.5:1 on *every* background it can land on. Measuring only
-    /// against `surface` is what let a pure-white `fieldBackground` ship: the field, the
-    /// secondary button and the checklist panel were all white on white in light mode.
+    /// Text has to clear 4.5:1 on *every* background it can land on, not just `surface`.
     func testTextClearsWCAGContrastOnEveryBackgroundItLandsOn() {
         let colors = JackpotColors.jackpotCity
         let backgrounds: [(String, KeyPath<JackpotColors, Color>)] = [
             ("surface", \.surface),
-            ("surfaceElevated", \.surfaceElevated),
             ("fieldBackground", \.fieldBackground),
         ]
         let foregrounds: [(String, KeyPath<JackpotColors, Color>)] = [
@@ -86,16 +83,14 @@ final class JackpotColorSchemeTests: XCTestCase {
         }
     }
 
-    /// The regression: light mode had both at pure white, so a field was identifiable only
-    /// by a border that itself sat at 1.5:1.
     func testFieldFillIsDistinguishableFromTheSurfaceBehindIt() {
         let colors = JackpotColors.jackpotCity
         for traits in [light, dark] {
             let fill = resolve(colors.fieldBackground, traits)
             let surface = resolve(colors.surface, traits)
             XCTAssertNotEqual(fill, surface, "field fill matches the surface in \(name(traits))")
-            // 1.05, not 3:1. The reference sheet's own fill separates by 1.06, so this pins
-            // the regression — fill identical to surface — without overruling the design.
+            // 1.05, not 3:1 — the design's own fill separates by 1.06, so this pins the
+            // regression (fill identical to surface) without overruling the design.
             XCTAssertGreaterThan(contrastRatio(fill, surface), 1.05,
                                  "field fill is too close to the surface in \(name(traits))")
         }
@@ -111,8 +106,8 @@ final class JackpotColorSchemeTests: XCTestCase {
         UIColor(color).resolvedColor(with: traits)
     }
 
-    /// Several palette entries are translucent white. Reading their components straight
-    /// back reports the contrast of opaque white, so they have to be composited first.
+    /// Several palette entries are translucent white. Reading their components straight back
+    /// reports the contrast of opaque white, so they have to be composited first.
     private func flatten(_ color: UIColor, over background: UIColor) -> UIColor {
         let fg = components(color), bg = components(background)
         return UIColor(red: fg.r * fg.a + bg.r * (1 - fg.a),
@@ -151,8 +146,7 @@ final class JackpotFieldKindTests: XCTestCase {
         XCTAssertFalse(JackpotFieldKind.email.isSecure)
     }
 
-    func testPasswordKindsAreSecure() {
-        XCTAssertTrue(JackpotFieldKind.password.isSecure)
+    func testNewPasswordIsSecureAndOptsIntoStrongPasswordSuggestions() {
         XCTAssertTrue(JackpotFieldKind.newPassword.isSecure)
         XCTAssertEqual(JackpotFieldKind.newPassword.contentType, .newPassword)
     }

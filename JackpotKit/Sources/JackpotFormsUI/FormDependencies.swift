@@ -3,36 +3,25 @@ import JackpotFormsDomain
 
 /// Everything `DynamicFormView` needs that isn't the form name or the callback.
 ///
-/// Passing this through the SwiftUI environment is what keeps the public call site at
-/// the two arguments the ticket asks for:
-///
-///     DynamicFormView(formName: .registration) { submission in ... }
-///
-/// while still injecting every dependency explicitly at the composition root:
-///
-///     RootView().formDependencies(.live(repository: repo))
+/// Carried through the environment so the public call site stays at two arguments —
+/// `DynamicFormView(formName: .registration) { submission in ... }` — while every dependency
+/// is still injected explicitly at the composition root.
 public struct FormDependencies {
     public var repository: any FormRepository
     public var validator: FieldValidator
     public var localizer: any FormLocalizing
     public var passwordPolicy: any PasswordPolicyProviding
-    /// Whether a dropdown option's *named* regex overrides another field's rule.
-    ///
-    /// Confirmed behaviour: the ID Number Type dropdown selects whether the user is entering a
-    /// South African ID or a passport, and the ID Number field must validate accordingly.
+    /// Whether a dropdown option's *named* regex overrides another field's rule. The ID Number
+    /// Type dropdown selects SA ID vs passport, and ID Number must validate accordingly.
     public var appliesOptionRegexToDependentField: Bool
 
-    /// Explicit "this dropdown drives this field's regex" links, keyed by field identifier.
-    ///
-    /// Without this the link is *positional* — the field immediately after the dropdown — which
-    /// works for the current schema but breaks silently if the CRM reorders rows or inserts a
-    /// field between them. On a regulated field (SA ID vs passport) silent breakage is the wrong
-    /// failure mode, so the known link is stated outright and the positional rule is only a
-    /// fallback for links we haven't been told about.
+    /// Explicit "this dropdown drives this field's regex" links, keyed by driver identifier.
+    /// Stated outright rather than inferred from row order, so a CRM reorder cannot silently
+    /// relax validation on a regulated field.
     public var regexDependencies: [String: String]
-    /// Latest date a `Calender` field allows. Defaults to 18 years ago: the form's
-    /// only age gate today is the T&C checkbox, and a picker that cannot select an
-    /// under-18 date is a cheap second line of defence.
+    /// Latest date a `Calender` field allows. Defaults to 18 years ago: the form's only age gate
+    /// today is the T&C checkbox, and a picker that cannot select an under-18 date is a cheap
+    /// second line of defence.
     public var maximumDateOfBirth: Date
 
     public init(repository: any FormRepository,
@@ -51,16 +40,9 @@ public struct FormDependencies {
         self.regexDependencies = regexDependencies
         self.maximumDateOfBirth = maximumDateOfBirth
     }
-
-    public static func live(repository: any FormRepository,
-                           localizer: any FormLocalizing = ComposedKeyLocalizer()) -> FormDependencies {
-        FormDependencies(repository: repository, localizer: localizer)
-    }
 }
 
 private struct FormDependenciesKey: EnvironmentKey {
-    /// Deliberately fatal: a form with no repository is a wiring bug, and a silent
-    /// empty form would be much harder to diagnose than a clear crash in development.
     static var defaultValue: FormDependencies {
         FormDependencies(repository: UnavailableFormRepository(assertsWhenCalled: true))
     }
@@ -78,17 +60,19 @@ struct UnavailableFormRepository: FormRepository {
     }
 
     func form(named name: FormName) async throws -> FormSchema {
-        if assertsWhenCalled {
-            assertionFailure("No FormDependencies in the environment. Call .formDependencies(_:) above DynamicFormView.")
-        }
+        assertConfigured()
         throw CancellationError()
     }
 
     func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
+        assertConfigured()
+        throw CancellationError()
+    }
+
+    private func assertConfigured() {
         if assertsWhenCalled {
             assertionFailure("No FormDependencies in the environment. Call .formDependencies(_:) above DynamicFormView.")
         }
-        throw CancellationError()
     }
 }
 
@@ -107,12 +91,11 @@ public extension View {
 
 #if DEBUG
 public extension FormDependencies {
-    /// Dependencies for previews: never fetches (previews seed the schema directly),
-    /// but carries the real localizer so the copy matches the designs.
+    /// Never fetches — previews seed the schema directly — but carries the real localizer so
+    /// the copy matches the designs.
     static var preview: FormDependencies {
         FormDependencies(repository: UnavailableFormRepository(),
                          localizer: ComposedKeyLocalizer.jpcRegistration)
     }
 }
-
 #endif

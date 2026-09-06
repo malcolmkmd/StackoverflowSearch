@@ -2,11 +2,10 @@ import Foundation
 
 /// What component renders this field.
 ///
-/// `unknown` is load-bearing, not defensive padding: the form schema is served from
-/// a CRM that product edits without shipping an app build. If an unrecognised
-/// `fieldType` threw, one CRM edit would brick registration for every installed
-/// version. Unknown fields are skipped and reported instead — see
-/// `DynamicFormModel.unsupportedFields`.
+/// `unknown` is load-bearing: the schema is served from a CRM that product edits without
+/// shipping an app build, so an unrecognised `fieldType` that threw would brick registration
+/// for every installed version. Unknown fields are skipped and reported through
+/// `DynamicFormModel.unsupportedFields` instead.
 public enum FieldType: Equatable, Hashable, Sendable {
     case input
     case button

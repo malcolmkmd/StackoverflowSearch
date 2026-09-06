@@ -50,7 +50,7 @@ final class AppDataLoaderTests: XCTestCase {
     func testRevalidationSendsTheStoredValidators() async throws {
         let cache = InMemoryAppDataCache()
         cache.seed(Data(payload.utf8),
-                   validators: HTTPValidatorsBox(etag: "v1", lastModified: "Fri, 04 Sep 2026 15:53:27 GMT"),
+                   validators: HTTPValidators(etag: "v1", lastModified: "Fri, 04 Sep 2026 15:53:27 GMT"),
                    key: "jza-synapse-en-us", storedAt: Date())
         let client = SpyClient(.notModified)
         let sut = loader(client, cache: cache)
@@ -93,10 +93,12 @@ final class AppDataLoaderTests: XCTestCase {
         XCTAssertNil(snapshot, "13h old against a 12h budget → skeleton, wait for the network")
     }
 
-    func testAlwaysFreshNeverServesCache() async {
+    func testAZeroMaxStalePolicyNeverServesCache() async {
         let cache = InMemoryAppDataCache()
         cache.seed(Data(payload.utf8), key: "jza-synapse-en-us", storedAt: Date())
-        let sut = loader(SpyClient(.notModified), cache: cache, policy: .alwaysFresh)
+        let policy = AppDataStalenessPolicy(maxStale: 0)
+        let sut = loader(SpyClient(.notModified), cache: cache, policy: policy,
+                         now: { Date(timeIntervalSinceNow: 1) })
         let snapshot = await sut.cached(region: "JZA", tenant: "synapse", locale: "en-US")
         XCTAssertNil(snapshot)
     }

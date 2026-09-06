@@ -3,11 +3,9 @@ import SwiftUI
 
 /// Drop-in replacement for the legacy registration popup.
 ///
-/// The old flow was a nib-backed `UIView` shown over dimmed content. This hosts the SwiftUI
-/// feature in a view controller so safe areas, keyboard avoidance and environment propagation
-/// work, and exposes `panelView` for containers that expect a `UIView`.
-///
-/// App-side usage (the entirety of the final PR's wiring):
+/// Hosting in a view controller — rather than handing a bare `UIView` to the existing popup
+/// container — is what makes safe areas, keyboard avoidance and environment propagation work.
+/// `panelView` is there for containers that still expect a `UIView`.
 ///
 /// ```swift
 /// let controller = RegistrationPanelController(dependencies: .mock(localizer: legacyLocalizer)) { result in

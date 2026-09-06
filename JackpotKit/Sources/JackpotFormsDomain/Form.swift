@@ -1,11 +1,7 @@
 import Foundation
 
-/// A whole form as the CRM form-builder describes it.
-///
-/// Structure, per the ticket:
-///   • Sections are responsible for paging  (section == one page of the wizard)
-///   • Rows determine the row for inline elements  (fields sharing a row sit side by side)
-///   • Fields belong to rows
+/// A whole form as the CRM form-builder describes it. A section is one page of the wizard;
+/// fields sharing a row sit side by side.
 public struct FormSchema: Identifiable, Equatable, Sendable {
     public let id: Int
     public let codeName: FormName

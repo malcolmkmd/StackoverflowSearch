@@ -1,14 +1,10 @@
 import Foundation
 
-/// The error envelope the API returns with a non-2xx response:
+/// The error envelope the API returns with a non-2xx response: `{ "code": 0, "message": "…" }`
 ///
-///     { "code": 0, "message": "Error message" }
-///
-/// `code` is a **number**, not a string — an earlier version had it as `String?`, which meant
-/// `{"code": 0}` failed to decode and every problem silently came back `nil`. Since decoding is
-/// `try?` by design (a gateway may return HTML, and that must not throw), a shape mismatch here
-/// is invisible: you get no crash, no log, just permanently empty error messages. It decodes
-/// both number and string forms now so a backend that changes its mind can't reintroduce that.
+/// `code` decodes from both number and string forms. Decoding is `try?` at the call site by
+/// design — a gateway may return HTML, and that must not throw — so a shape mismatch here
+/// would be invisible: no crash, no log, just permanently empty error messages.
 public struct APIProblem: Decodable, Sendable, Equatable {
     public let code: Int?
     public let message: String?
@@ -33,9 +29,8 @@ public struct APIProblem: Decodable, Sendable, Equatable {
             $0.isEmpty ? nil : $0
         }
 
-        // A body carrying neither field — `{}`, or JSON that happens to parse but isn't a
-        // problem envelope — is *not* a problem. Throwing here means the client's `try?`
-        // yields nil, so `.badRequest(nil)` correctly reads "the server said nothing"
+        // A body carrying neither field is not a problem envelope. Throwing here means the
+        // client's `try?` yields nil, so `.badRequest(nil)` reads "the server said nothing"
         // rather than "the server sent an empty complaint".
         guard decodedCode != nil || decodedMessage != nil else {
             throw DecodingError.dataCorrupted(.init(
@@ -51,12 +46,8 @@ public struct APIProblem: Decodable, Sendable, Equatable {
 
 /// What the client concluded happened.
 ///
-/// The API contract is **200, 400, 401, 500** — those four have named cases. Anything else can
-/// still arrive from a proxy, gateway, WAF or a misrouted deploy, so `unexpectedStatus` carries
-/// it rather than pretending it can't happen or silently reporting it as a server error.
-///
-/// Distinct from `APIProblem`: this enum is client-authored and closed (new cases need an app
-/// release); `APIProblem` is server-authored and open (new codes ship without one).
+/// The API contract is 200, 400, 401, 500. Anything else can still arrive from a proxy,
+/// gateway or WAF, so `unexpectedStatus` carries it rather than flattening it into `.server`.
 public enum APIError: Error, Sendable, Equatable {
     case invalidURL(String)
     case transport(URLError.Code)
@@ -90,5 +81,4 @@ public enum APIError: Error, Sendable, Equatable {
         guard case .transport(let code) = self else { return false }
         return [.notConnectedToInternet, .networkConnectionLost, .dataNotAllowed, .timedOut].contains(code)
     }
-
 }

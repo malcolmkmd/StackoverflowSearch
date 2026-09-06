@@ -2,9 +2,9 @@ import Foundation
 
 /// A field's current value.
 ///
-/// Every case can render itself as a string because the schema validates with
-/// regexes — including the checkboxes, whose patterns are literally `^true$`.
-/// `stringValue` is therefore both what gets validated and what gets submitted.
+/// Every case renders as a string because the schema validates with regexes — including the
+/// checkboxes, whose patterns are literally `^true$`. `stringValue` is therefore both what
+/// gets validated and what gets submitted.
 public enum FormValue: Equatable, Hashable, Sendable {
     case empty
     case text(String)
@@ -27,8 +27,7 @@ public enum FormValue: Equatable, Hashable, Sendable {
         case .empty:         return true
         case .text(let s):   return s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .option(let v): return v.isEmpty
-        // An unticked required checkbox is "empty" for the purposes of the required
-        // check — which is what makes `terms` behave correctly.
+        // An unticked required checkbox counts as empty, which is what makes `terms` work.
         case .bool(let b):   return !b
         case .date:          return false
         }
@@ -56,11 +55,8 @@ public enum FormValue: Equatable, Hashable, Sendable {
     }()
 }
 
-/// What the host receives in the submit callback, and what the cron submit
-/// endpoint expects: identity, timestamp, typed field values, optional metadata.
-///
-/// Wire keys are `form_id`, `form_name`, `submitted_at`, `fields`, `metadata`.
-/// Encoding lives in `JackpotFormsRemote` so this type stays a domain value.
+/// What the host receives in the submit callback, and what the cron submit endpoint expects.
+/// Encoding lives in `JackpotFormsRemote` so this type stays free of JSON key names.
 public struct FormSubmission: Equatable, Sendable {
     public let formId: String
     public let formCodeName: FormName
@@ -84,8 +80,8 @@ public struct FormSubmission: Equatable, Sendable {
         values[identifier] ?? .empty
     }
 
-    /// Flat string payload. Prefer `values` for the real submit body — fields are
-    /// typed on the wire (bool stays bool, empty becomes null).
+    /// Flat string payload, for hosts that want one. The real submit body uses `values`,
+    /// because fields are typed on the wire (bool stays bool, empty becomes null).
     public var stringValues: [String: String] {
         values.mapValues(\.stringValue)
     }

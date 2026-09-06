@@ -2,7 +2,7 @@ import Foundation
 
 public enum ValidationResult: Equatable, Sendable {
     case valid
-    /// Localization key for the message to show, plus the field it belongs to.
+    /// Localization key for the message to show.
     case invalid(messageKey: String)
 
     public var isValid: Bool { self == .valid }
@@ -10,12 +10,10 @@ public enum ValidationResult: Equatable, Sendable {
 
 /// Validates a value against a field's schema rules.
 ///
-/// Two things make this less trivial than it looks:
-///  1. The regexes come from a server, so they can be malformed. `NSRegularExpression`
-///     throws on a bad pattern — if that propagated, one CRM typo would crash signup.
-///     A pattern that will not compile is treated as "no constraint", and reported.
-///  2. Compiling a pattern on every keystroke, for every field, is wasteful. Compiled
-///     expressions are cached by pattern string.
+/// The regexes come from a server, so they can be malformed. A pattern that will not compile
+/// is treated as "no constraint" rather than propagating the throw — one CRM typo must not
+/// break signup. Compiled expressions are cached by pattern string, because compiling on every
+/// keystroke for every field is wasteful.
 public struct FieldValidator: Sendable {
     private let regexResolver: any RegexResolving
     private let cache = RegexCache()
@@ -35,20 +33,14 @@ public struct FieldValidator: Sendable {
             return .invalid(messageKey: field.validationMessageKey)
         }
 
-        // An empty optional field has nothing left to check. Note some schema regexes
-        // permit empty explicitly (referralCode: `...|^$`), but not all do, so this
-        // guard is what keeps optional fields genuinely optional.
+        // Some schema regexes permit empty explicitly (referralCode: `...|^$`) but not all do,
+        // so this guard is what keeps optional fields genuinely optional.
         if !field.isRequired, value.isEmpty { return .valid }
 
         guard let pattern = resolvedPattern(overrideRegex ?? field.regex), !pattern.isEmpty else {
             return .valid
         }
-
-        guard let expression = cache.expression(for: pattern) else {
-            // Malformed server pattern: do not block the user on our inability to
-            // compile it. Surfaced via `invalidPatterns` for diagnostics.
-            return .valid
-        }
+        guard let expression = cache.expression(for: pattern) else { return .valid }
 
         let subject = value.stringValue
         let range = NSRange(subject.startIndex..<subject.endIndex, in: subject)
@@ -65,14 +57,6 @@ public struct FieldValidator: Sendable {
         guard let raw, !raw.isEmpty else { return nil }
         if let named = regexResolver.pattern(named: raw) { return named }
         return raw.looksLikeRegexPattern ? raw : nil
-    }
-
-    /// Patterns in this form that will not compile — worth logging in debug.
-    public func invalidPatterns(in form: FormSchema) -> [String] {
-        form.allFields.compactMap { field in
-            guard let pattern = resolvedPattern(field.regex), !pattern.isEmpty else { return nil }
-            return cache.expression(for: pattern) == nil ? pattern : nil
-        }
     }
 }
 

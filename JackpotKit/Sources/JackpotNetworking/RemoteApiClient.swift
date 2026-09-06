@@ -35,9 +35,8 @@ public struct RemoteApiClient: ApiClient {
         do {
             return try decoder.decode(Response.self, from: data)
         } catch {
-            // Cleanup vs. the reference project: it throws `.decoding(error.localizedDescription)`,
-            // which for DecodingError is famously useless ("The data couldn't be read"). The
-            // full description names the key path that failed.
+            // The full error description names the key path that failed;
+            // `localizedDescription` would only say "The data couldn't be read".
             throw APIError.decoding("\(Response.self): \(error)")
         }
     }
@@ -87,8 +86,8 @@ public struct RemoteApiClient: ApiClient {
             return (data, response)
 
         case 401:
-            // One chance for an interceptor to refresh and retry. `didRetryAuth` is a
-            // parameter rather than stored state, so a second 401 can never loop.
+            // `didRetryAuth` is a parameter rather than stored state, so a second 401
+            // can never loop.
             if !didRetryAuth {
                 for interceptor in interceptors {
                     if let retry = await interceptor.retry(request, for: endpoint, response: response, data: data) {
@@ -101,27 +100,19 @@ public struct RemoteApiClient: ApiClient {
         case 400:
             throw APIError.badRequest(problem(from: data))
 
-        case 500:
-            // A POST may already have taken effect server-side, so only idempotent
-            // requests are retried.
+        case 500, 502...504:
+            // A POST may already have taken effect server-side, so only idempotent requests
+            // are retried.
             if endpoint.isIdempotent, transientRetries < maxTransientRetries {
                 try await Task.sleep(nanoseconds: 1_000_000_000)
                 return try await send(request, for: endpoint, didRetryAuth: didRetryAuth,
                                       transientRetries: transientRetries + 1)
             }
-            throw APIError.server(problem(from: data))
+            throw response.statusCode == 500
+                ? APIError.server(problem(from: data))
+                : APIError.unexpectedStatus(response.statusCode, problem(from: data))
 
         default:
-            // Outside the documented contract (200/400/401/500) — a proxy, gateway, WAF or a
-            // misrouted deploy. Retry idempotent 5xx the same way, then report the real status
-            // rather than flattening it into `.server` and losing the diagnostic.
-            if (502...504).contains(response.statusCode),
-               endpoint.isIdempotent,
-               transientRetries < maxTransientRetries {
-                try await Task.sleep(nanoseconds: 1_000_000_000)
-                return try await send(request, for: endpoint, didRetryAuth: didRetryAuth,
-                                      transientRetries: transientRetries + 1)
-            }
             throw APIError.unexpectedStatus(response.statusCode, problem(from: data))
         }
     }
@@ -130,12 +121,9 @@ public struct RemoteApiClient: ApiClient {
         do {
             return try await httpClient.send(request)
         } catch is CancellationError {
-            // Cleanup vs. the reference project: it writes `catch is CancellationError { throw CancellationError() }`,
-            // which constructs a fresh error to say the same thing. And it never handles
-            // `URLError.cancelled`, which is what URLSession actually throws when a Task is
-            // cancelled mid-flight — so cancelled loads surfaced to users as failures.
             throw APIError.cancelled
         } catch let error as URLError where error.code == .cancelled {
+            // What URLSession actually throws when a Task is cancelled mid-flight.
             throw APIError.cancelled
         } catch let error as URLError {
             throw APIError.transport(error.code)

@@ -6,19 +6,14 @@ import JackpotLocalization
 import JackpotFormsData
 import JackpotFormsRemote
 
-// The composition target: the one place that knows both how forms are fetched (Data)
-// and how they are rendered (UI). Everything else stays one-directional.
-//
-// Consumers import the modules they actually use — JackpotFormsDomain for types, JackpotFormsUI
-// for the view, JackpotForms for .mock()/.live(). All are vended by the JackpotForms product.
+// The composition target: the one place that knows both how forms are fetched (Data) and how
+// they are rendered (UI). Every other dependency stays one-directional.
 
 public extension FormDependencies {
 
-    /// **Mock-first, and the default while the endpoint is not wired up.**
-    /// Serves the real `registration` schema captured from
-    /// `config.jpc.africa/cron/forms/jackpotcity/JZA/registration?api-version=2.0`
-    /// out of the package bundle, so the whole feature is buildable and reviewable
-    /// before the API is reachable from the app.
+    /// Serves the bundled `registration` schema, captured from
+    /// `config.jpc.africa/cron/forms/jackpotcity/JZA/registration?api-version=2.0`, so the
+    /// feature is buildable and reviewable before the API is reachable from the app.
     ///
     ///     DynamicFormView(formName: .registration) { ... }
     ///         .formDependencies(.mock())
@@ -38,17 +33,16 @@ public extension FormDependencies {
         )
     }
 
-    /// The real thing. Swap `.mock()` for this at the call site — nothing else changes,
-    /// because `DynamicFormView` only ever sees the `FormRepository` protocol.
+    /// The real thing. Swap `.mock()` for this at the call site — nothing else changes, because
+    /// `DynamicFormView` only ever sees the `FormRepository` protocol.
     ///
     ///     .formDependencies(.live(baseURL: URL(string: "https://config.jpc.africa/crm")!))
     ///
-    /// `baseURL` may be the historical CRM URL; fetch and submit both run on the
-    /// sibling cron service. `region` should be `AppSetupData.wmsNavigationRegionCode`.
-    /// - Parameter translations: the session's locale table, from the once-per-session
-    ///   app-data call. Supplying it makes the form resolve its labels, placeholders and
-    ///   dropdown options through the real CRM copy, and turns API error *codes* into
-    ///   localised sentences. Omit it and the form falls back to bundled placeholder copy.
+    /// `baseURL` may be the historical CRM URL; fetch and submit both run on the sibling cron
+    /// service. `region` should be `AppSetupData.wmsNavigationRegionCode`.
+    /// - Parameter translations: the session's locale table, from the once-per-session app-data
+    ///   call. Supplying it resolves labels, placeholders and dropdown options through the real
+    ///   CRM copy, and turns API error *codes* into localised sentences.
     /// - Parameter localizer: overrides the table-derived localizer. During the migration the
     ///   app passes a `ClosureLocalizer` over its existing `getTranslation`; once
     ///   `JackpotLocalization` is adopted, omit it and pass `translations` instead.
@@ -77,7 +71,7 @@ public extension FormDependencies {
 }
 
 public extension FormSandboxView {
-    /// The testing page the ticket asks for, wired to the bundled schemas.
+    /// The sandbox, wired to the bundled schemas.
     static func mocked() -> FormSandboxView {
         FormSandboxView(
             samples: [

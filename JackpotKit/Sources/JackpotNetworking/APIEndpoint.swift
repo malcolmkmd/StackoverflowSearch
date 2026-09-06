@@ -3,10 +3,6 @@ import Foundation
 public enum RequestBody: Sendable {
     case json(Data)
     case form([String: String])
-
-    public static func encodable<T: Encodable>(_ value: T, encoder: JSONEncoder = JSONEncoder()) throws -> RequestBody {
-        .json(try encoder.encode(value))
-    }
 }
 
 /// One endpoint = one request shape. Knows its own path, method and body;
@@ -18,9 +14,9 @@ public protocol APIEndpoint: Sendable {
     var headers: [String: String] { get }
     var body: RequestBody? { get }
     /// False for login and token-refresh endpoints, so auth interceptors skip them —
-    /// a refresh request must never carry the token it is replacing. Defaults to true.
+    /// a refresh request must never carry the token it is replacing.
     var requiresAuth: Bool { get }
-    /// Safe to retry on 5xx / timeout. Defaults to `method == .GET`.
+    /// Safe to retry on 5xx / timeout.
     var isIdempotent: Bool { get }
 }
 

@@ -19,7 +19,6 @@ public struct JackpotTheme: Equatable, Sendable {
 
 public struct JackpotColors: Equatable, Sendable {
     public var surface = Palette.surface
-    public var surfaceElevated = Palette.surfaceElevated
 
     public var fieldBackground = Palette.fieldBackground
     public var fieldBorder = Palette.fieldBorder
@@ -40,25 +39,19 @@ public struct JackpotColors: Equatable, Sendable {
     public static let jackpotCity = JackpotColors()
 }
 
-/// Held as shared constants rather than inline literals so two separately built
-/// `JackpotColors` still compare equal — a dynamic `Color` compares by identity.
-///
-/// The light values are sampled from the Jackpot City sign-up and login sheets, so this
-/// palette owes nothing to whichever app happens to host the form.
+/// Held as shared constants rather than inline literals so two separately built `JackpotColors`
+/// still compare equal — a dynamic `Color` compares by identity.
 enum Palette {
     static let surface = Color.adaptive(light: Color(red: 1.00, green: 1.00, blue: 1.00),
                                         dark: Color(red: 0.07, green: 0.08, blue: 0.09))
-
-    static let surfaceElevated = Color.adaptive(light: Color(red: 0.96, green: 0.97, blue: 0.98),
-                                                dark: Color(red: 0.11, green: 0.12, blue: 0.14))
 
     /// #F7F8FA. A tint off the surface, not white on white — the fill is what identifies a
     /// field, a secondary button and a checklist panel.
     static let fieldBackground = Color.adaptive(light: Color(red: 0.969, green: 0.973, blue: 0.980),
                                                 dark: Color(red: 0.13, green: 0.14, blue: 0.16))
 
-    /// #E4E5EA. Deliberately a hairline, as in the reference: the fill carries
-    /// identification and the focused and invalid borders carry state.
+    /// #E4E5EA. A hairline by design: the fill carries identification, and the focused and
+    /// invalid borders carry state.
     static let fieldBorder = Color.adaptive(light: Color(red: 0.894, green: 0.898, blue: 0.918),
                                             dark: Color.white.opacity(0.32))
 
@@ -73,18 +66,17 @@ enum Palette {
     /// Sits on the accent and action fills, never on the surface, so it does not invert.
     static let textOnAccent = Color.white
 
-    /// Accent as *text* — the tertiary button label. In dark mode it sits on the dark
-    /// surface, so it has to be light. One value cannot do both jobs there: white on a fill
-    /// needs the fill at or below 0.18 luminance, a label on the dark surface needs 0.20 up.
+    /// Accent as *text* — the tertiary button label. It cannot share a value with `accentFill`:
+    /// white on a fill needs the fill at or below 0.18 luminance, while a label on the dark
+    /// surface needs 0.20 up.
     static let accent = Color.adaptive(light: Color(red: 0.000, green: 0.376, blue: 0.925),
                                        dark: Color(red: 0.302, green: 0.561, blue: 1.000))
 
-    /// #0060EC, the sign-up sheet's primary button. Carries `textOnAccent` at 5.4:1, which
-    /// is why the same brand blue serves as a fill in both appearances.
-    static let accentFill = Color.adaptive(light: Color(red: 0.000, green: 0.376, blue: 0.925),
-                                           dark: Color(red: 0.000, green: 0.376, blue: 0.925))
+    /// #0060EC. Carries `textOnAccent` at 5.4:1, which is why the same brand blue serves as a
+    /// fill in both appearances.
+    static let accentFill = Color(red: 0.000, green: 0.376, blue: 0.925)
 
-    /// #BC1A1A, sampled from "Please enter your valid mobile number."
+    /// #BC1A1A.
     static let error = Color.adaptive(light: Color(red: 0.737, green: 0.102, blue: 0.102),
                                       dark: Color(red: 0.98, green: 0.45, blue: 0.35))
 

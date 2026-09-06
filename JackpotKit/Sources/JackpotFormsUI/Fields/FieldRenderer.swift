@@ -3,11 +3,11 @@ import JackpotUI
 import JackpotFormsDomain
 
 /// Maps a schema `fieldType` to a component. This switch is the entire contract between the
-/// form builder and the app: adding a type on the server means adding a case here and
-/// shipping — until then, the unknown case keeps the form usable.
+/// form builder and the app: a new type on the server means a new case here, and until then
+/// the unknown case keeps the form usable.
 ///
-/// Every case binds the model to a `JackpotUI` component. The components know nothing about
-/// forms; the views in this folder are the only place the two meet.
+/// The `JackpotUI` components know nothing about forms; the views in this folder are the only
+/// place the two meet.
 struct FieldRenderer: View {
     let field: FormField
     @ObservedObject var model: DynamicFormModel
@@ -29,8 +29,8 @@ struct FieldRenderer: View {
     }
 }
 
-/// reCAPTCHA needs a WKWebView bridge; out of scope for the first PR but the type is
-/// recognised so the form still renders and validates around it.
+/// reCAPTCHA needs a `WKWebView` bridge. The type is recognised without one so the form still
+/// renders and validates around it.
 struct RecaptchaPlaceholderView: View {
     let field: FormField
     @Environment(\.jackpotTheme) private var theme

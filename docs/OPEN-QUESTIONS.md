@@ -24,7 +24,8 @@ Path, request body shape, and response body shape.
 - **Response is not a boolean.** HTTP 200 with:
   `{ data, isSuccessful, error, metadata, httpStatusCode }`.
   The iOS `submitForm` that only looked for `"success"` would treat a failed create as OK.
-- Drafts: `saveDraft` / `loadDraft` exist and are stubs (`true` / `nil`).
+- Drafts: the reference app declares `saveDraft` / `loadDraft` but both are stubs (`true` / `nil`),
+  so `FormRepository` here doesn't carry them. Add them when there's a persistence story.
 - **Assumed:** `submitted_at` encodes as ISO-8601 (the production encoder wasn't visible).
 
 ### Q2 · What happens after a successful registration? ✅ answered

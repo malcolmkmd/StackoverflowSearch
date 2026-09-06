@@ -17,23 +17,10 @@ extension EnvironmentValues {
 // MARK: - Theme
 
 public extension View {
+    /// Sets `tint` alongside the theme, so system controls (pickers, toggles) inherit the brand
+    /// accent without every call site remembering to.
     func jackpotTheme(_ theme: JackpotTheme) -> some View {
         environment(\.jackpotTheme, theme).tint(theme.colors.accent)
-    }
-
-    func jackpotTheme(_ transform: @escaping (inout JackpotTheme) -> Void) -> some View {
-        modifier(JackpotThemeTransform(transform: transform))
-    }
-}
-
-private struct JackpotThemeTransform: ViewModifier {
-    let transform: (inout JackpotTheme) -> Void
-    @Environment(\.jackpotTheme) private var inherited
-
-    func body(content: Content) -> some View {
-        var theme = inherited
-        transform(&theme)
-        return content.jackpotTheme(theme)
     }
 }
 

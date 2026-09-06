@@ -3,22 +3,19 @@ import Foundation
 /// Identifies a form in the CRM — the `formCodeName` in the schema, and the last path
 /// component of the fetch URL.
 ///
-/// Deliberately **not** an enum. Forms are authored server-side and new ones appear
-/// without an app release, so a closed set would fight the architecture: the moment the
-/// CRM serves `deposit`, a `switch` somewhere would stop compiling or a new form would be
-/// unreachable until the next submission to the App Store.
+/// Deliberately not an enum. Forms are authored server-side and new ones appear without an app
+/// release, so a closed set would fight the architecture. This is the `Notification.Name`
+/// pattern instead: a `RawRepresentable` wrapper with static members for the forms this build
+/// knows about, and `FormName("deposit")` for anything else.
 ///
-/// Instead this is the `Notification.Name` pattern — a `RawRepresentable` wrapper with
-/// static members for the forms this build knows about:
-///
-///     DynamicFormView(formName: .registration) { ... }     // autocompleted, typo-proof
-///     DynamicFormView(formName: FormName("deposit")) { ... } // server-authored, still fine
-///
-/// Note it is **not** `ExpressibleByStringLiteral`. If it were, `formName: "registraton"`
-/// would still compile and you'd be back to a runtime 404 — which is the whole problem this
-/// type exists to remove. Constructing one from an arbitrary string is possible but has to be
-/// written out, so `FormName(` is greppable at review time.
-public struct FormName: RawRepresentable, Hashable, Sendable, Codable, CustomStringConvertible {
+/// Not `ExpressibleByStringLiteral`, on purpose: `formName: "registraton"` would compile and
+/// give a runtime 404. Constructing one from an arbitrary string has to be written out, so
+/// `FormName(` stays greppable at review time.
+/// Not `Codable`: a form name never crosses a serialisation boundary as itself. Decoding goes
+/// `FormDTO.formCodeName` (a `String`) → `FormName(_:)` in the mapper, and encoding goes
+/// `FormSubmitBody.formName = submission.formCodeName.rawValue`. Both directions are explicit at
+/// the wire type, which is where the JSON key names already live.
+public struct FormName: RawRepresentable, Hashable, Sendable, CustomStringConvertible {
 
     public let rawValue: String
 
@@ -26,7 +23,6 @@ public struct FormName: RawRepresentable, Hashable, Sendable, Codable, CustomStr
         self.rawValue = rawValue
     }
 
-    /// Shorthand for the static members below and for server-authored names.
     public init(_ rawValue: String) {
         self.rawValue = rawValue
     }
@@ -36,9 +32,9 @@ public struct FormName: RawRepresentable, Hashable, Sendable, Codable, CustomStr
 
 // MARK: - Known forms
 //
-// Add a case here when the CRM starts serving a form you reference by name in code.
-// Forms you only ever reach dynamically (from a sitemap, a deep link, the forms list
-// endpoint) never need an entry — construct them with `FormName(_:)`.
+// Add a member here when the CRM starts serving a form you reference by name in code. Forms
+// you only ever reach dynamically — from a sitemap, deep link or the forms list endpoint —
+// never need one.
 
 public extension FormName {
     /// The two-section sign-up form: credentials + name + email, then FICA.

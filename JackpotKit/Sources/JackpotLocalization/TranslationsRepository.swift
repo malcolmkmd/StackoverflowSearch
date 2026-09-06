@@ -13,9 +13,8 @@ public struct RemoteTranslationsRepository: TranslationsRepository {
         self.apiClient = apiClient
     }
 
-    /// Fetches the whole bootstrap payload and keeps only the strings. Other features can
-    /// fetch the same endpoint and keep their own section, or — better once more than one
-    /// feature needs it — one caller fetches `AppDataResponse` and hands it round.
+    /// Fetches the whole bootstrap payload and keeps only the strings. Once more than one
+    /// feature needs it, one caller should fetch `AppDataResponse` and hand it round instead.
     public func translations(region: String, tenant: String, locale: String) async throws -> Translations {
         let data = try await apiClient.requestData(
             AppDataRequest(region: region, tenant: tenant, locale: locale)

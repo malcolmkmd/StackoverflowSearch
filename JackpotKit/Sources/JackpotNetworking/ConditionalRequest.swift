@@ -1,10 +1,12 @@
 import Foundation
 
-/// The cache validators a response came back with.
+/// The cache validators a response came back with. Sending them back turns a revalidation
+/// into a 304 with an empty body — the round trip still happens, but nothing is transferred
+/// or decoded.
 ///
-/// The app-data response carries `last-modified`; if the service also emits `etag`, that wins.
-/// Sending these back turns a revalidation into a 304 with an empty body — the round trip still
-/// happens, but nothing is transferred or decoded.
+/// `Codable` both ways, and the only type in this layer that is: these are read off the response
+/// headers rather than a JSON body, so the conformance exists for `AppDataCaching`, which writes
+/// them beside the payload it validates and reads them back on the next launch.
 public struct HTTPValidators: Sendable, Equatable, Codable {
     public let etag: String?
     public let lastModified: String?

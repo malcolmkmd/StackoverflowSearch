@@ -83,12 +83,6 @@ public struct JackpotLabeledField<Content: View>: View {
     }
 }
 
-public extension View {
-    func jackpotLabeled(_ label: String? = nil, error: String? = nil) -> some View {
-        JackpotLabeledField(label, error: error) { self }
-    }
-}
-
 // MARK: - Divider
 
 public struct JackpotDivider: View {

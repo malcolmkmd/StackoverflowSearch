@@ -310,8 +310,8 @@ Refactor screens to accept injected dependencies, ranked by call-site count:
 grep -rn "getTranslation(" --include=*.swift . | cut -d: -f1 | sort | uniq -c | sort -rn
 ```
 
-Existing `*TranslationsKeys` enums are retained unchanged — they conform to `LocalizationKey`
-with an empty conformance. Only the lookup mechanism moves.
+Existing `*TranslationsKeys` enums are retained unchanged — call sites pass `key.rawValue` to
+`Translations`. Only the lookup mechanism moves.
 
 *Exit criteria:* deprecation warnings at zero.
 

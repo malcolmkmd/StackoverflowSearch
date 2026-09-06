@@ -2,8 +2,8 @@ import Foundation
 import SwiftUI
 import JackpotFormsDomain
 
-/// Localization table that turns the schema's keys into the copy in the designs.
-/// In production this is fed from the CRM strings endpoint — see the guide.
+/// Turns the schema's keys into the copy in the designs. In production the equivalent table
+/// arrives in the app-data response's `locales` section.
 public extension ComposedKeyLocalizer {
     static let jpcRegistration = ComposedKeyLocalizer(table: [
         // Placeholders / labels
@@ -46,9 +46,8 @@ public extension ComposedKeyLocalizer {
 }
 
 public enum FormPreviewData {
-    /// Schemas bundled with the package, for the sandbox and previews.
-    /// `Bundle.module` is internal, so it cannot appear in a public default argument —
-    /// hence the explicit overload rather than `bundle: Bundle = .module`.
+    /// `Bundle.module` is internal, so it cannot appear in a public default argument — hence
+    /// this overload rather than `bundle: Bundle = .module`.
     public static func bundledJSON(named name: String) -> Data {
         json(named: name, in: .module)
     }
@@ -62,8 +61,7 @@ public enum FormPreviewData {
         return data
     }
 
-    /// The two schemas shipped with the package, keyed by `formCodeName` — exactly the
-    /// shape `StubFormRepository(forms:)` wants.
+    /// The schemas shipped with the package, keyed by `formCodeName`.
     public static var bundledForms: [FormName: Data] {
         Dictionary(uniqueKeysWithValues: FormName.bundled.map { ($0, bundledJSON(named: $0.rawValue)) })
     }

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// `TextInputAutocapitalization` is neither `Equatable` nor inspectable, so the kind stores
-/// its own case and converts when applying.
+/// `TextInputAutocapitalization` is neither `Equatable` nor inspectable, so the kind stores its
+/// own case and converts when applying.
 public enum JackpotCapitalization: Equatable, Sendable {
     case never, words, sentences, characters
 
@@ -15,6 +15,8 @@ public enum JackpotCapitalization: Equatable, Sendable {
     }
 }
 
+/// Keyboard, autofill and autocorrection settings applied as one unit, so a field's semantics
+/// are declared once instead of as four loose modifiers per call site.
 public struct JackpotFieldKind: Equatable, Sendable {
     public var keyboard: UIKeyboardType = .default
     public var contentType: UITextContentType?
@@ -23,10 +25,6 @@ public struct JackpotFieldKind: Equatable, Sendable {
     public var isSecure = false
 
     public static let text = JackpotFieldKind()
-
-    public static let name = JackpotFieldKind(contentType: .name,
-                                              capitalization: .words,
-                                              disablesAutocorrection: true)
 
     public static let givenName = JackpotFieldKind(contentType: .givenName,
                                                    capitalization: .words,
@@ -46,11 +44,8 @@ public struct JackpotFieldKind: Equatable, Sendable {
                                                     capitalization: .never,
                                                     disablesAutocorrection: true)
 
-    public static let password = JackpotFieldKind(contentType: .password,
-                                                  capitalization: .never,
-                                                  disablesAutocorrection: true,
-                                                  isSecure: true)
-
+    /// `.newPassword`, not `.password`: it opts the field into iOS's strong-password suggestion,
+    /// which is what a registration form wants.
     public static let newPassword = JackpotFieldKind(contentType: .newPassword,
                                                      capitalization: .never,
                                                      disablesAutocorrection: true,
@@ -61,26 +56,9 @@ public struct JackpotFieldKind: Equatable, Sendable {
                                                      capitalization: .never,
                                                      disablesAutocorrection: true)
 
-    public static let streetAddress = JackpotFieldKind(contentType: .fullStreetAddress,
-                                                       capitalization: .words)
-
-    public static let postalCode = JackpotFieldKind(keyboard: .numbersAndPunctuation,
-                                                    contentType: .postalCode,
-                                                    capitalization: .characters,
-                                                    disablesAutocorrection: true)
-
-    public static let url = JackpotFieldKind(keyboard: .URL,
-                                             contentType: .URL,
-                                             capitalization: .never,
-                                             disablesAutocorrection: true)
-
     public static let number = JackpotFieldKind(keyboard: .numberPad,
                                                 capitalization: .never,
                                                 disablesAutocorrection: true)
-
-    public static let decimal = JackpotFieldKind(keyboard: .decimalPad,
-                                                 capitalization: .never,
-                                                 disablesAutocorrection: true)
 
     public func with(_ transform: (inout JackpotFieldKind) -> Void) -> JackpotFieldKind {
         var copy = self

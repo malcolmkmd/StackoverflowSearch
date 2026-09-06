@@ -2,15 +2,14 @@ import SwiftUI
 import JackpotUI
 import JackpotFormsDomain
 
-/// The single component the ticket asks for.
+/// A whole form, from one name and one callback.
 ///
 ///     DynamicFormView(formName: .registration) { submission in
 ///         try await api.register(submission.stringValues)
 ///     }
 ///
-/// Two arguments: the form name used to fetch the schema, and the callback that receives the
-/// collected data. Everything else arrives through the environment (`.formDependencies(_:)`,
-/// `.jackpotTheme(_:)`) so no dependency is hidden in a global.
+/// Everything else arrives through the environment (`.formDependencies(_:)`,
+/// `.jackpotTheme(_:)`), so no dependency is hidden in a global.
 public struct DynamicFormView: View {
 
     public typealias SubmitHandler = (FormSubmission) async throws -> Void
@@ -115,8 +114,7 @@ struct DynamicFormBody: View {
             }
             .jackpotBackground(\.surface)
             .jackpotFocusedField($focusedField)
-            // Fires for whichever field submitted; the shared value says which one that was.
-            // Validate before moving, so the error and the new focus land in one update
+            // Validate before moving focus, so the error and the new focus land in one update
             // rather than the error arriving a render after the keyboard has moved on.
             .onSubmit {
                 guard let current = focusedField else { return }

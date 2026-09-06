@@ -2,11 +2,10 @@ import Foundation
 import Combine
 import JackpotFormsDomain
 
-/// The engine. Owns the fetched schema, every field's value, touched state and errors,
-/// and which section (page) is showing.
+/// The engine. Owns the fetched schema, every field's value, touched state and errors, and
+/// which section (page) is showing.
 ///
 /// `ObservableObject` rather than `@Observable` because this package targets iOS 15.
-/// The upgrade is mechanical when the app moves to 17 — see the guide, "iOS 15 seams".
 @MainActor
 public final class DynamicFormModel: ObservableObject {
 
@@ -24,12 +23,12 @@ public final class DynamicFormModel: ObservableObject {
     @Published public private(set) var isSubmitting = false
     @Published public private(set) var submitError: String?
 
-    /// Field types the schema asked for that this build cannot render. Non-fatal by
-    /// design (see `FieldType.unknown`); surfaced so QA and logs can see them.
+    /// Field types the schema asked for that this build cannot render. Non-fatal by design
+    /// (see `FieldType.unknown`); surfaced so QA and logs can see them.
     @Published public private(set) var unsupportedFields: [String] = []
 
-    /// Published: `objectWillChange` has to fire *before* the set changes, or the error it
-    /// reveals lands a render late.
+    /// `@Published` because `objectWillChange` has to fire *before* the set changes, or the
+    /// error it reveals lands a render late.
     @Published private var touched: Set<String> = []
 
     // MARK: Inputs
@@ -39,9 +38,9 @@ public final class DynamicFormModel: ObservableObject {
     private var loadTask: Task<Void, Never>?
 
     /// - Parameter isConfigured: true when the caller supplied real dependencies. The
-    ///   two-argument `DynamicFormView.init` passes false and lets `configureIfNeeded`
-    ///   swap in the environment's copy on first appearance — `@StateObject` cannot
-    ///   read `@Environment` from an initializer.
+    ///   two-argument `DynamicFormView.init` passes false and lets `configureIfNeeded` swap in
+    ///   the environment's copy on first appearance, because `@StateObject` cannot read
+    ///   `@Environment` from an initializer.
     public init(formName: FormName, dependencies: FormDependencies, isConfigured: Bool = true) {
         self.formName = formName
         self.dependencies = dependencies
@@ -70,14 +69,12 @@ public final class DynamicFormModel: ObservableObject {
     public var isFirstSection: Bool { sectionIndex == 0 }
     public var isLastSection: Bool { sectionIndex >= sections.count - 1 }
 
-    /// Fraction of all required fields across the whole form that currently validate.
-    /// Drives the progress bar at the top of the panel.
+    /// Fraction of the form's required fields that currently validate. Drives the progress bar.
     public var progress: Double {
         guard let form else { return 0 }
         let required = form.allFields.filter { $0.carriesValue && $0.isRequired }
-        guard !required.isEmpty else { return isLastSection ? 1 : 0 }
-        let satisfied = required.filter { isValid($0) }.count
-        return Double(satisfied) / Double(required.count)
+        guard !required.isEmpty else { return 1 }
+        return Double(required.filter(isValid).count) / Double(required.count)
     }
 
     /// Whether the visible section can be advanced past / submitted.
@@ -155,16 +152,16 @@ public final class DynamicFormModel: ObservableObject {
     public func setValue(_ value: FormValue, for field: FormField) {
         values[field.identifier] = value
         validate(field)
-        // A dropdown can change a dependent field's rule (ID type → ID number), so
-        // anything downstream of it has to be re-checked, not just this field.
+        // A dropdown can change a dependent field's rule (ID type → ID number), so anything
+        // downstream of it has to be re-checked, not just this field.
         if field.type == .dropdown, dependencies.appliesOptionRegexToDependentField {
             revalidateDependents(of: field)
         }
     }
 
-    /// Call on blur, or on first edit, so errors don't appear before the user has typed.
-    /// Re-touching is a no-op rather than another render — the return key marks a field on
-    /// submit and then again on the blur that follows.
+    /// Call on blur so errors don't appear before the user has typed. Re-touching is a no-op
+    /// rather than another render: the return key marks a field, then the blur that follows
+    /// marks it again.
     public func markTouched(_ field: FormField) {
         guard !touched.contains(field.identifier) else { return }
         touched.insert(field.identifier)
@@ -211,12 +208,8 @@ public final class DynamicFormModel: ObservableObject {
         dependents.forEach { validate($0) }
     }
 
-    /// The dropdown that drives `field`'s regex, if any.
-    ///
-    /// Links are declared in `FormDependencies.regexDependencies`, never inferred from field
-    /// order. An earlier version fell back to "the dropdown immediately before this field",
-    /// which worked for the current schema but would have re-enabled silent breakage on a
-    /// reorder — the exact fragility declaring the link was meant to remove.
+    /// The dropdown that drives `field`'s regex, if any. Links come from
+    /// `FormDependencies.regexDependencies` and are never inferred from field order.
     private func regexDriver(for field: FormField) -> FormField? {
         guard dependencies.appliesOptionRegexToDependentField,
               let form,
@@ -295,13 +288,12 @@ public final class DynamicFormModel: ObservableObject {
 }
 
 #if DEBUG
-// Preview support. Lives in this file because `apply(_:)` is private, and `private`
-// in Swift is file-scoped — so an extension here can seed a model without widening
-// the type's real API.
+// Preview support lives in this file because `private` is file-scoped in Swift, so an
+// extension here can call `apply(_:)` without widening the type's real API.
 public extension DynamicFormModel {
 
-    /// A model already holding `schema`, with no async load — previews render instantly
-    /// and deterministically instead of flashing a skeleton.
+    /// A model already holding `schema`, with no async load, so previews render instantly and
+    /// deterministically instead of flashing a skeleton.
     static func preview(schema: FormSchema,
                         dependencies: FormDependencies = .preview,
                         values: [String: FormValue] = [:],

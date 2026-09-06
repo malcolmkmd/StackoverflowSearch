@@ -22,8 +22,6 @@ final class TranslationsTests: XCTestCase {
         XCTAssertEqual(sample("markets.windrawwin"), "1X2")
     }
 
-    /// The old function lowercased both sides on every call; the table is normalised once now,
-    /// but the behaviour has to be identical.
     func testLookupIsCaseInsensitive() {
         XCTAssertEqual(sample("NEW-SITE"), "New Site")
         XCTAssertEqual(sample("New-Site"), "New Site")
@@ -93,15 +91,14 @@ final class TranslationsTests: XCTestCase {
         XCTAssertEqual(table.message(forErrorCode: 123), "plain")
     }
 
-    // MARK: Typed keys — the app's existing enums work unchanged
-
-    func testStringBackedEnumsResolveWithAnEmptyConformance() {
-        enum FixedJackpotTranslationsKeys: String, LocalizationKey {
+    /// The app's existing key enums are `String`-backed, so `rawValue` is all the bridge needs.
+    func testStringBackedEnumsResolveThroughTheirRawValue() {
+        enum FixedJackpotTranslationsKeys: String {
             case startsIn = "jpc-fixed-jackpots-starts-in"
             case cityJackpots = "city-jackpots"
         }
-        XCTAssertEqual(sample(FixedJackpotTranslationsKeys.startsIn), "Starts in")
-        XCTAssertEqual(sample[FixedJackpotTranslationsKeys.cityJackpots], "City Jackpots")
+        XCTAssertEqual(sample(FixedJackpotTranslationsKeys.startsIn.rawValue), "Starts in")
+        XCTAssertEqual(sample(FixedJackpotTranslationsKeys.cityJackpots.rawValue), "City Jackpots")
     }
 
     // MARK: Housekeeping
@@ -112,10 +109,8 @@ final class TranslationsTests: XCTestCase {
         XCTAssertEqual(empty("anything"), "anything")
     }
 
-
-    /// Guards the fix for the real bug: the old implementation rebuilt the whole lowercased
-    /// dictionary inside every lookup. Normalising once is what this asserts — 50k lookups
-    /// against a 2k-row table finish in well under a second.
+    /// Lookup must not rebuild the lowercased table each time: 50k lookups against a 2k-row
+    /// table finish in well under a second only if normalisation happens once, at init.
     func testLookupIsConstantTimeNotAFullTableRebuild() {
         let big = Translations(
             Dictionary(uniqueKeysWithValues: (0..<2_000).map { ("key-\($0)", "value-\($0)") }),

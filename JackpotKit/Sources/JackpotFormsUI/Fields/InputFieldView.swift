@@ -44,7 +44,7 @@ struct InputFieldView: View {
     private var passwordItems: [JackpotChecklistItem] {
         model.passwordRules(for: field).map { rule in
             JackpotChecklistItem(id: rule.id,
-                                 text: rule.fallbackDescription,
+                                 text: rule.description,
                                  isSatisfied: rule.isSatisfied(by: model.value(for: field).stringValue))
         }
     }

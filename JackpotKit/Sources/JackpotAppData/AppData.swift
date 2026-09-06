@@ -3,13 +3,12 @@ import JackpotNetworking
 
 /// The once-per-session bootstrap call:
 ///
-///     GET https://config.jpc.africa/cron/app-data/{region}/{platform}/{tenant}/{locale}?api-version=1.0
+///     GET {cron}/app-data/{region}/{platform}/{tenant}/{locale}?api-version=1.0
 ///     GET .../cron/app-data/JZA/IOS/jackpotcity/en-US?api-version=1.0
 ///
-/// `tenant` is the brand (`jackpotcity`). Note this is a **different version** from the
-/// forms fetch (`/cron/forms/...` at `api-version=2.0`) on the same host — the response
-/// advertises `api-supported-versions: 1.0,2.0`. Two resources, one gateway, so the
-/// version belongs to the request rather than to a single shared environment.
+/// `tenant` is the brand (`jackpotcity`). Note this is a **different version** from the forms
+/// fetch (`/cron/forms/...` at `api-version=2.0`) on the same host, so the version belongs to
+/// the request rather than to a shared environment.
 public struct AppDataRequest: APIEndpoint {
     let region: String
     let platform: String
@@ -31,23 +30,9 @@ public struct AppDataRequest: APIEndpoint {
 /// One response, decoded a section at a time.
 ///
 /// The payload carries six unrelated things — `appsettings`, `wmsconfig`, `registration`,
-/// `redirects`, `sitemaps`, `locales` — owned by six different parts of the app. Two ways to
-/// model that, and only one of them survives contact with a CMS:
-///
-/// **The single-struct version** (what the app does today) puts every section in one
-/// `Decodable` and decodes them together. It has two failure modes:
-///
-/// - Any section using non-optional `decode` takes the **whole response** with it when that
-///   key is null. The app's `ConfigData` does exactly this for `locales`, so a CMS edit that
-///   nulls the strings also loses app settings, sitemaps, redirects and registration — none
-///   of which have anything to do with copy.
-/// - It becomes the next god object. Every feature that needs a slice adds a property, and
-///   nothing can be extracted afterwards.
-///
-/// **This version** splits the top-level keys up front and hands each one out on request. One
-/// network call, six independent decodes, and a malformed `wmsconfig` cannot stop `locales`
-/// from loading. `section(_:as:)` returns nil rather than throwing, because a section this
-/// build doesn't understand is not a reason to fail the ones it does.
+/// `redirects`, `sitemaps`, `locales` — owned by six different parts of the app. Splitting the
+/// top-level keys up front gives one network call and six independent decodes, so a CMS edit
+/// that nulls the strings cannot also take app settings, sitemaps and registration with it.
 public struct AppDataResponse: Sendable, Equatable {
 
     private let sections: [String: Data]
@@ -80,16 +65,16 @@ public struct AppDataResponse: Sendable, Equatable {
 
     public func contains(_ key: String) -> Bool { sections[key] != nil }
 
-    // MARK: Sections this module owns
-
-    /// The `locales` table. Every other section belongs to whichever feature owns it —
-    /// `wmsconfig` to app settings, `sitemaps` to navigation, `registration` to sign-up —
-    /// and each decodes its own type from the same response.
+    /// The `locales` table. Every other section belongs to whichever feature owns it, and
+    /// each decodes its own type from the same response.
     public var locales: [String: String] {
         section("locales") ?? [:]
     }
 }
 
 public enum AppDataError: Error, Equatable {
+    /// The payload's top level wasn't a JSON object.
     case notAnObject
+    /// The server reported nothing changed while there was nothing cached to serve.
+    case noPayload
 }

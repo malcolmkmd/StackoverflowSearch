@@ -2,10 +2,8 @@ import Foundation
 import JackpotNetworking
 import JackpotFormsDomain
 
-/// GET {cron}/forms/{brand}/{region}/{identifier}?api-version=2.0
-///
-/// Production `buildFormURL` uses the same template for fetch-by-name and fetch-by-id:
-/// `/cron/forms/jackpotcity/{wmsNavigationRegionCode}/{identifier}?api-version=2.0`.
+/// `GET {cron}/forms/{brand}/{region}/{identifier}?api-version=2.0` — one template for both
+/// fetch-by-name and fetch-by-id, matching production `buildFormURL`.
 public struct FormRequest: APIEndpoint {
     let brand: String
     let region: String
@@ -26,10 +24,7 @@ public struct FormRequest: APIEndpoint {
     public var queryItems: [URLQueryItem] { [URLQueryItem(name: "api-version", value: "2.0")] }
 }
 
-/// POST {cron}/forms/submit
-///
-/// Confirmed from production: `https://config.jpc.africa/cron/forms/submit`.
-/// No `api-version` query item. Body is a `FormSubmission`. Auth is not required —
+/// `POST {cron}/forms/submit` — no `api-version` query item. Auth is not required, because
 /// registration happens before login.
 struct FormSubmitRequest: APIEndpoint {
     let bodyData: Data
@@ -44,7 +39,7 @@ struct FormSubmitRequest: APIEndpoint {
     var requiresAuth: Bool { false }
 }
 
-/// Wire shape of `FormSubmission`. Domain stays free of JSON key names.
+/// Wire shape of `FormSubmission`, so Domain stays free of JSON key names.
 struct FormSubmitBody: Encodable {
     let formId: String
     let formName: String
@@ -75,28 +70,21 @@ struct FormSubmitBody: Encodable {
     }()
 }
 
-/// Untagged JSON value for a form field: string, number, bool, string array, or null.
+/// Untagged JSON value for a form field.
 ///
-/// Custom `encode` is required: synthesized `Codable` would emit a tagged object
-/// (`{"bool":true}`) instead of a bare JSON value. Decode is not implemented — we
-/// only ever send this shape.
+/// The custom `encode` is required: synthesized `Codable` would emit a tagged object
+/// (`{"bool":true}`) instead of a bare JSON value.
 enum FieldValue: Equatable, Sendable, Encodable {
     case string(String)
-    case int(Int)
-    case double(Double)
     case bool(Bool)
-    case array([String])
     case null
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
         case .string(let value): try container.encode(value)
-        case .int(let value):    try container.encode(value)
-        case .double(let value): try container.encode(value)
         case .bool(let value):   try container.encode(value)
-        case .array(let value):  try container.encode(value)
-        case .null:             try container.encodeNil()
+        case .null:              try container.encodeNil()
         }
     }
 }
@@ -113,8 +101,8 @@ extension FormValue {
     }
 }
 
-/// The real submit body. HTTP 200 still carries `isSuccessful` / `error` —
-/// the iOS client that only looked for `"success"` would swallow a failed create.
+/// HTTP 200 is not success: the body carries `isSuccessful` / `error`, so a client that only
+/// looked for `"success"` would swallow a failed create.
 struct FormSubmitEnvelope: Decodable {
     let data: FormSubmitDataDTO?
     let isSuccessful: Bool?

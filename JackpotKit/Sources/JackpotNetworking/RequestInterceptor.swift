@@ -1,7 +1,7 @@
 import Foundation
 
-/// The seam the reference project has no equivalent of. Auth headers, token refresh,
-/// logging and correlation IDs all belong here — once — instead of in every API type.
+/// Where auth headers, token refresh, logging and correlation IDs belong — once,
+/// instead of in every API type.
 public protocol RequestInterceptor: Sendable {
     func adapt(_ request: URLRequest, for endpoint: any APIEndpoint) async throws -> URLRequest
     /// Return an adapted request to retry with, or nil to give up. Called at most once.
@@ -19,8 +19,8 @@ public extension RequestInterceptor {
                data: Data) async -> URLRequest? { nil }
 }
 
-/// Adds a bearer token. The token is supplied by a closure so this layer never
-/// imports a session type — that keeps JackpotNetworking free of app concerns.
+/// Adds a bearer token. The token arrives through a closure so this module never
+/// imports a session type.
 public struct BearerTokenInterceptor: RequestInterceptor {
     private let token: @Sendable () async -> String?
 
@@ -29,7 +29,6 @@ public struct BearerTokenInterceptor: RequestInterceptor {
     }
 
     public func adapt(_ request: URLRequest, for endpoint: any APIEndpoint) async throws -> URLRequest {
-        // Never attach a token to login/refresh — see `APIEndpoint.requiresAuth`.
         guard endpoint.requiresAuth, let token = await token() else { return request }
         var request = request
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

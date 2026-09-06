@@ -9,9 +9,8 @@ public protocol RegistrationService: Sendable {
     func register(_ submission: FormSubmission) async throws -> RegistrationResult
 }
 
-/// What the app needs afterwards: an account, an optional session token, and whether
-/// FICA still needs a manual upload. Mapped from the submit envelope — HTTP 200 is
-/// not enough; `isSuccessful: false` is a thrown `RegistrationError`.
+/// What the app needs afterwards: an account, an optional session token, and whether FICA still
+/// needs a manual upload.
 public struct RegistrationResult: Equatable, Sendable {
     public let accountId: String?
     public let accessToken: String?
@@ -49,8 +48,8 @@ public struct RegistrationResult: Equatable, Sendable {
     public var isPartial: Bool { (partialRegistrationStatus ?? 0) != 0 }
 }
 
-/// Succeeds after a short delay; fails if the mobile is `"0000000000"`. Enough to demo both
-/// paths and to drive previews and tests.
+/// Succeeds after a short delay, and fails if the mobile is `"0000000000"` — enough to demo
+/// both paths and to drive previews and tests.
 public struct MockRegistrationService: RegistrationService {
     private let delay: TimeInterval
 
@@ -109,7 +108,7 @@ public enum RegistrationError: LocalizedError, Equatable {
         switch error {
         case .offline:              self = .offline
         case .server(let message):  self = .server(message: message)
-        case .notFound, .submissionFailed, .unexpected:
+        case .notFound, .unexpected:
             self = .unexpected
         }
     }

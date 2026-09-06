@@ -1,11 +1,8 @@
 import SwiftUI
 import JackpotFormsDomain
 
-/// "Create a testing page where we can see this in action." — the ticket.
-///
-/// Pick a form, watch it render from JSON alone, submit it, and read back exactly what
-/// the callback received. Nothing here is app-specific, so it doubles as the review
-/// harness for the PR.
+/// The review harness: pick a form, watch it render from JSON alone, submit it, and read back
+/// exactly what the callback received. Nothing here is app-specific.
 public struct FormSandboxView: View {
 
     public struct Sample: Identifiable, Hashable {
@@ -37,8 +34,8 @@ public struct FormSandboxView: View {
                 picker
                 Divider()
                 DynamicFormView(formName: selected.id) { submission in
-                    // Deliberately not posting anywhere: the sandbox proves the
-                    // callback contract, not the registration endpoint.
+                    // Deliberately not posting anywhere: the sandbox proves the callback
+                    // contract, not the registration endpoint.
                     lastSubmission = submission.stringValues
                     showsSubmission = true
                 }
@@ -46,12 +43,12 @@ public struct FormSandboxView: View {
                 .formDependencies(dependencies)
             }
             .navigationTitle("Form Sandbox")
-            .iOSInlineTitle()
+            .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showsSubmission) {
                 SubmissionResultView(values: lastSubmission ?? [:])
             }
         }
-        .iOSStackNavigation()
+        .navigationViewStyle(.stack)
     }
 
     private var picker: some View {
@@ -67,7 +64,7 @@ public struct FormSandboxView: View {
 
 struct SubmissionResultView: View {
     let values: [String: String]
-    @Environment(\.presentationMode) private var presentationMode
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationView {
@@ -79,40 +76,14 @@ struct SubmissionResultView: View {
                 }
             }
             .navigationTitle("Submitted")
-            .iOSInlineTitle()
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { presentationMode.wrappedValue.dismiss() }
+                    Button("Done") { dismiss() }
                 }
             }
         }
-        .iOSStackNavigation()
-    }
-}
-
-
-// MARK: - Platform guards
-//
-// The sandbox is an iOS harness, but the package still has to type-check on a macOS
-// host so `swift test` can run the Domain/Data suites from the command line.
-
-extension View {
-    @ViewBuilder
-    func iOSInlineTitle() -> some View {
-        #if os(iOS)
-        navigationBarTitleDisplayMode(.inline)
-        #else
-        self
-        #endif
-    }
-
-    @ViewBuilder
-    func iOSStackNavigation() -> some View {
-        #if os(iOS)
-        navigationViewStyle(.stack)
-        #else
-        self
-        #endif
+        .navigationViewStyle(.stack)
     }
 }
 

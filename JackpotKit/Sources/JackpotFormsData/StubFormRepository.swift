@@ -1,8 +1,8 @@
 import Foundation
 import JackpotFormsDomain
 
-/// Serves forms from bundled JSON. Backs the demo harness and previews, and lets the
-/// whole feature be built and reviewed before the endpoint is reachable from the app.
+/// Serves forms from bundled JSON. Backs the demo harness and previews, and lets the whole
+/// feature be built and reviewed before the endpoint is reachable from the app.
 public struct StubFormRepository: FormRepository {
     private let forms: [FormName: Data]
     /// Seconds. (`Duration` is iOS 16 — this package targets 15.)
@@ -35,7 +35,7 @@ public struct StubFormRepository: FormRepository {
         return FormSubmitResult()
     }
 
-    /// Decodes raw JSON straight to a `form` — handy in tests and previews.
+    /// Decodes raw JSON straight to a form — for tests and previews.
     public static func decode(_ data: Data) throws -> FormSchema {
         FormMapper.map(try JSONDecoder().decode(FormDTO.self, from: data))
     }

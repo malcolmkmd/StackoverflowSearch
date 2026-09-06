@@ -128,8 +128,8 @@ final class FieldValidatorTests: XCTestCase {
     func testPasswordRulesAreDerivedFromTheQuantifier() {
         let rules = PasswordPolicy().rules(for: field("password", inputType: .password, regex: "^(.){8,20}$"))
         XCTAssertEqual(rules.count, 2)
-        XCTAssertEqual(rules[0].fallbackDescription, "Minimum of 8 characters")
-        XCTAssertEqual(rules[1].fallbackDescription, "Maximum of 20 characters")
+        XCTAssertEqual(rules[0].description, "Minimum of 8 characters")
+        XCTAssertEqual(rules[1].description, "Maximum of 20 characters")
         XCTAssertFalse(rules[0].isSatisfied(by: "short"))
         XCTAssertTrue(rules[0].isSatisfied(by: "longenough"))
         XCTAssertFalse(rules[1].isSatisfied(by: String(repeating: "a", count: 21)))

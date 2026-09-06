@@ -1,16 +1,12 @@
 import Foundation
 
 /// The transport seam. Tests stub this — never the ApiClient itself.
-///
-/// Cleanup vs. the reference project: there, `URLSession` is retroactively conformed
-/// to `HTTPClient` in an extension. That works, but it means every `URLSession` in the
-/// process gains the conformance and there is nowhere to inject configuration
-/// (timeouts, cache policy, `waitsForConnectivity`). A wrapper struct keeps the
-/// conformance private to us and gives configuration a home.
 public protocol HTTPClient: Sendable {
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse)
 }
 
+/// A wrapper rather than a `URLSession` conformance, so the conformance stays private to
+/// this module and configuration has somewhere to live.
 public struct URLSessionHTTPClient: HTTPClient {
     private let session: URLSession
 

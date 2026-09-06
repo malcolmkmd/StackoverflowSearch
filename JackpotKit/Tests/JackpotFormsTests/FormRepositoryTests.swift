@@ -115,15 +115,11 @@ final class FormRepositoryOperationTests: XCTestCase {
         XCTAssertEqual(form.id, 1052)
     }
 
-    func testStubSubmitSucceedsAndDraftsMatchProductionStubs() async throws {
+    func testStubSubmitSucceeds() async throws {
         let repo = StubFormRepository(forms: [:], delay: 0)
         let submission = FormSubmission(formCodeName: .registration, values: [:], formId: "1052")
         let submitted = try await repo.submitForm(submission)
-        let saved = try await repo.saveDraft(submission)
-        let draft = try await repo.loadDraft(formId: "1052")
         XCTAssertNil(submitted.accountId)
-        XCTAssertTrue(saved)
-        XCTAssertNil(draft)
     }
 
     func testRemoteSubmitPostsToCronAndReadsTheEnvelope() async throws {
@@ -161,14 +157,6 @@ final class FormRepositoryOperationTests: XCTestCase {
             XCTAssertEqual(error as? FormLoadError,
                            .server(message: "The ID or Passport Number Provided Is Invalid"))
         }
-    }
-
-    func testRemoteDraftsMatchProductionStubs() async throws {
-        let repo = RemoteFormRepository(apiClient: ScriptedApiClient())
-        let saved = try await repo.saveDraft(FormSubmission(formCodeName: .registration, values: [:]))
-        let draft = try await repo.loadDraft(formId: "1052")
-        XCTAssertTrue(saved)
-        XCTAssertNil(draft)
     }
 
     func testRemoteSubmitMapsTransportErrors() async {

@@ -1,25 +1,19 @@
 import Foundation
 import JackpotNetworking
 
-// Config service calling convention. Fetch, submit and app-data all live under
-// `https://config.jpc.africa/cron` — production `buildFormURL` is
-// `/cron/forms/jackpotcity/{wmsNavigationRegionCode}/{identifier}?api-version=2.0`.
-// Submit is a sibling: `{cron}/forms/submit` with no version query item, so version
-// belongs on the request, not on this environment.
+// Fetch, submit and app-data all live under `https://config.jpc.africa/cron`. Fetch carries
+// `api-version=2.0` and submit carries none, so the version belongs on the request rather than
+// on this environment.
 
 public extension APIEnvironment {
 
     /// The cron config service — `https://config.jpc.africa/cron`.
     static func cron(baseURL: URL) -> APIEnvironment {
-        APIEnvironment(
-            baseURL: baseURL,
-            defaultHeaders: ["Accept": "application/json"]
-        )
+        APIEnvironment(baseURL: baseURL)
     }
 
-    /// `https://config.jpc.africa/crm` → `https://config.jpc.africa/cron`.
-    ///
-    /// Call sites historically passed a CRM base; production fetch is on cron.
+    /// `https://config.jpc.africa/crm` → `https://config.jpc.africa/cron`, because call sites
+    /// historically passed a CRM base and production fetch is on cron.
     static func cronBaseURL(fromCRM url: URL) -> URL {
         switch url.lastPathComponent {
         case "crm":

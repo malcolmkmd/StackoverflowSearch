@@ -1,10 +1,10 @@
 import Foundation
 
-// Wire shapes, exactly as the CRM form-builder sends them. Nothing outside this file
-// knows about "formSectionCodeName" or the "Calender" spelling.
+// Wire shapes, exactly as the CRM form-builder sends them. Nothing outside this file knows
+// about "formSectionCodeName" or the "Calender" spelling.
 //
-// Everything optional except the identifiers we cannot render without. The schema is
-// edited by product in a CMS; a missing `prefix` must not fail the whole decode.
+// Everything is optional except the identifiers we cannot render without: the schema is edited
+// by product in a CMS, so a missing `prefix` must not fail the whole decode.
 
 public struct FormDTO: Decodable {
     let formId: Int

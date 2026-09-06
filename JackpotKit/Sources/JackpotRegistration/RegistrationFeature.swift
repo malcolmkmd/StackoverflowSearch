@@ -21,8 +21,7 @@ public struct RegistrationDependencies {
         self.theme = theme
     }
 
-    /// Bundled schema, mock service. Works with no backend and no app — the state of the
-    /// feature at the end of PR 2, and what the app's final PR replaces with `.live`.
+    /// Bundled schema, mock service — works with no backend and no app.
     ///
     /// - Parameter localizer: the app's existing translation function, wrapped:
     ///   `ClosureLocalizer { key in … getTranslation(Key: key) … }`. Nil → bundled placeholder copy.

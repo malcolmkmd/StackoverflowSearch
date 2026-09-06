@@ -20,18 +20,21 @@ one. No feature flags; the app has none and this plan doesn't introduce any.
 
 ## Overview
 
-| # | PR | Package | Demoable as | Size |
+| # | PR | Modules | Demoable as | Tests |
 |---|---|---|---|---|
-| 1 | **`JackpotUI`** — design system | JackpotUI | the gallery preview: every component, every state | ~900 |
-| 2 | **`JackpotForms`** — engine on mock data | JackpotForms | the sandbox rendering the captured registration schema | ~3,000 |
-| 3 | **`JackpotCore`** networking + live repository | JackpotCore, JackpotForms/Remote | `.live()` fetching the real schema | ~1,300 |
-| 4 | **`JackpotRegistration`** — the feature, complete | JackpotRegistration | the full registration flow, mock service, on a device | ~350 |
-| 5 | **Replace the current flow** | app | registration live in the app; old sign-up gone | −1,200 |
-| — | Localisation follow-up | JackpotCore (AppData, Localization) + app | | ~1,000 |
+| 1 | **`JackpotUI`** — design system | JackpotUI | the gallery preview: every component, every state | 13 |
+| 2 | **`JackpotForms`** — engine on mock data | JackpotFormsDomain, Data, UI | the sandbox rendering the captured registration schema | 48 |
+| 3 | **`JackpotNetworking`** + live repository | JackpotNetworking, JackpotLocalization, FormsRemote, JackpotForms | `.live()` fetching the real schema | 130 |
+| 4 | **`JackpotRegistration`** — the feature, complete | JackpotRegistration | the full registration flow, mock service, on a device | 9 |
+| 5 | **Replace the current flow** | app | registration live in the app; old sign-up gone | — |
+| — | App-data follow-up | JackpotAppData, JackpotLocalization (store) + app | | 29 |
 
 ```
-JackpotUI ──► JackpotForms (mock) ──► JackpotCore + Remote (live) ──► JackpotRegistration ──► app swap
+JackpotUI ──► JackpotForms (mock) ──► JackpotNetworking + Remote (live) ──► JackpotRegistration ──► app swap
 ```
+
+152 tests through PR 5, 181 with the follow-up. Everything lives in one local package,
+`JackpotKit`; each row above is a set of modules inside it, not a package of its own.
 
 Every PR up to 4 is package-only. Reviewers can pull the branch and see the result without the
 app building at all.
@@ -46,46 +49,49 @@ Components only. No data, no networking, no notion of a form. Everything is driv
 | Component | Replaces |
 |---|---|
 | `JackpotTheme` · `.jackpotTheme()` | ad-hoc colours per nib |
-| `JackpotButton` / `JackpotButtonStyle` | gold/blue buttons redrawn per screen |
+| `JackpotButtonStyle` | gold/blue buttons redrawn per screen |
 | `JackpotTextField` — prefix cell, secure reveal, focus ring, invalid border | the `+27` mobile field, password field |
 | `JackpotTextArea`, `JackpotDropdown`, `JackpotDateField` | |
-| `JackpotCheckbox`, `JackpotToggleRow`, `JackpotRadioGroup` | Account Settings toggles, T&C checkbox |
+| `JackpotToggleStyle`, `JackpotRadioGroup` | Account Settings toggles, T&C checkbox |
 | `JackpotChecklist` — progress bar + tickable rows | the Password Validity panel |
-| `JackpotSelectableCard` + `.jackpotLocked(_:message:)` | welcome-offer tiles; provider and payment grids |
-| `JackpotProgressBar`, `JackpotSkeleton`, `JackpotErrorView`, `JackpotLabeledField` | |
+| `.jackpotLocked(_:message:)` | welcome-offer tiles; provider and payment grids |
+| `JackpotProgressViewStyle`, `JackpotErrorView` | |
 
-**Review:** open the gallery preview in `JackpotPreviewPanel.swift`.
+**Review:** open the gallery preview in `JackpotPreviewPanel.swift`. 13 tests.
 
 ## PR 2 · `JackpotForms` — the engine, on mock data
 
-Four targets, **no networking dependency anywhere**.
+Three modules, **no networking dependency anywhere**.
 
-| Target | Holds |
+| Module | Holds |
 |---|---|
 | `JackpotFormsDomain` | `FormSchema`, `FormField`, `FormName`, `FieldValidator`, `PasswordPolicy`, `FormLoadError`, `ClosureLocalizer`, the `FormRepository` / `FormLocalizing` protocols |
 | `JackpotFormsData` | DTOs, `FormMapper`, `StubFormRepository` (serves the captured `registration.json`) |
-| `JackpotFormsUI` | `DynamicFormModel`, `DynamicFormView`, one thin field view per type binding the model to a `JackpotUI` component |
-| `JackpotForms` | composition — `.mock()`, `FormSandboxView.mocked()` |
+| `JackpotFormsUI` | `DynamicFormModel`, `DynamicFormView`, one thin field view per type binding the model to a `JackpotUI` component, and `FormSandboxView` |
 
 **Review:** `FieldRenderer.swift` (the CRM↔app contract), `FieldValidator.swift` (untrusted
-regexes), `DynamicFormModel.swift` (touched state, section gating, ID-type → ID-number). 55 tests.
+regexes), `DynamicFormModel.swift` (touched state, section gating, ID-type → ID-number). 48 tests.
 
-## PR 3 · `JackpotCore` networking + the live repository
+## PR 3 · `JackpotNetworking` + the live repository
 
-- **`JackpotCore` / `JackpotNetworking`** — `HTTPClient`, `APIEndpoint`, `APIError`,
-  interceptors, `RemoteApiClient`. 200 / 400 / 401 / 500 with `unexpectedStatus` for anything
-  infrastructure returns. 34 tests.
+- **`JackpotNetworking`** — `HTTPClient`, `APIEndpoint`, `APIError`, interceptors,
+  `RemoteApiClient`. 200 / 400 / 401 / 500 with `unexpectedStatus` for anything infrastructure
+  returns. 34 tests.
+- **`JackpotLocalization`** — `Translations` only: the table, region-suffixed lookup, and error
+  codes as keys. 16 tests.
 - **`JackpotFormsRemote`** — `RemoteFormRepository`, endpoints, `CRMEnvironment`,
-  `FormErrorMapper`, and `.live()` in composition. The only forms target that touches networking.
+  `FormErrorMapper`. The only forms module that touches networking.
+- **`JackpotForms`** — composition: `.mock()` and `.live()`, plus `TranslationsLocalizer`.
 
-`JackpotAppData` and `JackpotLocalization` are **not** here — they're the follow-up.
+`JackpotAppData` and the `TranslationsStore` half of `JackpotLocalization` are **not** here —
+they're the follow-up.
 
-**Review:** `RemoteApiClientTests` and the `APIProblem.code`-is-an-`Int` fix.
+**Review:** `RemoteApiClientTests` (the retry policy) and the `APIProblem.code`-is-an-`Int` fix.
 
 ## PR 4 · `JackpotRegistration` — the complete feature
 
-The registration flow as a package. The app's entire integration surface is one view
-controller and one dependencies struct.
+The registration flow as a module. The app's entire integration surface is one view controller
+and one dependencies struct.
 
 | File | Holds |
 |---|---|
@@ -97,7 +103,7 @@ The feature reads **nothing** from the app. The one thing it needs from the lega
 current `getTranslation` — arrives as a `FormLocalizing` the app constructs in PR 5.
 
 **Review:** run the previews. The full flow, both pages, success and the duplicate-mobile
-failure path, with no app and no backend. 5 tests.
+failure path, with no app and no backend. 9 tests.
 
 ## PR 5 · Replace the current flow
 
@@ -144,11 +150,12 @@ Net negative. The diff is small enough to review in one sitting and revert in on
 Everything from ADR-0001 that touches copy. After PR 5, deliberately: it changes the mechanism
 behind every string in the app and has no dependency on registration shipping.
 
-Adds `JackpotAppData` (section-wise bootstrap ingestion — the `ConfigData` decode fix) and
-`JackpotLocalization` (`Translations`, `TranslationsStore`), then: `getTranslation` becomes a
-shim (app-wide performance fix, zero call-site changes, deprecation warnings as the burn-down
-list); the registration `ClosureLocalizer` is replaced with `TranslationsLocalizer` and error
-codes start resolving to localised copy; call sites burn down by count.
+Adds `JackpotAppData` (section-wise bootstrap ingestion — the `ConfigData` decode fix) and the
+rest of `JackpotLocalization` (`TranslationsRepository`, `TranslationsStore`), then:
+`getTranslation` becomes a shim (app-wide performance fix, zero call-site changes, deprecation
+warnings as the burn-down list); the registration `ClosureLocalizer` is replaced with
+`TranslationsLocalizer` and error codes start resolving to localised copy; call sites burn down
+by count. 29 tests.
 
 ---
 
