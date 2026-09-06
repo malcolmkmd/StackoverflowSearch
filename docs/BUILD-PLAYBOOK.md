@@ -77,6 +77,7 @@ public struct JackpotColors: Equatable, Sendable {
     public var textOnAccent = Palette.textOnAccent
 
     public var accent = Palette.accent
+    public var accentFill = Palette.accentFill
     public var actionPrimary = Palette.actionPrimary
     public var currency = Palette.actionPrimary
 
@@ -96,34 +97,47 @@ enum Palette {
     static let surfaceElevated = Color.adaptive(light: Color(red: 0.96, green: 0.97, blue: 0.98),
                                                 dark: Color(red: 0.11, green: 0.12, blue: 0.14))
 
-    static let fieldBackground = Color.adaptive(light: Color(red: 1.00, green: 1.00, blue: 1.00),
+    /// Light has to be a tint off the surface, not white on white — the fill is what
+    /// identifies a field, a secondary button and a checklist panel, all of which were
+    /// invisible while this matched `surface`.
+    static let fieldBackground = Color.adaptive(light: Color(red: 0.94, green: 0.95, blue: 0.96),
                                                 dark: Color(red: 0.13, green: 0.14, blue: 0.16))
 
-    static let fieldBorder = Color.adaptive(light: Color(red: 0.80, green: 0.82, blue: 0.85),
-                                            dark: Color.white.opacity(0.18))
+    static let fieldBorder = Color.adaptive(light: Color(red: 0.72, green: 0.75, blue: 0.79),
+                                            dark: Color.white.opacity(0.32))
 
     static let textPrimary = Color.adaptive(light: Color(red: 0.07, green: 0.09, blue: 0.12),
                                             dark: .white)
 
-    static let textSecondary = Color.adaptive(light: Color(red: 0.42, green: 0.45, blue: 0.50),
+    /// Measured against `fieldBackground`, the tighter of its two backgrounds.
+    static let textSecondary = Color.adaptive(light: Color(red: 0.40, green: 0.43, blue: 0.48),
                                               dark: Color.white.opacity(0.6))
 
     /// Sits on the accent and action fills, never on the surface, so it does not invert.
     static let textOnAccent = Color.white
 
+    /// Accent as *text* — the tertiary button label, sitting on a dark surface in dark mode,
+    /// so it has to be light. One accent cannot do both jobs: white text needs a fill at or
+    /// below 0.18 luminance, and a label on the dark surface needs 0.20 or above.
     static let accent = Color.adaptive(light: Color(red: 0.13, green: 0.40, blue: 0.87),
-                                       dark: Color(red: 0.16, green: 0.47, blue: 0.96))
+                                       dark: Color(red: 0.30, green: 0.56, blue: 1.00))
 
-    static let actionPrimary = Color.adaptive(light: Color(red: 0.85, green: 0.60, blue: 0.05),
+    /// Accent as a *fill*, carrying `textOnAccent`. Dark enough for white to read on it.
+    static let accentFill = Color.adaptive(light: Color(red: 0.13, green: 0.40, blue: 0.87),
+                                           dark: Color(red: 0.13, green: 0.40, blue: 0.88))
+
+    /// The light golds all had to come down a long way: as a currency colour this sits on
+    /// the surface as text, and the brand gold reads at 2.5:1 there.
+    static let actionPrimary = Color.adaptive(light: Color(red: 0.58, green: 0.40, blue: 0.02),
                                               dark: Color(red: 0.96, green: 0.71, blue: 0.13))
 
     static let error = Color.adaptive(light: Color(red: 0.80, green: 0.16, blue: 0.10),
-                                      dark: Color(red: 0.94, green: 0.28, blue: 0.16))
+                                      dark: Color(red: 0.98, green: 0.45, blue: 0.35))
 
-    static let warning = Color.adaptive(light: Color(red: 0.72, green: 0.45, blue: 0.02),
+    static let warning = Color.adaptive(light: Color(red: 0.58, green: 0.36, blue: 0.02),
                                         dark: Color(red: 0.96, green: 0.62, blue: 0.13))
 
-    static let success = Color.adaptive(light: Color(red: 0.10, green: 0.55, blue: 0.32),
+    static let success = Color.adaptive(light: Color(red: 0.06, green: 0.46, blue: 0.26),
                                         dark: Color(red: 0.20, green: 0.72, blue: 0.44))
 }
 
@@ -376,7 +390,7 @@ public struct JackpotButtonStyle: ButtonStyle {
 
         private var background: Color {
             switch prominence {
-            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accent
+            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill
             case .secondary: return theme.colors.fieldBackground
             case .tertiary:  return .clear
             }
@@ -1293,18 +1307,80 @@ final class JackpotColorSchemeTests: XCTestCase {
         XCTAssertEqual(color.resolvedColor(with: light), color.resolvedColor(with: dark))
     }
 
-    func testBodyTextClearsWCAGContrastInBothAppearances() {
+    /// Text has to clear 4.5:1 on *every* background it can land on. Measuring only
+    /// against `surface` is what let a pure-white `fieldBackground` ship: the field, the
+    /// secondary button and the checklist panel were all white on white in light mode.
+    func testTextClearsWCAGContrastOnEveryBackgroundItLandsOn() {
+        let colors = JackpotColors.jackpotCity
+        let backgrounds: [(String, KeyPath<JackpotColors, Color>)] = [
+            ("surface", \.surface),
+            ("surfaceElevated", \.surfaceElevated),
+            ("fieldBackground", \.fieldBackground),
+        ]
+        let foregrounds: [(String, KeyPath<JackpotColors, Color>)] = [
+            ("textPrimary", \.textPrimary),
+            ("textSecondary", \.textSecondary),
+            ("accent", \.accent),
+            ("error", \.error),
+            ("warning", \.warning),
+            ("success", \.success),
+            ("currency", \.currency),
+        ]
+
+        for traits in [light, dark] {
+            for (bgName, bg) in backgrounds {
+                let background = resolve(colors[keyPath: bg], traits)
+                for (fgName, fg) in foregrounds {
+                    let text = flatten(resolve(colors[keyPath: fg], traits), over: background)
+                    XCTAssertGreaterThanOrEqual(
+                        contrastRatio(text, background), 4.5,
+                        "\(fgName) on \(bgName) in \(name(traits)) is unreadable")
+                }
+            }
+        }
+    }
+
+    func testButtonLabelClearsContrastOnItsFill() {
         let colors = JackpotColors.jackpotCity
         for traits in [light, dark] {
-            let text = UIColor(colors.textPrimary).resolvedColor(with: traits)
-            let background = UIColor(colors.surface).resolvedColor(with: traits)
-            XCTAssertGreaterThan(contrastRatio(text, background), 4.5,
-                                 "textPrimary on surface, \(traits.userInterfaceStyle.rawValue)")
-
-            let secondary = UIColor(colors.textSecondary).resolvedColor(with: traits)
-            XCTAssertGreaterThan(contrastRatio(secondary, background), 4.5,
-                                 "textSecondary on surface, \(traits.userInterfaceStyle.rawValue)")
+            let fill = resolve(colors.accentFill, traits)
+            let label = flatten(resolve(colors.textOnAccent, traits), over: fill)
+            XCTAssertGreaterThanOrEqual(contrastRatio(label, fill), 4.5,
+                                        "textOnAccent on accentFill in \(name(traits))")
         }
+    }
+
+    /// The regression: light mode had both at pure white, so a field was identifiable only
+    /// by a border that itself sat at 1.5:1.
+    func testFieldFillIsDistinguishableFromTheSurfaceBehindIt() {
+        let colors = JackpotColors.jackpotCity
+        for traits in [light, dark] {
+            let fill = resolve(colors.fieldBackground, traits)
+            let surface = resolve(colors.surface, traits)
+            XCTAssertNotEqual(fill, surface, "field fill matches the surface in \(name(traits))")
+            XCTAssertGreaterThan(contrastRatio(fill, surface), 1.08,
+                                 "field fill is too close to the surface in \(name(traits))")
+        }
+    }
+
+    // MARK: Helpers
+
+    private func name(_ traits: UITraitCollection) -> String {
+        traits.userInterfaceStyle == .dark ? "dark" : "light"
+    }
+
+    private func resolve(_ color: Color, _ traits: UITraitCollection) -> UIColor {
+        UIColor(color).resolvedColor(with: traits)
+    }
+
+    /// Several palette entries are translucent white. Reading their components straight
+    /// back reports the contrast of opaque white, so they have to be composited first.
+    private func flatten(_ color: UIColor, over background: UIColor) -> UIColor {
+        let fg = components(color), bg = components(background)
+        return UIColor(red: fg.r * fg.a + bg.r * (1 - fg.a),
+                       green: fg.g * fg.a + bg.g * (1 - fg.a),
+                       blue: fg.b * fg.a + bg.b * (1 - fg.a),
+                       alpha: 1)
     }
 
     /// WCAG 2.1 relative luminance.
@@ -1314,13 +1390,18 @@ final class JackpotColorSchemeTests: XCTestCase {
         return (lighter + 0.05) / (darker + 0.05)
     }
 
-    private func luminance(_ color: UIColor) -> CGFloat {
+    private func components(_ color: UIColor) -> (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return (r, g, b, a)
+    }
+
+    private func luminance(_ color: UIColor) -> CGFloat {
+        let c = components(color)
         func channel(_ value: CGFloat) -> CGFloat {
             value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
         }
-        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+        return 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b)
     }
 }
 

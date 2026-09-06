@@ -10,6 +10,7 @@ import SwiftUI
 struct SearchView: View {
     
     @State private var viewModel: SearchViewModel
+    @State private var showsRegistration = false
     private let questionRepository: QuestionRepository
     
     init(questionRepository: any QuestionRepository) {
@@ -34,7 +35,11 @@ struct SearchView: View {
                     )
                 }
             }
-        }.task {
+        }
+        .sheet(isPresented: $showsRegistration) {
+            RegistrationSandbox()
+        }
+        .task {
             viewModel.loadInitial()
         }.onChange(of: viewModel.query) {
             viewModel.queryDidChange()
@@ -55,7 +60,16 @@ struct SearchView: View {
                     .foregroundStyle(Theme.orange)
             }
             Spacer()
-            Color.clear.frame(width: 22, height: 22)
+            // Occupies the slot that balanced the logo, so the logo stays centred.
+            Button {
+                showsRegistration = true
+            } label: {
+                Image(systemName: "person.crop.circle.badge.plus")
+                    .font(.title3)
+                    .foregroundStyle(.primary)
+                    .frame(width: 22, height: 22)
+            }
+            .accessibilityLabel("Open the sign-up form sandbox")
         }
         .padding(.horizontal)
         .padding(.vertical, 10)

@@ -31,6 +31,7 @@ public struct JackpotColors: Equatable, Sendable {
     public var textOnAccent = Palette.textOnAccent
 
     public var accent = Palette.accent
+    public var accentFill = Palette.accentFill
     public var actionPrimary = Palette.actionPrimary
     public var currency = Palette.actionPrimary
 
@@ -50,34 +51,47 @@ enum Palette {
     static let surfaceElevated = Color.adaptive(light: Color(red: 0.96, green: 0.97, blue: 0.98),
                                                 dark: Color(red: 0.11, green: 0.12, blue: 0.14))
 
-    static let fieldBackground = Color.adaptive(light: Color(red: 1.00, green: 1.00, blue: 1.00),
+    /// Light has to be a tint off the surface, not white on white — the fill is what
+    /// identifies a field, a secondary button and a checklist panel, all of which were
+    /// invisible while this matched `surface`.
+    static let fieldBackground = Color.adaptive(light: Color(red: 0.94, green: 0.95, blue: 0.96),
                                                 dark: Color(red: 0.13, green: 0.14, blue: 0.16))
 
-    static let fieldBorder = Color.adaptive(light: Color(red: 0.80, green: 0.82, blue: 0.85),
-                                            dark: Color.white.opacity(0.18))
+    static let fieldBorder = Color.adaptive(light: Color(red: 0.72, green: 0.75, blue: 0.79),
+                                            dark: Color.white.opacity(0.32))
 
     static let textPrimary = Color.adaptive(light: Color(red: 0.07, green: 0.09, blue: 0.12),
                                             dark: .white)
 
-    static let textSecondary = Color.adaptive(light: Color(red: 0.42, green: 0.45, blue: 0.50),
+    /// Measured against `fieldBackground`, the tighter of its two backgrounds.
+    static let textSecondary = Color.adaptive(light: Color(red: 0.40, green: 0.43, blue: 0.48),
                                               dark: Color.white.opacity(0.6))
 
     /// Sits on the accent and action fills, never on the surface, so it does not invert.
     static let textOnAccent = Color.white
 
+    /// Accent as *text* — the tertiary button label, sitting on a dark surface in dark mode,
+    /// so it has to be light. One accent cannot do both jobs: white text needs a fill at or
+    /// below 0.18 luminance, and a label on the dark surface needs 0.20 or above.
     static let accent = Color.adaptive(light: Color(red: 0.13, green: 0.40, blue: 0.87),
-                                       dark: Color(red: 0.16, green: 0.47, blue: 0.96))
+                                       dark: Color(red: 0.30, green: 0.56, blue: 1.00))
 
-    static let actionPrimary = Color.adaptive(light: Color(red: 0.85, green: 0.60, blue: 0.05),
+    /// Accent as a *fill*, carrying `textOnAccent`. Dark enough for white to read on it.
+    static let accentFill = Color.adaptive(light: Color(red: 0.13, green: 0.40, blue: 0.87),
+                                           dark: Color(red: 0.13, green: 0.40, blue: 0.88))
+
+    /// The light golds all had to come down a long way: as a currency colour this sits on
+    /// the surface as text, and the brand gold reads at 2.5:1 there.
+    static let actionPrimary = Color.adaptive(light: Color(red: 0.58, green: 0.40, blue: 0.02),
                                               dark: Color(red: 0.96, green: 0.71, blue: 0.13))
 
     static let error = Color.adaptive(light: Color(red: 0.80, green: 0.16, blue: 0.10),
-                                      dark: Color(red: 0.94, green: 0.28, blue: 0.16))
+                                      dark: Color(red: 0.98, green: 0.45, blue: 0.35))
 
-    static let warning = Color.adaptive(light: Color(red: 0.72, green: 0.45, blue: 0.02),
+    static let warning = Color.adaptive(light: Color(red: 0.58, green: 0.36, blue: 0.02),
                                         dark: Color(red: 0.96, green: 0.62, blue: 0.13))
 
-    static let success = Color.adaptive(light: Color(red: 0.10, green: 0.55, blue: 0.32),
+    static let success = Color.adaptive(light: Color(red: 0.06, green: 0.46, blue: 0.26),
                                         dark: Color(red: 0.20, green: 0.72, blue: 0.44))
 }
 

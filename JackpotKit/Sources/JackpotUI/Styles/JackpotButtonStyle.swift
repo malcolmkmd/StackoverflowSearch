@@ -50,7 +50,7 @@ public struct JackpotButtonStyle: ButtonStyle {
 
         private var background: Color {
             switch prominence {
-            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accent
+            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill
             case .secondary: return theme.colors.fieldBackground
             case .tertiary:  return .clear
             }

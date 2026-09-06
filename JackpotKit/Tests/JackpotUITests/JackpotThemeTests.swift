@@ -44,18 +44,80 @@ final class JackpotColorSchemeTests: XCTestCase {
         XCTAssertEqual(color.resolvedColor(with: light), color.resolvedColor(with: dark))
     }
 
-    func testBodyTextClearsWCAGContrastInBothAppearances() {
+    /// Text has to clear 4.5:1 on *every* background it can land on. Measuring only
+    /// against `surface` is what let a pure-white `fieldBackground` ship: the field, the
+    /// secondary button and the checklist panel were all white on white in light mode.
+    func testTextClearsWCAGContrastOnEveryBackgroundItLandsOn() {
+        let colors = JackpotColors.jackpotCity
+        let backgrounds: [(String, KeyPath<JackpotColors, Color>)] = [
+            ("surface", \.surface),
+            ("surfaceElevated", \.surfaceElevated),
+            ("fieldBackground", \.fieldBackground),
+        ]
+        let foregrounds: [(String, KeyPath<JackpotColors, Color>)] = [
+            ("textPrimary", \.textPrimary),
+            ("textSecondary", \.textSecondary),
+            ("accent", \.accent),
+            ("error", \.error),
+            ("warning", \.warning),
+            ("success", \.success),
+            ("currency", \.currency),
+        ]
+
+        for traits in [light, dark] {
+            for (bgName, bg) in backgrounds {
+                let background = resolve(colors[keyPath: bg], traits)
+                for (fgName, fg) in foregrounds {
+                    let text = flatten(resolve(colors[keyPath: fg], traits), over: background)
+                    XCTAssertGreaterThanOrEqual(
+                        contrastRatio(text, background), 4.5,
+                        "\(fgName) on \(bgName) in \(name(traits)) is unreadable")
+                }
+            }
+        }
+    }
+
+    func testButtonLabelClearsContrastOnItsFill() {
         let colors = JackpotColors.jackpotCity
         for traits in [light, dark] {
-            let text = UIColor(colors.textPrimary).resolvedColor(with: traits)
-            let background = UIColor(colors.surface).resolvedColor(with: traits)
-            XCTAssertGreaterThan(contrastRatio(text, background), 4.5,
-                                 "textPrimary on surface, \(traits.userInterfaceStyle.rawValue)")
-
-            let secondary = UIColor(colors.textSecondary).resolvedColor(with: traits)
-            XCTAssertGreaterThan(contrastRatio(secondary, background), 4.5,
-                                 "textSecondary on surface, \(traits.userInterfaceStyle.rawValue)")
+            let fill = resolve(colors.accentFill, traits)
+            let label = flatten(resolve(colors.textOnAccent, traits), over: fill)
+            XCTAssertGreaterThanOrEqual(contrastRatio(label, fill), 4.5,
+                                        "textOnAccent on accentFill in \(name(traits))")
         }
+    }
+
+    /// The regression: light mode had both at pure white, so a field was identifiable only
+    /// by a border that itself sat at 1.5:1.
+    func testFieldFillIsDistinguishableFromTheSurfaceBehindIt() {
+        let colors = JackpotColors.jackpotCity
+        for traits in [light, dark] {
+            let fill = resolve(colors.fieldBackground, traits)
+            let surface = resolve(colors.surface, traits)
+            XCTAssertNotEqual(fill, surface, "field fill matches the surface in \(name(traits))")
+            XCTAssertGreaterThan(contrastRatio(fill, surface), 1.08,
+                                 "field fill is too close to the surface in \(name(traits))")
+        }
+    }
+
+    // MARK: Helpers
+
+    private func name(_ traits: UITraitCollection) -> String {
+        traits.userInterfaceStyle == .dark ? "dark" : "light"
+    }
+
+    private func resolve(_ color: Color, _ traits: UITraitCollection) -> UIColor {
+        UIColor(color).resolvedColor(with: traits)
+    }
+
+    /// Several palette entries are translucent white. Reading their components straight
+    /// back reports the contrast of opaque white, so they have to be composited first.
+    private func flatten(_ color: UIColor, over background: UIColor) -> UIColor {
+        let fg = components(color), bg = components(background)
+        return UIColor(red: fg.r * fg.a + bg.r * (1 - fg.a),
+                       green: fg.g * fg.a + bg.g * (1 - fg.a),
+                       blue: fg.b * fg.a + bg.b * (1 - fg.a),
+                       alpha: 1)
     }
 
     /// WCAG 2.1 relative luminance.
@@ -65,13 +127,18 @@ final class JackpotColorSchemeTests: XCTestCase {
         return (lighter + 0.05) / (darker + 0.05)
     }
 
-    private func luminance(_ color: UIColor) -> CGFloat {
+    private func components(_ color: UIColor) -> (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return (r, g, b, a)
+    }
+
+    private func luminance(_ color: UIColor) -> CGFloat {
+        let c = components(color)
         func channel(_ value: CGFloat) -> CGFloat {
             value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
         }
-        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+        return 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b)
     }
 }
 
