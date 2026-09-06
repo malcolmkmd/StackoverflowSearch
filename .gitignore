@@ -21,7 +21,6 @@ DerivedData/
 *.dSYM
 
 # Swift Package Manager
-Packages/
 Package.pins
 Package.resolved
 *.xcodeproj
@@ -30,7 +29,6 @@ Package.resolved
 .build/
 
 ### SwiftPackageManager ###
-Packages
 xcuserdata
 *.xcodeproj
 

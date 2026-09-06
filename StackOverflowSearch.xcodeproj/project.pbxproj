@@ -19,6 +19,8 @@
 /* Begin PBXFileReference section */
 		53C185AB300CF5E20009260F /* StackOverflowSearch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StackOverflowSearch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		53C185B8300CF5E50009260F /* StackOverflowSearchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StackOverflowSearchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8450DFF7304B1ECA00A3A1CA /* JCCore */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = JCCore; sourceTree = "<group>"; };
+		8450DFF8304B1ECA00A3A1CA /* JCForms */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = JCForms; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -55,6 +57,7 @@
 		53C185A2300CF5E20009260F = {
 			isa = PBXGroup;
 			children = (
+				8450DFF9304B1ECA00A3A1CA /* Packages */,
 				53C185AD300CF5E20009260F /* StackOverflowSearch */,
 				53C185BB300CF5E50009260F /* StackOverflowSearchTests */,
 				53C185AC300CF5E20009260F /* Products */,
@@ -68,6 +71,15 @@
 				53C185B8300CF5E50009260F /* StackOverflowSearchTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		8450DFF9304B1ECA00A3A1CA /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				8450DFF7304B1ECA00A3A1CA /* JCCore */,
+				8450DFF8304B1ECA00A3A1CA /* JCForms */,
+			);
+			path = Packages;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

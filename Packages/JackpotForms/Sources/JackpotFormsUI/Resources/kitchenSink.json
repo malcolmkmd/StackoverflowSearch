@@ -1,0 +1,33 @@
+{
+  "formId": 9001,
+  "formCodeName": "kitchenSink",
+  "formTitle": "Every field type",
+  "formSubTitle": "renderer coverage",
+  "regionCode": "JZA",
+  "sections": [
+    {
+      "formSectionId": 1, "formSectionCodeName": "1", "formSectionTitle": "Inputs", "formSectionSubTitle": "",
+      "formSectionOrder": 1,
+      "rows": [
+        { "rowNumber": 1, "fields": [ { "fieldId": 1, "fieldIdentifier": "plainText", "fieldName": "plain text", "fieldLabel": "Plain text", "fieldType": "Input", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^.{2,}$", "prefix": "", "suffix": "", "fieldPlaceholder": "Type something", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
+        { "rowNumber": 2, "fields": [ { "fieldId": 2, "fieldIdentifier": "withPrefix", "fieldName": "prefixed", "fieldLabel": "Prefixed number", "fieldType": "Input", "inputType": "Number", "textStyle": "Regular", "validationMessage": "regex", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[0-9]{0,9}$", "prefix": "+27", "suffix": "", "fieldPlaceholder": "Mobile", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
+        { "rowNumber": 3, "fields": [ { "fieldId": 3, "fieldIdentifier": "secret", "fieldName": "password", "fieldLabel": "Password", "fieldType": "Input", "inputType": "Password", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^(.){8,20}$", "prefix": "", "suffix": "", "fieldPlaceholder": "Password", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
+        { "rowNumber": 4, "fields": [ { "fieldId": 4, "fieldIdentifier": "notes", "fieldName": "notes", "fieldLabel": "Notes", "fieldType": "Text Area", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "", "prefix": "", "suffix": "", "fieldPlaceholder": "Anything else?", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
+        { "rowNumber": 5, "fields": [ { "fieldId": 5, "fieldIdentifier": "spacer", "fieldName": "divider", "fieldLabel": "", "fieldType": "Divider", "inputType": "Text", "textStyle": "Regular", "validationMessage": "", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "", "prefix": "", "suffix": "", "fieldPlaceholder": "", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
+        { "rowNumber": 6, "fields": [ { "fieldId": 6, "fieldIdentifier": "futureThing", "fieldName": "future", "fieldLabel": "Not shipped yet", "fieldType": "SignaturePad", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^.+$", "prefix": "", "suffix": "", "fieldPlaceholder": "", "fieldDropdowns": [], "fieldRadioGroup": [] } ] }
+      ]
+    },
+    {
+      "formSectionId": 2, "formSectionCodeName": "2", "formSectionTitle": "Choices", "formSectionSubTitle": "",
+      "formSectionOrder": 2,
+      "rows": [
+        { "rowNumber": 1, "fields": [ { "fieldId": 7, "fieldIdentifier": "pickOne", "fieldName": "dropdown", "fieldLabel": "Dropdown", "fieldType": "Dropdown", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^[a-zA-Z]+$", "prefix": "", "suffix": "", "fieldPlaceholder": "Choose one", "fieldDropdowns": [ { "value": "alpha", "text": "Alpha", "regex": "[a-zA-Z]" }, { "value": "beta", "text": "Beta", "regex": "[a-zA-Z]" } ], "fieldRadioGroup": [] } ] },
+        { "rowNumber": 2, "fields": [ { "fieldId": 8, "fieldIdentifier": "radio", "fieldName": "radio group", "fieldLabel": "Radio group", "fieldType": "Radio Group", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^.+$", "prefix": "", "suffix": "", "fieldPlaceholder": "", "fieldDropdowns": [], "fieldRadioGroup": [ { "value": "one", "text": "Option one" }, { "value": "two", "text": "Option two" } ] } ] },
+        { "rowNumber": 3, "fields": [ { "fieldId": 9, "fieldIdentifier": "when", "fieldName": "date", "fieldLabel": "A date", "fieldType": "Input", "inputType": "Calender", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2}(?:\\.\\d*)?)((-(\\d{2}):(\\d{2})|Z)?)$", "prefix": "", "suffix": "", "fieldPlaceholder": "Pick a date", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
+        { "rowNumber": 4, "fields": [ { "fieldId": 10, "fieldIdentifier": "optIn", "fieldName": "toggle", "fieldLabel": "A toggle", "fieldType": "Toggle", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "^true|^false$", "prefix": "", "suffix": "", "fieldPlaceholder": "", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
+        { "rowNumber": 5, "fields": [ { "fieldId": 11, "fieldIdentifier": "agree", "fieldName": "checkbox", "fieldLabel": "I agree to the thing", "fieldType": "Checkbox", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": true, "isVisible": true, "isReadOnly": false, "fieldRegex": "^true$", "prefix": "", "suffix": "", "fieldPlaceholder": "", "fieldDropdowns": [], "fieldRadioGroup": [] } ] },
+        { "rowNumber": 6, "fields": [ { "fieldId": 12, "fieldIdentifier": "welcomeOffer", "fieldName": "welcome offer", "fieldLabel": "Select your Welcome Offer:", "fieldType": "Welcome Offer", "inputType": "Text", "textStyle": "Regular", "validationMessage": "regex", "isRequired": false, "isVisible": true, "isReadOnly": false, "fieldRegex": "", "prefix": "", "suffix": "", "fieldPlaceholder": "", "fieldDropdowns": [ { "value": "depositMatch", "text": "100% Deposit Match", "regex": "" }, { "value": "freeSpins", "text": "50 Free Spins", "regex": "" } ], "fieldRadioGroup": [] } ] }
+      ]
+    }
+  ]
+}
