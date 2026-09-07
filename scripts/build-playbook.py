@@ -148,9 +148,39 @@ text(
     "still maps `username` to `.phoneNumber`)."
 )
 text(
-    "Chrome the form actually uses: `JackpotLabeledField` / field chrome, `.jackpot` and\n"
-    "`.jackpot(.secondary)` buttons (Next / Sign Up / Previous), `.jackpotBar` progress,\n"
-    "`JackpotErrorView` on load failure, and the locked colour / spacing / size tokens below."
+    "Chrome the form actually uses: `JackpotLabeledField` / field chrome, `FormNavigationBar`\n"
+    "with `.jackpot` / `.jackpot(.secondary)` (Next / Sign Up / Previous — see below),\n"
+    "`.jackpotBar` progress, `JackpotErrorView` on load failure, and the locked colour /\n"
+    "spacing / size tokens below."
+)
+text("### How to go to the next screen")
+text(
+    "The gold/blue button at the bottom of registration is **host UI chrome**, not a CRM\n"
+    "`fieldType: Button`. Neither the bundled `registration.json` nor the live CRM schema\n"
+    "(`GET …/cron/forms/jackpotcity/JZA/registration?api-version=2.0`) includes a Button\n"
+    "field. `RegistrationView` is a thin wrapper around `DynamicFormView`; the footer is\n"
+    "`FormNavigationBar` in `DynamicFormView.swift`."
+)
+table(
+    ["Visible control", "Style", "When", "Action"],
+    [
+        ["**Next**", "`.jackpot` (primary)", "Section 1 — not last", "`advance()` → `DynamicFormModel.advance()`"],
+        ["**Previous**", "`.jackpot(.secondary)`", "Section 2+", "`goBack()` — values kept"],
+        ["**Sign Up**", "`.jackpot` (primary)", "Last section", "`model.submit(onSubmit)`"],
+    ],
+)
+text(
+    "`Next` stays **disabled** until every value-carrying field on the visible section\n"
+    "validates (`isCurrentSectionValid`). Tapping it marks the section touched, revalidates,\n"
+    "and if valid increments `sectionIndex` (step 1 → step 2). `Sign Up` stays disabled until\n"
+    "`isFormValid`, then `RegistrationView`'s callback calls `RegistrationService.register`.\n"
+    "A progress bar sits above the scroll view when `sections.count > 1`."
+)
+text(
+    "A CRM `fieldType: Button` is a different thing. `FieldType.button` is decorative\n"
+    "(`isDecorative`), `FieldRenderer` maps it to `EmptyView()`, and the comment says the\n"
+    "footer owns navigation. Do not look for a schema Button to page the wizard — that\n"
+    "control is already on screen as `FormNavigationBar`."
 )
 text("### Kitchen-sink preview path")
 text(
@@ -202,8 +232,12 @@ text(
     "`FormPreview` path. The playbook does not reproduce them. **Do not delete the Swift.**"
 )
 text(
-    "- **Field types:** `Button` (footer owns navigation), `reCAPTCHA` v2/v3, `Radio` as a\n"
-    "  distinct CRM spelling of `Radio Group` (the renderer already aliases both)\n"
+    "- **CRM `fieldType: Button`:** recognised by `FieldType` and treated as decorative\n"
+    "  (`EmptyView` in `FieldRenderer`). It is **not** on registration (bundled or live) and\n"
+    "  **not** on kitchen-sink. It is **not** the Next / Sign Up / Previous control — that\n"
+    "  is host chrome (`FormNavigationBar`), documented above, and **in scope**.\n"
+    "- **Field types:** `reCAPTCHA` v2/v3, `Radio` as a distinct CRM spelling of `Radio Group`\n"
+    "  (the renderer already aliases both)\n"
     "- **Form views:** `RecaptchaPlaceholderView`\n"
     "- **Follow-up infra:** `JackpotAppData`, `TranslationsStore` / `TranslationsRepository`,\n"
     "  `ConditionalRequest` (ETag) — not on the registration or preview call path"
@@ -444,9 +478,10 @@ files(
         "JackpotKit/Sources/JackpotFormsUI/FormDependencies.swift",
         (
             "JackpotKit/Sources/JackpotFormsUI/DynamicFormModel.swift",
-            "The engine. Two things here are worth reading closely: `touched` is why an untouched field\n"
-            "stays silent until Next, and `applyRegexDependencies` is how selecting Passport relaxes the\n"
-            "SA-ID rule on a different field.",
+            "The engine. `advance()` / `goBack()` / `submit()` are what Next, Previous, and Sign Up\n"
+            "call. `touched` is why an untouched field stays silent until Next, and\n"
+            "`applyRegexDependencies` is how selecting Passport relaxes the SA-ID rule on a\n"
+            "different field.",
         ),
         (
             "JackpotKit/Sources/JackpotFormsUI/Demo/PreviewFixtures.swift",
@@ -457,7 +492,8 @@ files(
             "JackpotKit/Sources/JackpotFormsUI/Fields/FieldRenderer.swift",
             "The switch is the whole contract. Registration hits `.input` (Calender → `DateFieldView`),\n"
             "`.dropdown`, and `.checkbox`. Kitchen-sink also hits `.textArea`, `.divider` →\n"
-            "`JackpotDivider`, `.toggle`, `.radio` / `.radioGroup`, and `.welcomeOffer`.",
+            "`JackpotDivider`, `.toggle`, `.radio` / `.radioGroup`, and `.welcomeOffer`.\n"
+            "`.button` is `EmptyView()` — a CRM field type, not the footer Next / Sign Up chrome.",
         ),
         "JackpotKit/Sources/JackpotFormsUI/Fields/InputFieldView.swift",
         (
@@ -479,7 +515,11 @@ files(
             "JackpotKit/Sources/JackpotFormsUI/Fields/WelcomeOfferFieldView.swift",
             "Kitchen-sink / Gallery Welcome Offer. Keep — the preview path renders it.",
         ),
-        "JackpotKit/Sources/JackpotFormsUI/DynamicFormView.swift",
+        (
+            "JackpotKit/Sources/JackpotFormsUI/DynamicFormView.swift",
+            "`FormNavigationBar` is the Next / Previous / Sign Up chrome. That is how step 1 becomes\n"
+            "step 2 — not a schema `Button` field. `RegistrationView` just hosts this view.",
+        ),
         (
             "JackpotKit/Sources/JackpotFormsUI/Demo/PreviewSupport.swift",
             "Registration copy table, plus `FormPreviewData.bundledForms` (registration + kitchen-sink).",
@@ -669,7 +709,11 @@ swift_literal(
 files(
     [
         "JackpotKit/Sources/JackpotRegistration/RegistrationService.swift",
-        "JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift",
+        (
+            "JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift",
+            "`RegistrationView` hosts `DynamicFormView(formName: .registration)`. It does not own\n"
+            "paging — Next / Previous / Sign Up live in `FormNavigationBar`.",
+        ),
         (
             "JackpotKit/Sources/JackpotRegistration/RegistrationPanelController.swift",
             "A drop-in for the view controller PR 5 deletes: same `addChild`/`popupContainer` call site,\n"
