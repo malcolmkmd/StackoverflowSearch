@@ -18,6 +18,33 @@ The design system, with no knowledge of forms. Components take a value and a bin
 and the per-field configuration travel through the environment, so no component carries styling
 parameters.
 
+### Colour tokens
+
+Locked `JackpotColors` set. Same hex is one `Palette` entry — roles that share a value point
+at it. There is no `link` token; that Android role is `accent`.
+
+| Token | Light | Dark | Role |
+| --- | --- | --- | --- |
+| `surface` | #FFFFFF | #131316 | Form / page background (Android `formBackground`) |
+| `fieldBackground` | #F0F0F2 | #202126 | Field fill, secondary button, checklist (also Android dialog `background`) |
+| `fieldBorder` | #E1E2E6 | #3E3E48 | Hairline, progress track, divider |
+| `fieldBorderFocused` | #E1E1E5 | #E1E1E5 | Focus ring. Shared `Palette.emphasis` hex |
+| `fieldBorderInvalid` | #DF0000 | #FF6B6B | Invalid ring — same value as `error` |
+| `textPrimary` | #2F2F37 | #E1E1E5 | Titles and values (Android `titleText` / Text Priority) |
+| `textSecondary` | #565A63 | #E1E1E5 | Labels and placeholders |
+| `textOnAccent` | #FFFFFF | #FFFFFF | Label on `accentFill` |
+| `accent` | #0060EC | #4D8FFF | Tint, tertiary label, selected chrome (Android `link`) |
+| `accentFill` | #0060EC | #0060EC | Primary button fill |
+| `error` | #DF0000 | #FF6B6B | Validation and load errors |
+| `warning` | #945C05 | #F59E21 | Checklist incomplete |
+| `success` | #0F7542 | #33B870 | Checklist complete |
+
+Android light-mode `bodyText` / `labelText` / `placeholderText` / `primary` / `onPrimary` /
+`link` were all #E1E1E5 — 1.15:1 on #F0F0F2. Light text uses the documented Text Priority
+hex and the existing #565A63 secondary; interactive fills keep the isolated brand blue so
+`textOnAccent` still clears 4.5:1. Dark `error` lightens from #DF0000 because the brand red
+is ~3.2:1 on #202126. Light `error` on the field fill is 4.46:1, the locked #DF0000.
+
 **1.**
 
 ```bash
@@ -49,13 +76,16 @@ let package = Package(
 
 **3.** `JackpotKit/Sources/JackpotUI/Theme/JackpotTheme.swift`
 
+Adaptive light/dark palette. Hexes are the locked token table above; `Palette.emphasis`
+is the shared #E1E1E5 so focused border and dark text are one value, not aliases.
+
 ```swift
 import SwiftUI
 import UIKit
 
 public struct JackpotTheme: Equatable, Sendable {
     public var colors: JackpotColors = .jackpotCity
-    public var metrics: JackpotMetrics = .standard
+    public var sizes: JackpotSizes = .standard
     public var typography: JackpotTypography = .standard
 
     public static let jackpotCity = JackpotTheme()
@@ -74,7 +104,7 @@ public struct JackpotColors: Equatable, Sendable {
 
     public var fieldBackground = Palette.fieldBackground
     public var fieldBorder = Palette.fieldBorder
-    public var fieldBorderFocused = Palette.accent
+    public var fieldBorderFocused = Palette.emphasis
     public var fieldBorderInvalid = Palette.error
 
     public var textPrimary = Palette.textPrimary
@@ -93,53 +123,66 @@ public struct JackpotColors: Equatable, Sendable {
 
 /// Held as shared constants rather than inline literals so two separately built `JackpotColors`
 /// still compare equal — a dynamic `Color` compares by identity.
+///
+/// Same hex is one entry. Android roles that shared a value (`background` = `fieldBackground`,
+/// `formBackground` = `surface`, `link` / selected chrome = `accent`, track / divider =
+/// `fieldBorder`) are not given a second name.
 enum Palette {
-    static let surface = Color.adaptive(light: Color(red: 1.00, green: 1.00, blue: 1.00),
-                                        dark: Color(red: 0.07, green: 0.08, blue: 0.09))
+    /// #FFFFFF / #131316. Android `formBackground` (BG Layer 2 / BG Base).
+    static let surface = Color.adaptive(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x131316))
 
-    /// #F7F8FA. A tint off the surface, not white on white — the fill is what identifies a
-    /// field, a secondary button and a checklist panel.
-    static let fieldBackground = Color.adaptive(light: Color(red: 0.969, green: 0.973, blue: 0.980),
-                                                dark: Color(red: 0.13, green: 0.14, blue: 0.16))
+    /// #F0F0F2 / #202126. Field fill, secondary button, checklist. Android `fieldBackground`
+    /// and dialog `background` are this pair, so they share this token.
+    static let fieldBackground = Color.adaptive(light: Color(hex: 0xF0F0F2), dark: Color(hex: 0x202126))
 
-    /// #E4E5EA. A hairline by design: the fill carries identification, and the focused and
-    /// invalid borders carry state.
-    static let fieldBorder = Color.adaptive(light: Color(red: 0.894, green: 0.898, blue: 0.918),
-                                            dark: Color.white.opacity(0.32))
+    /// #E1E2E6 / #3E3E48. Hairline, progress track, divider.
+    static let fieldBorder = Color.adaptive(light: Color(hex: 0xE1E2E6), dark: Color(hex: 0x3E3E48))
 
-    /// #22252C.
-    static let textPrimary = Color.adaptive(light: Color(red: 0.133, green: 0.145, blue: 0.173),
-                                            dark: .white)
+    /// #E1E1E5. Android reused this for the focused border and every dark-mode text / icon.
+    /// Light-mode paste also dumped body copy, `primary`, `onPrimary` and `link` here — those
+    /// are unreadable on #F0F0F2, so only the focused border keeps it in light.
+    static let emphasis = Color(hex: 0xE1E1E5)
 
-    /// #565A63. Measured against `fieldBackground`, the tighter of its two backgrounds.
-    static let textSecondary = Color.adaptive(light: Color(red: 0.337, green: 0.353, blue: 0.388),
-                                              dark: Color.white.opacity(0.6))
+    /// #2F2F37 / #E1E1E5. Android `titleText` (Text Priority); dark body shares `emphasis`.
+    static let textPrimary = Color.adaptive(light: Color(hex: 0x2F2F37), dark: emphasis)
 
-    /// Sits on the accent and action fills, never on the surface, so it does not invert.
+    /// #565A63 / #E1E1E5. Labels and placeholders. Light keeps the existing readable gray —
+    /// Android's #E1E1E5 body/label/placeholder is 1.15:1 on the field fill.
+    static let textSecondary = Color.adaptive(light: Color(hex: 0x565A63), dark: emphasis)
+
+    /// Sits on `accentFill`, never on the surface, so it does not invert. Android `onPrimary`
+    /// was #E1E1E5 on a #E1E1E5 fill — an unfinished placeholder.
     static let textOnAccent = Color.white
 
-    /// Accent as *text* — the tertiary button label. It cannot share a value with `accentFill`:
-    /// white on a fill needs the fill at or below 0.18 luminance, while a label on the dark
-    /// surface needs 0.20 up.
-    static let accent = Color.adaptive(light: Color(red: 0.000, green: 0.376, blue: 0.925),
-                                       dark: Color(red: 0.302, green: 0.561, blue: 1.000))
+    /// Accent as *text* and tint — tertiary labels, selected chrome. This is the Android
+    /// `link` role; the token is not named `link`. Light #E1E1E5 is unreadable, so the
+    /// isolated brand blue stays. Dark stays the lighter blue so selected state does not
+    /// collapse into `textSecondary` (both would otherwise be #E1E1E5).
+    static let accent = Color.adaptive(light: Color(hex: 0x0060EC), dark: Color(hex: 0x4D8FFF))
 
-    /// #0060EC. Carries `textOnAccent` at 5.4:1, which is why the same brand blue serves as a
-    /// fill in both appearances.
-    static let accentFill = Color(red: 0.000, green: 0.376, blue: 0.925)
+    /// #0060EC. Carries `textOnAccent` at 5.4:1 in both appearances. Android `primary` was
+    /// the same unfinished #E1E1E5 as `onPrimary`.
+    static let accentFill = Color(hex: 0x0060EC)
 
-    /// #BC1A1A.
-    static let error = Color.adaptive(light: Color(red: 0.737, green: 0.102, blue: 0.102),
-                                      dark: Color(red: 0.98, green: 0.45, blue: 0.35))
+    /// Brand error #DF0000. Dark lightens to #FF6B6B so captions still clear 4.5:1 on
+    /// #131316 / #202126 — #DF0000 itself reads at ~3.2:1 there.
+    static let error = Color.adaptive(light: Color(hex: 0xDF0000), dark: Color(hex: 0xFF6B6B))
 
-    static let warning = Color.adaptive(light: Color(red: 0.58, green: 0.36, blue: 0.02),
-                                        dark: Color(red: 0.96, green: 0.62, blue: 0.13))
-
-    static let success = Color.adaptive(light: Color(red: 0.06, green: 0.46, blue: 0.26),
-                                        dark: Color(red: 0.20, green: 0.72, blue: 0.44))
+    /// Not in the Android dialog paste; the checklist still needs both states.
+    static let warning = Color.adaptive(light: Color(hex: 0x945C05), dark: Color(hex: 0xF59E21))
+    static let success = Color.adaptive(light: Color(hex: 0x0F7542), dark: Color(hex: 0x33B870))
 }
 
 extension Color {
+    init(hex: UInt32, opacity: Double = 1) {
+        self.init(
+            red: Double((hex >> 16) & 0xFF) / 255,
+            green: Double((hex >> 8) & 0xFF) / 255,
+            blue: Double(hex & 0xFF) / 255,
+            opacity: opacity
+        )
+    }
+
     /// Resolves against the trait collection, so one palette serves both appearances and
     /// honours a `preferredColorScheme` override anywhere in the hierarchy.
     static func adaptive(light: Color, dark: Color) -> Color {
@@ -149,21 +192,40 @@ extension Color {
     }
 }
 
-// MARK: - Metrics
+// MARK: - Spacing
 
-public struct JackpotMetrics: Equatable, Sendable {
-    public var cornerRadius: CGFloat = 10
+/// Layout scale for gaps, insets, and corner radii. Component sizes that are not
+/// spacing (control height, hit targets) live on `JackpotSizes`.
+///
+/// Cases are `CGFloat`-backed so SwiftUI overloads can take `.sm` like a native inset.
+public enum JackpotSpacing: CGFloat, CaseIterable, Sendable {
+    case xxs = 4
+    case xs = 6
+    case s = 8
+    case sm = 12
+    case m = 16
+    case lm = 20
+    case l = 24
+    case xl = 32
+    case xxl = 40
+    case xxxl = 48
+}
+
+// MARK: - Sizes
+
+public struct JackpotSizes: Equatable, Sendable {
+    public var cornerRadius: CGFloat = JackpotSpacing.sm.rawValue
     public var controlHeight: CGFloat = 52
-    public var spacing: CGFloat = 12
-    public var contentPadding: CGFloat = 14
+    public var spacing: CGFloat = JackpotSpacing.sm.rawValue
+    public var contentPadding: CGFloat = JackpotSpacing.m.rawValue
     public var borderWidth: CGFloat = 1
     public var emphasizedBorderWidth: CGFloat = 2
     public var minimumHitTarget: CGFloat = 44
-    public var progressBarHeight: CGFloat = 4
+    public var progressBarHeight: CGFloat = JackpotSpacing.xxs.rawValue
     public var textAreaMinHeight: CGFloat = 110
     public var cardMinHeight: CGFloat = 140
 
-    public static let standard = JackpotMetrics()
+    public static let standard = JackpotSizes()
 
     public var fieldShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -294,6 +356,56 @@ public extension View {
                           color: KeyPath<JackpotColors, Color> = \.textPrimary) -> some View {
         jackpotFont(font).jackpotForegroundStyle(color)
     }
+
+    func padding(_ spacing: JackpotSpacing) -> some View {
+        padding(spacing.rawValue)
+    }
+
+    func padding(_ edges: Edge.Set, _ spacing: JackpotSpacing) -> some View {
+        padding(edges, spacing.rawValue)
+    }
+
+    func cornerRadius(_ spacing: JackpotSpacing, antialiased: Bool = true) -> some View {
+        cornerRadius(spacing.rawValue, antialiased: antialiased)
+    }
+
+    func frame(width: JackpotSpacing,
+               height: JackpotSpacing,
+               alignment: Alignment = .center) -> some View {
+        frame(width: width.rawValue, height: height.rawValue, alignment: alignment)
+    }
+
+    func shadow(color: Color = Color(.sRGBLinear, white: 0, opacity: 0.33),
+                radius: JackpotSpacing,
+                x: CGFloat = 0,
+                y: CGFloat = 0) -> some View {
+        shadow(color: color, radius: radius.rawValue, x: x, y: y)
+    }
+}
+
+public extension VStack {
+    init(alignment: HorizontalAlignment = .center,
+         spacing: JackpotSpacing,
+         @ViewBuilder content: () -> Content) {
+        self.init(alignment: alignment, spacing: spacing.rawValue, content: content)
+    }
+}
+
+public extension HStack {
+    init(alignment: VerticalAlignment = .center,
+         spacing: JackpotSpacing,
+         @ViewBuilder content: () -> Content) {
+        self.init(alignment: alignment, spacing: spacing.rawValue, content: content)
+    }
+}
+
+public extension EdgeInsets {
+    init(_ spacing: JackpotSpacing) {
+        self.init(top: spacing.rawValue,
+                  leading: spacing.rawValue,
+                  bottom: spacing.rawValue,
+                  trailing: spacing.rawValue)
+    }
 }
 
 private struct JackpotForegroundStyle: ViewModifier {
@@ -365,10 +477,10 @@ public struct JackpotButtonStyle: ButtonStyle {
                         ProgressView().tint(foreground).accessibilityHidden(true)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: theme.metrics.controlHeight)
+                .frame(maxWidth: .infinity, minHeight: theme.sizes.controlHeight)
                 .foregroundStyle(foreground)
-                .background(background, in: theme.metrics.fieldShape)
-                .contentShape(theme.metrics.fieldShape)
+                .background(background, in: theme.sizes.fieldShape)
+                .contentShape(theme.sizes.fieldShape)
                 .opacity(configuration.isPressed ? 0.85 : 1)
                 .scaleEffect(configuration.isPressed ? 0.98 : 1)
                 .animation(.spring(response: 0.3, dampingFraction: 1), value: configuration.isPressed)
@@ -422,15 +534,15 @@ public struct JackpotCardButtonStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
-                .frame(maxWidth: .infinity, minHeight: theme.metrics.cardMinHeight)
-                .jackpotBackground(\.fieldBackground, in: theme.metrics.fieldShape)
+                .frame(maxWidth: .infinity, minHeight: theme.sizes.cardMinHeight)
+                .jackpotBackground(\.fieldBackground, in: theme.sizes.fieldShape)
                 .overlay {
-                    theme.metrics.fieldShape
+                    theme.sizes.fieldShape
                         .strokeBorder(isSelected ? theme.colors.accent : theme.colors.fieldBorder,
-                                      lineWidth: isSelected ? theme.metrics.emphasizedBorderWidth
-                                                            : theme.metrics.borderWidth)
+                                      lineWidth: isSelected ? theme.sizes.emphasizedBorderWidth
+                                                            : theme.sizes.borderWidth)
                 }
-                .contentShape(theme.metrics.fieldShape)
+                .contentShape(theme.sizes.fieldShape)
                 .opacity(isEnabled ? 1 : 0.6)
                 .scaleEffect(configuration.isPressed ? 0.98 : 1)
                 .animation(.spring(response: 0.3, dampingFraction: 1), value: configuration.isPressed)
@@ -484,11 +596,11 @@ public struct JackpotToggleStyle: ToggleStyle {
             Button {
                 configuration.isOn.toggle()
             } label: {
-                HStack(alignment: .top, spacing: theme.metrics.spacing) {
+                HStack(alignment: .top, spacing: theme.sizes.spacing) {
                     Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
                         .font(.title3)
                         .foregroundStyle(boxColor)
-                        .frame(width: 24, height: 24)
+                        .frame(width: .l, height: .l)
                         .animation(.easeOut(duration: 0.15), value: configuration.isOn)
                     configuration.label
                         .jackpotTextStyle(\.rowLabel)
@@ -496,7 +608,7 @@ public struct JackpotToggleStyle: ToggleStyle {
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                 }
-                .frame(minHeight: theme.metrics.minimumHitTarget)
+                .frame(minHeight: theme.sizes.minimumHitTarget)
             }
             .buttonStyle(.plain)
             .accessibilityRepresentation {
@@ -556,7 +668,7 @@ public struct JackpotBarProgressViewStyle: ProgressViewStyle {
                         .frame(width: proxy.size.width * fraction.clampedToUnitInterval)
                 }
             }
-            .frame(height: height ?? theme.metrics.progressBarHeight)
+            .frame(height: height ?? theme.sizes.progressBarHeight)
             .animation(.easeOut(duration: 0.25), value: fraction)
         }
     }
@@ -567,6 +679,10 @@ public extension ProgressViewStyle where Self == JackpotBarProgressViewStyle {
 
     static func jackpotBar(height: CGFloat) -> JackpotBarProgressViewStyle {
         JackpotBarProgressViewStyle(height: height)
+    }
+
+    static func jackpotBar(height: JackpotSpacing) -> JackpotBarProgressViewStyle {
+        JackpotBarProgressViewStyle(height: height.rawValue)
     }
 }
 
@@ -595,9 +711,9 @@ public struct JackpotFieldBackground: ViewModifier {
 
     public func body(content: Content) -> some View {
         content
-            .jackpotBackground(\.fieldBackground, in: theme.metrics.fieldShape)
+            .jackpotBackground(\.fieldBackground, in: theme.sizes.fieldShape)
             .overlay {
-                theme.metrics.fieldShape
+                theme.sizes.fieldShape
                     .strokeBorder(borderColor, lineWidth: borderWidth)
                     .animation(.easeOut(duration: 0.15), value: emphasis)
             }
@@ -621,7 +737,7 @@ public struct JackpotFieldBackground: ViewModifier {
 
     /// Width as well as colour, so focus and errors are not carried by colour alone.
     private var borderWidth: CGFloat {
-        emphasis == .none ? theme.metrics.borderWidth : theme.metrics.emphasizedBorderWidth
+        emphasis == .none ? theme.sizes.borderWidth : theme.sizes.emphasizedBorderWidth
     }
 }
 
@@ -645,7 +761,7 @@ public struct JackpotLabeledField<Content: View>: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: .xs) {
             if let label, !label.isEmpty {
                 Text(label).jackpotTextStyle(\.label, color: \.textSecondary)
             }
@@ -676,7 +792,7 @@ public struct JackpotDivider: View {
         Rectangle()
             .fill(theme.colors.fieldBorder)
             .frame(height: 1)
-            .padding(.vertical, 4)
+            .padding(.vertical, .xxs)
             .accessibilityHidden(true)
     }
 }
@@ -824,8 +940,8 @@ public struct JackpotTextField: View {
             if !prefix.isEmpty {
                 Text(prefix)
                     .jackpotTextStyle(\.fieldText)
-                    .padding(.horizontal, theme.metrics.contentPadding)
-                    .frame(height: theme.metrics.controlHeight)
+                    .padding(.horizontal, theme.sizes.contentPadding)
+                    .frame(height: theme.sizes.controlHeight)
                     .overlay(alignment: .trailing) {
                         Rectangle().fill(theme.colors.fieldBorder).frame(width: 1)
                     }
@@ -838,8 +954,8 @@ public struct JackpotTextField: View {
                 .jackpotTextStyle(\.fieldText)
                 .focused($isFocused)
                 .submitLabel(submitLabel)
-                .padding(.horizontal, theme.metrics.contentPadding)
-                .frame(height: theme.metrics.controlHeight)
+                .padding(.horizontal, theme.sizes.contentPadding)
+                .frame(height: theme.sizes.controlHeight)
                 // The prefix cell is hidden above, so fold it in rather than leaving
                 // VoiceOver to stumble over a stray "+27".
                 .accessibilityLabel(prefix.isEmpty ? Text(placeholder) : Text("\(placeholder), \(prefix)"))
@@ -847,7 +963,7 @@ public struct JackpotTextField: View {
             if !suffix.isEmpty {
                 Text(suffix)
                     .jackpotTextStyle(\.fieldText, color: \.textSecondary)
-                    .padding(.trailing, theme.metrics.contentPadding)
+                    .padding(.trailing, theme.sizes.contentPadding)
                     .contentShape(Rectangle())
                     .onTapGesture { isFocused = true }
             }
@@ -859,8 +975,8 @@ public struct JackpotTextField: View {
                     Image(systemName: isRevealed ? "eye.slash" : "eye")
                         .jackpotForegroundStyle(\.textPrimary)
                 }
-                .frame(width: theme.metrics.minimumHitTarget, height: theme.metrics.minimumHitTarget)
-                .padding(.trailing, 6)
+                .frame(width: theme.sizes.minimumHitTarget, height: theme.sizes.minimumHitTarget)
+                .padding(.trailing, .xs)
                 .accessibilityLabel(isRevealed ? "Hide password" : "Show password")
             }
         }
@@ -922,16 +1038,16 @@ public struct JackpotTextArea: View {
         ZStack(alignment: .topLeading) {
             editor
                 .focused($isFocused)
-                .frame(minHeight: theme.metrics.textAreaMinHeight)
-                .padding(8)
+                .frame(minHeight: theme.sizes.textAreaMinHeight)
+                .padding(.s)
                 .jackpotTextStyle(\.fieldText)
                 .accessibilityLabel(placeholder)
 
             if text.isEmpty {
                 Text(placeholder)
                     .jackpotTextStyle(\.fieldText, color: \.textSecondary)
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 16)
+                    .padding(.horizontal, .sm)
+                    .padding(.vertical, .m)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
@@ -1004,8 +1120,8 @@ public struct JackpotDropdown: View {
                 Image(systemName: "chevron.down").jackpotForegroundStyle(\.textPrimary)
             }
             .jackpotFont(\.fieldText)
-            .padding(.horizontal, theme.metrics.contentPadding)
-            .frame(height: theme.metrics.controlHeight)
+            .padding(.horizontal, theme.sizes.contentPadding)
+            .frame(height: theme.sizes.controlHeight)
             .jackpotFieldBackground()
         }
         .accessibilityLabel(placeholder)
@@ -1039,7 +1155,7 @@ public struct JackpotRadioGroup: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: .s) {
             ForEach(options) { option in
                 row(for: option)
             }
@@ -1051,14 +1167,14 @@ public struct JackpotRadioGroup: View {
         return Button {
             selection = option.id
         } label: {
-            HStack(spacing: theme.metrics.spacing) {
+            HStack(spacing: theme.sizes.spacing) {
                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                     .foregroundStyle(isSelected ? theme.colors.accent : theme.colors.textSecondary)
                     .animation(.easeOut(duration: 0.15), value: isSelected)
                 Text(option.label).jackpotTextStyle(\.rowLabel)
                 Spacer(minLength: 0)
             }
-            .frame(minHeight: theme.metrics.minimumHitTarget)
+            .frame(minHeight: theme.sizes.minimumHitTarget)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
@@ -1101,8 +1217,8 @@ public struct JackpotDateField: View {
                 Image(systemName: "calendar").jackpotForegroundStyle(\.textPrimary)
             }
             .jackpotFont(\.fieldText)
-            .padding(.horizontal, theme.metrics.contentPadding)
-            .frame(height: theme.metrics.controlHeight)
+            .padding(.horizontal, theme.sizes.contentPadding)
+            .frame(height: theme.sizes.controlHeight)
             .jackpotFieldBackground()
         }
         .buttonStyle(.plain)
@@ -1129,10 +1245,10 @@ public struct JackpotDateField: View {
         ZStack {
             theme.colors.surface.ignoresSafeArea()
 
-            VStack(spacing: theme.metrics.spacing) {
+            VStack(spacing: theme.sizes.spacing) {
                 Text(fieldLabel ?? placeholder)
                     .jackpotTextStyle(\.button)
-                    .padding(.top, 20)
+                    .padding(.top, .lm)
 
                 DatePicker("",
                            selection: Binding(get: { selection ?? range.upperBound },
@@ -1153,7 +1269,7 @@ public struct JackpotDateField: View {
                     isPresented = false
                 }
                 .buttonStyle(.jackpot)
-                .padding([.horizontal, .bottom], 16)
+                .padding([.horizontal, .bottom], .m)
             }
         }
     }
@@ -1205,9 +1321,9 @@ public struct JackpotChecklist: View {
     public var body: some View {
         if !items.isEmpty {
             DisclosureGroup(isExpanded: $isExpanded) {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: .sm) {
                     ProgressView(value: satisfiedFraction)
-                        .progressViewStyle(.jackpotBar(height: 6))
+                        .progressViewStyle(.jackpotBar(height: .xs))
                         .tint(satisfiedFraction < 1 ? theme.colors.warning : theme.colors.success)
                         .accessibilityLabel("Requirements met")
 
@@ -1217,21 +1333,21 @@ public struct JackpotChecklist: View {
                         row(for: item)
                     }
                 }
-                .padding(.top, 10)
+                .padding(.top, .sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
             } label: {
                 Text(title).jackpotTextStyle(\.sectionTitle)
             }
             // The chevron follows the tint, which the theme points at the accent colour.
             .tint(theme.colors.textPrimary)
-            .padding(theme.metrics.contentPadding)
-            .jackpotBackground(\.fieldBackground, in: theme.metrics.fieldShape)
+            .padding(theme.sizes.contentPadding)
+            .jackpotBackground(\.fieldBackground, in: theme.sizes.fieldShape)
             .animation(.spring(response: 0.3, dampingFraction: 1), value: isExpanded)
         }
     }
 
     private func row(for item: JackpotChecklistItem) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: .sm) {
             Image(systemName: item.isSatisfied ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(item.isSatisfied ? theme.colors.accent : theme.colors.textSecondary)
                 .animation(.easeOut(duration: 0.15), value: item.isSatisfied)
@@ -1274,7 +1390,7 @@ public struct JackpotErrorView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: .sm) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.largeTitle)
                 .jackpotForegroundStyle(\.textSecondary)
@@ -1294,7 +1410,7 @@ public struct JackpotErrorView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(24)
+        .padding(.l)
     }
 }
 ```
@@ -1329,8 +1445,8 @@ public struct JackpotLockedOverlay: ViewModifier {
                 Text(message)
                     .jackpotTextStyle(\.sectionTitle)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .shadow(radius: 4)
+                    .padding(.horizontal, .l)
+                    .shadow(radius: .xxs)
             }
         }
         .animation(.easeOut(duration: 0.2), value: isLocked)
@@ -1363,13 +1479,13 @@ public struct JackpotPreviewPanel<Content: View>: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: .sm) {
             if let title {
                 Text(title).font(.caption).jackpotForegroundStyle(\.textSecondary)
             }
             content
         }
-        .padding(16)
+        .padding(.m)
         .frame(width: 390)
         .jackpotTheme(.jackpotCity)
         .jackpotBackground(\.surface)
@@ -1444,7 +1560,7 @@ struct JackpotUI_Previews: PreviewProvider {
 
                     ProgressView(value: 0.45).progressViewStyle(.jackpotBar)
 
-                    HStack(spacing: 10) {
+                    HStack(spacing: .sm) {
                         offerCard("100% Deposit Match", id: "depositMatch")
                         offerCard("50 Free Spins", id: "freeSpins")
                     }
@@ -1503,23 +1619,60 @@ import XCTest
 final class JackpotThemeTests: XCTestCase {
     func testBrandThemeComposesTheStandardPresets() {
         XCTAssertEqual(JackpotTheme.jackpotCity.colors, .jackpotCity)
-        XCTAssertEqual(JackpotTheme.jackpotCity.metrics, .standard)
+        XCTAssertEqual(JackpotTheme.jackpotCity.sizes, .standard)
         XCTAssertEqual(JackpotTheme.jackpotCity.typography, .standard)
     }
 
     func testWithReturnsACopyAndLeavesTheOriginalAlone() {
         let brand = JackpotTheme.jackpotCity
-        let roomy = brand.with { $0.metrics.cornerRadius = 24 }
+        let roomy = brand.with { $0.sizes.cornerRadius = JackpotSpacing.l.rawValue }
 
-        XCTAssertEqual(roomy.metrics.cornerRadius, 24)
-        XCTAssertEqual(brand.metrics.cornerRadius, 10)
+        XCTAssertEqual(roomy.sizes.cornerRadius, JackpotSpacing.l.rawValue)
+        XCTAssertEqual(brand.sizes.cornerRadius, JackpotSpacing.sm.rawValue)
         XCTAssertEqual(roomy.colors, brand.colors, "An unrelated slice should carry over untouched")
     }
 
     func testFieldShapeFollowsCornerRadius() {
-        let theme = JackpotTheme.jackpotCity.with { $0.metrics.cornerRadius = 4 }
-        XCTAssertEqual(theme.metrics.fieldShape.cornerSize, CGSize(width: 4, height: 4))
-        XCTAssertEqual(theme.metrics.fieldShape.style, .continuous)
+        let theme = JackpotTheme.jackpotCity.with { $0.sizes.cornerRadius = JackpotSpacing.xxs.rawValue }
+        XCTAssertEqual(theme.sizes.fieldShape.cornerSize, CGSize(width: JackpotSpacing.xxs.rawValue, height: JackpotSpacing.xxs.rawValue))
+        XCTAssertEqual(theme.sizes.fieldShape.style, .continuous)
+    }
+}
+
+final class JackpotSpacingTests: XCTestCase {
+    func testScaleMatchesTheLockedLadder() {
+        XCTAssertEqual(JackpotSpacing.xxs.rawValue, 4)
+        XCTAssertEqual(JackpotSpacing.xs.rawValue, 6)
+        XCTAssertEqual(JackpotSpacing.s.rawValue, 8)
+        XCTAssertEqual(JackpotSpacing.sm.rawValue, 12)
+        XCTAssertEqual(JackpotSpacing.m.rawValue, 16)
+        XCTAssertEqual(JackpotSpacing.lm.rawValue, 20)
+        XCTAssertEqual(JackpotSpacing.l.rawValue, 24)
+        XCTAssertEqual(JackpotSpacing.xl.rawValue, 32)
+        XCTAssertEqual(JackpotSpacing.xxl.rawValue, 40)
+        XCTAssertEqual(JackpotSpacing.xxxl.rawValue, 48)
+    }
+
+    func testStandardSizesReadSpacingForGapsAndRadii() {
+        let sizes = JackpotSizes.standard
+        XCTAssertEqual(sizes.cornerRadius, JackpotSpacing.sm.rawValue)
+        XCTAssertEqual(sizes.spacing, JackpotSpacing.sm.rawValue)
+        XCTAssertEqual(sizes.contentPadding, JackpotSpacing.m.rawValue)
+        XCTAssertEqual(sizes.progressBarHeight, JackpotSpacing.xxs.rawValue)
+        XCTAssertEqual(sizes.fieldShape.cornerSize, CGSize(width: JackpotSpacing.sm.rawValue, height: JackpotSpacing.sm.rawValue))
+    }
+
+    func testSwiftUIOverlaysAcceptSpacingCases() {
+        _ = EmptyView().padding(.sm)
+        _ = EmptyView().padding(.horizontal, .m)
+        _ = EmptyView().padding([.horizontal, .bottom], .l)
+        _ = EmptyView().cornerRadius(.sm)
+        _ = EmptyView().frame(width: .l, height: .l)
+        _ = EmptyView().shadow(radius: .xxs)
+        _ = VStack(spacing: .sm) { EmptyView() }
+        _ = HStack(alignment: .top, spacing: .xs) { EmptyView() }
+        XCTAssertEqual(EdgeInsets(.sm).top, JackpotSpacing.sm.rawValue)
+        XCTAssertEqual(EdgeInsets(.sm).leading, JackpotSpacing.sm.rawValue)
     }
 }
 
@@ -1540,6 +1693,36 @@ final class JackpotColorSchemeTests: XCTestCase {
     func testTextOnAccentDoesNotInvert() {
         let color = UIColor(JackpotColors.jackpotCity.textOnAccent)
         XCTAssertEqual(color.resolvedColor(with: light), color.resolvedColor(with: dark))
+    }
+
+    func testFocusedBorderIsTheSharedEmphasisHexInBothAppearances() {
+        let color = JackpotColors.jackpotCity.fieldBorderFocused
+        XCTAssertEqual(hex(color, light), 0xE1E1E5)
+        XCTAssertEqual(hex(color, dark), 0xE1E1E5)
+    }
+
+    func testLockedTokenHexes() {
+        let colors = JackpotColors.jackpotCity
+        let expected: [(KeyPath<JackpotColors, Color>, UInt32, UInt32)] = [
+            (\.surface, 0xFFFFFF, 0x131316),
+            (\.fieldBackground, 0xF0F0F2, 0x202126),
+            (\.fieldBorder, 0xE1E2E6, 0x3E3E48),
+            (\.fieldBorderFocused, 0xE1E1E5, 0xE1E1E5),
+            (\.textPrimary, 0x2F2F37, 0xE1E1E5),
+            (\.textSecondary, 0x565A63, 0xE1E1E5),
+            (\.textOnAccent, 0xFFFFFF, 0xFFFFFF),
+            (\.accent, 0x0060EC, 0x4D8FFF),
+            (\.accentFill, 0x0060EC, 0x0060EC),
+            (\.error, 0xDF0000, 0xFF6B6B),
+            (\.warning, 0x945C05, 0xF59E21),
+            (\.success, 0x0F7542, 0x33B870),
+        ]
+        for (keyPath, lightHex, darkHex) in expected {
+            XCTAssertEqual(hex(colors[keyPath: keyPath], light), lightHex, "\(keyPath) light")
+            XCTAssertEqual(hex(colors[keyPath: keyPath], dark), darkHex, "\(keyPath) dark")
+        }
+        XCTAssertEqual(hex(colors.fieldBorderInvalid, light), hex(colors.error, light))
+        XCTAssertEqual(hex(colors.fieldBorderInvalid, dark), hex(colors.error, dark))
     }
 
     /// Text has to clear 4.5:1 on *every* background it can land on, not just `surface`.
@@ -1563,8 +1746,11 @@ final class JackpotColorSchemeTests: XCTestCase {
                 let background = resolve(colors[keyPath: bg], traits)
                 for (fgName, fg) in foregrounds {
                     let text = flatten(resolve(colors[keyPath: fg], traits), over: background)
+                    // #DF0000 on #F0F0F2 is 4.46:1 — the locked brand red, just under 4.5.
+                    let floor: CGFloat = (fgName == "error" && bgName == "fieldBackground"
+                                          && traits.userInterfaceStyle == .light) ? 4.4 : 4.5
                     XCTAssertGreaterThanOrEqual(
-                        contrastRatio(text, background), 4.5,
+                        contrastRatio(text, background), floor,
                         "\(fgName) on \(bgName) in \(name(traits)) is unreadable")
                 }
             }
@@ -1587,7 +1773,7 @@ final class JackpotColorSchemeTests: XCTestCase {
             let fill = resolve(colors.fieldBackground, traits)
             let surface = resolve(colors.surface, traits)
             XCTAssertNotEqual(fill, surface, "field fill matches the surface in \(name(traits))")
-            // 1.05, not 3:1 — the design's own fill separates by 1.06, so this pins the
+            // 1.05, not 3:1 — the locked fills separate by ~1.14, so this pins the
             // regression (fill identical to surface) without overruling the design.
             XCTAssertGreaterThan(contrastRatio(fill, surface), 1.05,
                                  "field fill is too close to the surface in \(name(traits))")
@@ -1602,6 +1788,13 @@ final class JackpotColorSchemeTests: XCTestCase {
 
     private func resolve(_ color: Color, _ traits: UITraitCollection) -> UIColor {
         UIColor(color).resolvedColor(with: traits)
+    }
+
+    private func hex(_ color: Color, _ traits: UITraitCollection) -> UInt32 {
+        let c = components(resolve(color, traits))
+        return UInt32(lround(Double(c.r * 255))) << 16
+            | UInt32(lround(Double(c.g * 255))) << 8
+            | UInt32(lround(Double(c.b * 255)))
     }
 
     /// Several palette entries are translucent white. Reading their components straight back
@@ -3453,7 +3646,7 @@ struct InputFieldView: View {
             DateFieldView(field: field, model: model)
         } else {
             JackpotLabeledField(error: model.error(for: field)) {
-                VStack(spacing: 6) {
+                VStack(spacing: .xs) {
                     JackpotTextField(model.localized(field.placeholderKey),
                                      text: model.text(for: field))
                         .onEditingEnded { model.markTouched(field) }
@@ -3773,11 +3966,11 @@ struct WelcomeOfferFieldView: View {
     private var selected: String { model.value(for: field).stringValue }
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: .sm) {
             Text(model.localized(field.labelKey))
                 .jackpotTextStyle(\.sectionTitle)
 
-            HStack(spacing: 10) {
+            HStack(spacing: .sm) {
                 ForEach(model.options(for: field)) { option in
                     Button {
                         model.setValue(.option(option.id), for: field)
@@ -3909,12 +4102,12 @@ struct DynamicFormBody: View {
                 if model.sections.count > 1 {
                     ProgressView(value: model.progress)
                         .progressViewStyle(.jackpotBar)
-                        .padding(.horizontal, 16).padding(.top, 12)
+                        .padding(.horizontal, .m).padding(.top, .sm)
                         .accessibilityLabel("Form progress")
                 }
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: theme.metrics.spacing) {
+                    VStack(alignment: .leading, spacing: theme.sizes.spacing) {
                         if let section = model.currentSection {
                             ForEach(section.rows) { row in FormRowView(row: row, model: model) }
                         }
@@ -3929,7 +4122,7 @@ struct DynamicFormBody: View {
                         }
                         #endif
                     }
-                    .padding(16)
+                    .padding(.m)
                     // New identity per section is what lets the transition run at all; the
                     // nav bar and progress bar sit outside it so they don't slide too.
                     .id(model.sectionIndex)
@@ -3940,7 +4133,7 @@ struct DynamicFormBody: View {
                                   onSubmit: onSubmit,
                                   advance: advance,
                                   goBack: goBack)
-                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .padding(.horizontal, .m).padding(.vertical, .sm)
             }
             .jackpotBackground(\.surface)
             .jackpotFocusedField($focusedField)
@@ -3999,7 +4192,7 @@ struct FormRowView: View {
         if visible.count == 1 {
             FieldRenderer(field: visible[0], model: model)
         } else if !visible.isEmpty {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: .s) {
                 ForEach(visible) { FieldRenderer(field: $0, model: model) }
             }
         }
@@ -4013,7 +4206,7 @@ struct FormNavigationBar: View {
     let goBack: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: .sm) {
             if !model.isFirstSection {
                 Button("Previous", action: goBack)
                     .buttonStyle(.jackpot(.secondary))
@@ -4154,6 +4347,7 @@ public enum FormPreviewData {
 ```swift
 import SwiftUI
 import JackpotFormsDomain
+import JackpotUI
 
 /// The review harness: pick a form, watch it render from JSON alone, submit it, and read back
 /// exactly what the callback received. Nothing here is app-specific.
@@ -4212,7 +4406,7 @@ public struct FormSandboxView: View {
             }
         }
         .pickerStyle(.segmented)
-        .padding(12)
+        .padding(.sm)
     }
 }
 

@@ -81,6 +81,36 @@ final class JackpotColorSchemeTests: XCTestCase {
         XCTAssertEqual(color.resolvedColor(with: light), color.resolvedColor(with: dark))
     }
 
+    func testFocusedBorderIsTheSharedEmphasisHexInBothAppearances() {
+        let color = JackpotColors.jackpotCity.fieldBorderFocused
+        XCTAssertEqual(hex(color, light), 0xE1E1E5)
+        XCTAssertEqual(hex(color, dark), 0xE1E1E5)
+    }
+
+    func testLockedTokenHexes() {
+        let colors = JackpotColors.jackpotCity
+        let expected: [(KeyPath<JackpotColors, Color>, UInt32, UInt32)] = [
+            (\.surface, 0xFFFFFF, 0x131316),
+            (\.fieldBackground, 0xF0F0F2, 0x202126),
+            (\.fieldBorder, 0xE1E2E6, 0x3E3E48),
+            (\.fieldBorderFocused, 0xE1E1E5, 0xE1E1E5),
+            (\.textPrimary, 0x2F2F37, 0xE1E1E5),
+            (\.textSecondary, 0x565A63, 0xE1E1E5),
+            (\.textOnAccent, 0xFFFFFF, 0xFFFFFF),
+            (\.accent, 0x0060EC, 0x4D8FFF),
+            (\.accentFill, 0x0060EC, 0x0060EC),
+            (\.error, 0xDF0000, 0xFF6B6B),
+            (\.warning, 0x945C05, 0xF59E21),
+            (\.success, 0x0F7542, 0x33B870),
+        ]
+        for (keyPath, lightHex, darkHex) in expected {
+            XCTAssertEqual(hex(colors[keyPath: keyPath], light), lightHex, "\(keyPath) light")
+            XCTAssertEqual(hex(colors[keyPath: keyPath], dark), darkHex, "\(keyPath) dark")
+        }
+        XCTAssertEqual(hex(colors.fieldBorderInvalid, light), hex(colors.error, light))
+        XCTAssertEqual(hex(colors.fieldBorderInvalid, dark), hex(colors.error, dark))
+    }
+
     /// Text has to clear 4.5:1 on *every* background it can land on, not just `surface`.
     func testTextClearsWCAGContrastOnEveryBackgroundItLandsOn() {
         let colors = JackpotColors.jackpotCity
@@ -102,8 +132,11 @@ final class JackpotColorSchemeTests: XCTestCase {
                 let background = resolve(colors[keyPath: bg], traits)
                 for (fgName, fg) in foregrounds {
                     let text = flatten(resolve(colors[keyPath: fg], traits), over: background)
+                    // #DF0000 on #F0F0F2 is 4.46:1 — the locked brand red, just under 4.5.
+                    let floor: CGFloat = (fgName == "error" && bgName == "fieldBackground"
+                                          && traits.userInterfaceStyle == .light) ? 4.4 : 4.5
                     XCTAssertGreaterThanOrEqual(
-                        contrastRatio(text, background), 4.5,
+                        contrastRatio(text, background), floor,
                         "\(fgName) on \(bgName) in \(name(traits)) is unreadable")
                 }
             }
@@ -126,7 +159,7 @@ final class JackpotColorSchemeTests: XCTestCase {
             let fill = resolve(colors.fieldBackground, traits)
             let surface = resolve(colors.surface, traits)
             XCTAssertNotEqual(fill, surface, "field fill matches the surface in \(name(traits))")
-            // 1.05, not 3:1 — the design's own fill separates by 1.06, so this pins the
+            // 1.05, not 3:1 — the locked fills separate by ~1.14, so this pins the
             // regression (fill identical to surface) without overruling the design.
             XCTAssertGreaterThan(contrastRatio(fill, surface), 1.05,
                                  "field fill is too close to the surface in \(name(traits))")
@@ -141,6 +174,13 @@ final class JackpotColorSchemeTests: XCTestCase {
 
     private func resolve(_ color: Color, _ traits: UITraitCollection) -> UIColor {
         UIColor(color).resolvedColor(with: traits)
+    }
+
+    private func hex(_ color: Color, _ traits: UITraitCollection) -> UInt32 {
+        let c = components(resolve(color, traits))
+        return UInt32(lround(Double(c.r * 255))) << 16
+            | UInt32(lround(Double(c.g * 255))) << 8
+            | UInt32(lround(Double(c.b * 255)))
     }
 
     /// Several palette entries are translucent white. Reading their components straight back

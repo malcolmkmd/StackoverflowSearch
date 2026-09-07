@@ -79,6 +79,10 @@ def files(pairs):
             file_step(item)
 
 
+def table(headers, rows):
+    blocks.append(("table", (headers, rows)))
+
+
 def rule():
     blocks.append(("hr", None))
 
@@ -106,6 +110,36 @@ text(
     "The design system, with no knowledge of forms. Components take a value and a binding; the theme\n"
     "and the per-field configuration travel through the environment, so no component carries styling\n"
     "parameters."
+)
+text("### Colour tokens")
+text(
+    "Locked `JackpotColors` set. Same hex is one `Palette` entry — roles that share a value point\n"
+    "at it. There is no `link` token; that Android role is `accent`."
+)
+table(
+    ["Token", "Light", "Dark", "Role"],
+    [
+        ["`surface`", "#FFFFFF", "#131316", "Form / page background (Android `formBackground`)"],
+        ["`fieldBackground`", "#F0F0F2", "#202126", "Field fill, secondary button, checklist (also Android dialog `background`)"],
+        ["`fieldBorder`", "#E1E2E6", "#3E3E48", "Hairline, progress track, divider"],
+        ["`fieldBorderFocused`", "#E1E1E5", "#E1E1E5", "Focus ring. Shared `Palette.emphasis` hex"],
+        ["`fieldBorderInvalid`", "#DF0000", "#FF6B6B", "Invalid ring — same value as `error`"],
+        ["`textPrimary`", "#2F2F37", "#E1E1E5", "Titles and values (Android `titleText` / Text Priority)"],
+        ["`textSecondary`", "#565A63", "#E1E1E5", "Labels and placeholders"],
+        ["`textOnAccent`", "#FFFFFF", "#FFFFFF", "Label on `accentFill`"],
+        ["`accent`", "#0060EC", "#4D8FFF", "Tint, tertiary label, selected chrome (Android `link`)"],
+        ["`accentFill`", "#0060EC", "#0060EC", "Primary button fill"],
+        ["`error`", "#DF0000", "#FF6B6B", "Validation and load errors"],
+        ["`warning`", "#945C05", "#F59E21", "Checklist incomplete"],
+        ["`success`", "#0F7542", "#33B870", "Checklist complete"],
+    ],
+)
+text(
+    "Android light-mode `bodyText` / `labelText` / `placeholderText` / `primary` / `onPrimary` /\n"
+    "`link` were all #E1E1E5 — 1.15:1 on #F0F0F2. Light text uses the documented Text Priority\n"
+    "hex and the existing #565A63 secondary; interactive fills keep the isolated brand blue so\n"
+    "`textOnAccent` still clears 4.5:1. Dark `error` lightens from #DF0000 because the brand red\n"
+    "is ~3.2:1 on #202126. Light `error` on the field fill is 4.46:1, the locked #DF0000."
 )
 
 bash(
@@ -137,7 +171,11 @@ let package = Package(
 
 files(
     [
-        "JackpotKit/Sources/JackpotUI/Theme/JackpotTheme.swift",
+        (
+            "JackpotKit/Sources/JackpotUI/Theme/JackpotTheme.swift",
+            "Adaptive light/dark palette. Hexes are the locked token table above; `Palette.emphasis`\n"
+            "is the shared #E1E1E5 so focused border and dark text are one value, not aliases.",
+        ),
         (
             "JackpotKit/Sources/JackpotUI/Theme/JackpotEnvironment.swift",
             "`JackpotFieldConfiguration` is what keeps the field views parameter-free: a caller sets\n"
@@ -632,6 +670,13 @@ def render_markdown():
         elif kind == "hr":
             out.append("---")
             out.append("")
+        elif kind == "table":
+            headers, rows = payload
+            out.append("| " + " | ".join(headers) + " |")
+            out.append("| " + " | ".join("---" for _ in headers) + " |")
+            for row in rows:
+                out.append("| " + " | ".join(row) + " |")
+            out.append("")
     return "\n".join(out).rstrip("\n") + "\n"
 
 
@@ -679,6 +724,15 @@ def render_html():
         if kind == "code":
             lang, src = payload
             body.append(f'<pre class="code {lang}">{highlight(lang, src)}</pre>')
+            continue
+
+        if kind == "table":
+            headers, rows = payload
+            head = "".join(f"<th>{inline(h)}</th>" for h in headers)
+            body_rows = "".join(
+                "<tr>" + "".join(f"<td>{inline(c)}</td>" for c in row) + "</tr>" for row in rows
+            )
+            body.append(f"<table><thead><tr>{head}</tr></thead><tbody>{body_rows}</tbody></table>")
             continue
 
         tag, content = classify(payload)
@@ -792,6 +846,15 @@ pre.code {{
 pre.code.bash {{ background: #1d2025; border-color: #1d2025; border-left-color: #6b7280; color: #e8eaed; }}
 pre.code.bash span {{ color: #e8eaed !important; font-style: normal !important; }}
 hr.rule {{ border: 0; border-top: 0.5pt solid #e2e5e9; margin: 5mm 0; }}
+table {{
+  width: 100%; border-collapse: collapse; margin: 0 0 3.4mm;
+  font-size: 8.4pt;
+}}
+th, td {{
+  border: 0.5pt solid #e2e5e9; padding: 1.2mm 1.6mm; text-align: left; vertical-align: top;
+}}
+th {{ background: #f1f3f5; font-weight: 600; }}
+td:nth-child(2), td:nth-child(3) {{ font-family: Menlo, Monaco, monospace; font-size: 7.6pt; }}
 
 nav {{ break-before: page; }}
 nav h2 {{ break-before: avoid; }}

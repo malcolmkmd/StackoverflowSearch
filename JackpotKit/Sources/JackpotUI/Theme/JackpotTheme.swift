@@ -22,7 +22,7 @@ public struct JackpotColors: Equatable, Sendable {
 
     public var fieldBackground = Palette.fieldBackground
     public var fieldBorder = Palette.fieldBorder
-    public var fieldBorderFocused = Palette.accent
+    public var fieldBorderFocused = Palette.emphasis
     public var fieldBorderInvalid = Palette.error
 
     public var textPrimary = Palette.textPrimary
@@ -41,53 +41,66 @@ public struct JackpotColors: Equatable, Sendable {
 
 /// Held as shared constants rather than inline literals so two separately built `JackpotColors`
 /// still compare equal — a dynamic `Color` compares by identity.
+///
+/// Same hex is one entry. Android roles that shared a value (`background` = `fieldBackground`,
+/// `formBackground` = `surface`, `link` / selected chrome = `accent`, track / divider =
+/// `fieldBorder`) are not given a second name.
 enum Palette {
-    static let surface = Color.adaptive(light: Color(red: 1.00, green: 1.00, blue: 1.00),
-                                        dark: Color(red: 0.07, green: 0.08, blue: 0.09))
+    /// #FFFFFF / #131316. Android `formBackground` (BG Layer 2 / BG Base).
+    static let surface = Color.adaptive(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x131316))
 
-    /// #F7F8FA. A tint off the surface, not white on white — the fill is what identifies a
-    /// field, a secondary button and a checklist panel.
-    static let fieldBackground = Color.adaptive(light: Color(red: 0.969, green: 0.973, blue: 0.980),
-                                                dark: Color(red: 0.13, green: 0.14, blue: 0.16))
+    /// #F0F0F2 / #202126. Field fill, secondary button, checklist. Android `fieldBackground`
+    /// and dialog `background` are this pair, so they share this token.
+    static let fieldBackground = Color.adaptive(light: Color(hex: 0xF0F0F2), dark: Color(hex: 0x202126))
 
-    /// #E4E5EA. A hairline by design: the fill carries identification, and the focused and
-    /// invalid borders carry state.
-    static let fieldBorder = Color.adaptive(light: Color(red: 0.894, green: 0.898, blue: 0.918),
-                                            dark: Color.white.opacity(0.32))
+    /// #E1E2E6 / #3E3E48. Hairline, progress track, divider.
+    static let fieldBorder = Color.adaptive(light: Color(hex: 0xE1E2E6), dark: Color(hex: 0x3E3E48))
 
-    /// #22252C.
-    static let textPrimary = Color.adaptive(light: Color(red: 0.133, green: 0.145, blue: 0.173),
-                                            dark: .white)
+    /// #E1E1E5. Android reused this for the focused border and every dark-mode text / icon.
+    /// Light-mode paste also dumped body copy, `primary`, `onPrimary` and `link` here — those
+    /// are unreadable on #F0F0F2, so only the focused border keeps it in light.
+    static let emphasis = Color(hex: 0xE1E1E5)
 
-    /// #565A63. Measured against `fieldBackground`, the tighter of its two backgrounds.
-    static let textSecondary = Color.adaptive(light: Color(red: 0.337, green: 0.353, blue: 0.388),
-                                              dark: Color.white.opacity(0.6))
+    /// #2F2F37 / #E1E1E5. Android `titleText` (Text Priority); dark body shares `emphasis`.
+    static let textPrimary = Color.adaptive(light: Color(hex: 0x2F2F37), dark: emphasis)
 
-    /// Sits on the accent and action fills, never on the surface, so it does not invert.
+    /// #565A63 / #E1E1E5. Labels and placeholders. Light keeps the existing readable gray —
+    /// Android's #E1E1E5 body/label/placeholder is 1.15:1 on the field fill.
+    static let textSecondary = Color.adaptive(light: Color(hex: 0x565A63), dark: emphasis)
+
+    /// Sits on `accentFill`, never on the surface, so it does not invert. Android `onPrimary`
+    /// was #E1E1E5 on a #E1E1E5 fill — an unfinished placeholder.
     static let textOnAccent = Color.white
 
-    /// Accent as *text* — the tertiary button label. It cannot share a value with `accentFill`:
-    /// white on a fill needs the fill at or below 0.18 luminance, while a label on the dark
-    /// surface needs 0.20 up.
-    static let accent = Color.adaptive(light: Color(red: 0.000, green: 0.376, blue: 0.925),
-                                       dark: Color(red: 0.302, green: 0.561, blue: 1.000))
+    /// Accent as *text* and tint — tertiary labels, selected chrome. This is the Android
+    /// `link` role; the token is not named `link`. Light #E1E1E5 is unreadable, so the
+    /// isolated brand blue stays. Dark stays the lighter blue so selected state does not
+    /// collapse into `textSecondary` (both would otherwise be #E1E1E5).
+    static let accent = Color.adaptive(light: Color(hex: 0x0060EC), dark: Color(hex: 0x4D8FFF))
 
-    /// #0060EC. Carries `textOnAccent` at 5.4:1, which is why the same brand blue serves as a
-    /// fill in both appearances.
-    static let accentFill = Color(red: 0.000, green: 0.376, blue: 0.925)
+    /// #0060EC. Carries `textOnAccent` at 5.4:1 in both appearances. Android `primary` was
+    /// the same unfinished #E1E1E5 as `onPrimary`.
+    static let accentFill = Color(hex: 0x0060EC)
 
-    /// #BC1A1A.
-    static let error = Color.adaptive(light: Color(red: 0.737, green: 0.102, blue: 0.102),
-                                      dark: Color(red: 0.98, green: 0.45, blue: 0.35))
+    /// Brand error #DF0000. Dark lightens to #FF6B6B so captions still clear 4.5:1 on
+    /// #131316 / #202126 — #DF0000 itself reads at ~3.2:1 there.
+    static let error = Color.adaptive(light: Color(hex: 0xDF0000), dark: Color(hex: 0xFF6B6B))
 
-    static let warning = Color.adaptive(light: Color(red: 0.58, green: 0.36, blue: 0.02),
-                                        dark: Color(red: 0.96, green: 0.62, blue: 0.13))
-
-    static let success = Color.adaptive(light: Color(red: 0.06, green: 0.46, blue: 0.26),
-                                        dark: Color(red: 0.20, green: 0.72, blue: 0.44))
+    /// Not in the Android dialog paste; the checklist still needs both states.
+    static let warning = Color.adaptive(light: Color(hex: 0x945C05), dark: Color(hex: 0xF59E21))
+    static let success = Color.adaptive(light: Color(hex: 0x0F7542), dark: Color(hex: 0x33B870))
 }
 
 extension Color {
+    init(hex: UInt32, opacity: Double = 1) {
+        self.init(
+            red: Double((hex >> 16) & 0xFF) / 255,
+            green: Double((hex >> 8) & 0xFF) / 255,
+            blue: Double(hex & 0xFF) / 255,
+            opacity: opacity
+        )
+    }
+
     /// Resolves against the trait collection, so one palette serves both appearances and
     /// honours a `preferredColorScheme` override anywhere in the hierarchy.
     static func adaptive(light: Color, dark: Color) -> Color {
