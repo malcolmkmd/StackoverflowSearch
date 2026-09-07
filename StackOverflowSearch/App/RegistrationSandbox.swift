@@ -27,7 +27,7 @@ struct RegistrationSandbox: View {
         FormSandboxView(
             samples: [
                 .init(id: .registration, title: "Sign Up"),
-                .init(id: .kitchenSink, title: "All Fields"),
+                .init(id: .kitchenSink, title: "Registration fields"),
             ],
             dependencies: Self.dependencies
         )

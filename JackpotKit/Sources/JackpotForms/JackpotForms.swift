@@ -76,7 +76,7 @@ public extension FormSandboxView {
         FormSandboxView(
             samples: [
                 .init(id: .registration, title: "Registration"),
-                .init(id: .kitchenSink, title: "All field types"),
+                .init(id: .kitchenSink, title: "Registration fields"),
             ],
             dependencies: .mock()
         )

@@ -40,7 +40,7 @@ public extension FormName {
     /// The two-section sign-up form: credentials + name + email, then FICA.
     static let registration = FormName("registration")
 
-    /// Development-only schema exercising every supported field type.
+    /// Development-only schema of the twelve registration fields.
     static let kitchenSink = FormName("kitchenSink")
 
     /// Forms bundled with the package as JSON, for mocks, previews and the sandbox.

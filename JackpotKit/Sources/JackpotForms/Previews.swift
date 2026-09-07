@@ -18,7 +18,7 @@ struct MockedForm_Previews: PreviewProvider {
 
             DynamicFormView(formName: .kitchenSink) { _ in }
                 .formDependencies(.mock(delay: 0))
-                .previewDisplayName("All field types — from JSON")
+                .previewDisplayName("Registration fields — from JSON")
 
             DynamicFormView(formName: .registration) { _ in }
                 .formDependencies(.mock(delay: 3600))
