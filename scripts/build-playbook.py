@@ -209,13 +209,84 @@ def registration_form_field(body, rel):
         "        default:                   self = .unknown(raw)\n"
         "        }\n"
         "    }\n"
-        "\n"
-        "    public var isDecorative: Bool { false }\n"
         "}\n",
         rel,
     )
+    body = require_replace(
+        body,
+        "\npublic struct RadioOption: Identifiable, Equatable, Hashable, Sendable {\n"
+        "    public let value: String\n"
+        "    public let textKey: String\n"
+        "\n"
+        "    public var id: String { value }\n"
+        "\n"
+        "    public init(value: String, textKey: String) {\n"
+        "        self.value = value\n"
+        "        self.textKey = textKey\n"
+        "    }\n"
+        "}\n",
+        "",
+        rel,
+    )
+    body = require_replace(body, "    public let dropdownOptions: [DropdownOption]\n"
+                                 "    public let radioOptions: [RadioOption]\n",
+                           "    public let dropdownOptions: [DropdownOption]\n", rel)
+    body = require_replace(body, "                dropdownOptions: [DropdownOption], radioOptions: [RadioOption]) {",
+                           "                dropdownOptions: [DropdownOption]) {", rel)
+    body = require_replace(body, "        self.dropdownOptions = dropdownOptions\n"
+                                 "        self.radioOptions = radioOptions\n",
+                           "        self.dropdownOptions = dropdownOptions\n", rel)
     return require_replace(body, "        isVisible && !type.isDecorative && !(type == .recaptchaV2 || type == .recaptchaV3)\n",
-                           "        isVisible && !type.isDecorative\n", rel)
+                           "        isVisible\n", rel)
+
+
+def registration_form_dto(body, rel):
+    body = require_replace(body, "    let fieldDropdowns: [FieldDropdownDTO]?\n"
+                                 "    let fieldRadioGroup: [FieldRadioDTO]?\n",
+                           "    let fieldDropdowns: [FieldDropdownDTO]?\n", rel)
+    return require_replace(
+        body,
+        "\npublic struct FieldRadioDTO: Decodable {\n"
+        "    let value: String\n"
+        "    let text: String?\n"
+        "}\n",
+        "",
+        rel,
+    )
+
+
+def registration_form_mapper(body, rel):
+    return require_replace(
+        body,
+        "            dropdownOptions: (dto.fieldDropdowns ?? []).map {\n"
+        "                DropdownOption(value: $0.value, textKey: $0.text ?? $0.value, regex: $0.regex)\n"
+        "            },\n"
+        "            radioOptions: (dto.fieldRadioGroup ?? []).map {\n"
+        "                RadioOption(value: $0.value, textKey: $0.text ?? $0.value)\n"
+        "            }\n",
+        "            dropdownOptions: (dto.fieldDropdowns ?? []).map {\n"
+        "                DropdownOption(value: $0.value, textKey: $0.text ?? $0.value, regex: $0.regex)\n"
+        "            }\n",
+        rel,
+    )
+
+
+def registration_environment(body, rel):
+    body = require_replace(body, "    @Entry public var jackpotIsLoading: Bool = false\n"
+                                 "    @Entry public var jackpotIsSelected: Bool = false\n",
+                           "    @Entry public var jackpotIsLoading: Bool = false\n", rel)
+    return require_replace(
+        body,
+        "\n    func jackpotSelected(_ isSelected: Bool = true) -> some View {\n"
+        "        environment(\\.jackpotIsSelected, isSelected)\n"
+        "    }\n",
+        "",
+        rel,
+    )
+
+
+def registration_validator_tests(body, rel):
+    return body.replace(", radioOptions: []", "")
 
 
 def registration_form_model(body, rel):
@@ -317,6 +388,12 @@ def registration_checkbox_field(body, rel):
 
 
 def registration_preview_fixtures(body, rel):
+    body = require_replace(body, "                             dropdowns: [DropdownOption] = [],\n"
+                                 "                             radios: [RadioOption] = []) -> FormField {\n",
+                           "                             dropdowns: [DropdownOption] = []) -> FormField {\n", rel)
+    body = require_replace(body, "            dropdownOptions: dropdowns,\n"
+                                 "            radioOptions: radios\n",
+                           "            dropdownOptions: dropdowns\n", rel)
     body = require_replace(
         body,
         "    public static let notes = field(\"notes\", type: .textArea, label: \"Notes\",\n"
@@ -465,11 +542,11 @@ text(
     "   the last section."
 )
 table(
-    ["`fieldType`", "Where it renders in preview", "On registration?"],
+    ["`fieldType`", "Where it renders"],
     [
-        ["Input", "Registration JSON + Gallery + `FormPreview` field previews", "Yes"],
-        ["Dropdown", "Registration JSON + Gallery + `DropdownFieldView` previews", "Yes"],
-        ["Checkbox", "Registration JSON + Gallery + `CheckboxFieldView` previews", "Yes"],
+        ["Input", "Registration JSON + Gallery + `FormPreview` field previews"],
+        ["Dropdown", "Registration JSON + Gallery + `DropdownFieldView` previews"],
+        ["Checkbox", "Registration JSON + Gallery + `CheckboxFieldView` previews"],
     ],
 )
 rule()
@@ -552,6 +629,7 @@ files(
             "JackpotKit/Sources/JackpotUI/Theme/JackpotEnvironment.swift",
             "`JackpotFieldConfiguration` is what keeps the field views parameter-free: a caller sets\n"
             "`jackpotFieldState`/`jackpotFieldError` once and every field below reads it.",
+            registration_environment,
         ),
         "JackpotKit/Sources/JackpotUI/Theme/JackpotStyling.swift",
         (
@@ -674,8 +752,16 @@ files(
         "JackpotKit/Sources/JackpotFormsDomain/FormLoadError.swift",
         "JackpotKit/Sources/JackpotFormsDomain/FormLocalizing.swift",
         "JackpotKit/Sources/JackpotFormsDomain/FormRepository.swift",
-        "JackpotKit/Sources/JackpotFormsData/FormDTO.swift",
-        "JackpotKit/Sources/JackpotFormsData/FormMapper.swift",
+        (
+            "JackpotKit/Sources/JackpotFormsData/FormDTO.swift",
+            None,
+            registration_form_dto,
+        ),
+        (
+            "JackpotKit/Sources/JackpotFormsData/FormMapper.swift",
+            None,
+            registration_form_mapper,
+        ),
         "JackpotKit/Sources/JackpotFormsData/StubFormRepository.swift",
     ]
 )
@@ -741,7 +827,11 @@ files(
             "`RegistrationSandbox` in the app target wraps this.",
         ),
         "JackpotKit/Tests/JackpotFormsTests/FormDecodingTests.swift",
-        "JackpotKit/Tests/JackpotFormsTests/FieldValidatorTests.swift",
+        (
+            "JackpotKit/Tests/JackpotFormsTests/FieldValidatorTests.swift",
+            None,
+            registration_validator_tests,
+        ),
         (
             "JackpotKit/Tests/JackpotFormsTests/DynamicFormModelTests.swift",
             "The behaviour a user experiences: untouched fields stay silent, Next reveals every error at\n"
@@ -1278,6 +1368,17 @@ FORBIDDEN = (
     r"jackpotSwitch",
     r"JackpotDivider",
     r"ToggleFieldView",
+    r"RadioOption",
+    r"FieldRadioDTO",
+    r"fieldRadioGroup",
+    r"radioOptions",
+    r"WelcomeOffer",
+    r"TextAreaFieldView",
+    r"JackpotTextArea",
+    r"RecaptchaPlaceholderView",
+    r"SignaturePad",
+    r"jackpotIsSelected",
+    r"jackpotSelected",
     r"### Out of scope",
     r"tertiary",
 )

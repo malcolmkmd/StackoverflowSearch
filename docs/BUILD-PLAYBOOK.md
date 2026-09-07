@@ -347,7 +347,6 @@ extension EnvironmentValues {
     @Entry public var jackpotFieldSuffix: String = ""
     @Entry public var jackpotSecureEntry: Bool = false
     @Entry public var jackpotIsLoading: Bool = false
-    @Entry public var jackpotIsSelected: Bool = false
     @Entry public var jackpotFocusedField: Binding<String?>? = nil
     @Entry public var jackpotFieldIdentity: String? = nil
     @Entry public var jackpotSubmitLabel: SubmitLabel = .return
@@ -389,10 +388,6 @@ public extension View {
     /// Disables as well as spins: a button that spins but still fires is a double submit.
     func jackpotLoading(_ isLoading: Bool = true) -> some View {
         environment(\.jackpotIsLoading, isLoading).disabled(isLoading)
-    }
-
-    func jackpotSelected(_ isSelected: Bool = true) -> some View {
-        environment(\.jackpotIsSelected, isSelected)
     }
 }
 
@@ -1933,8 +1928,6 @@ public enum FieldType: Equatable, Hashable, Sendable {
         default:                   self = .unknown(raw)
         }
     }
-
-    public var isDecorative: Bool { false }
 }
 
 /// Keyboard and formatting hint for `.input`.
@@ -1979,18 +1972,6 @@ public struct DropdownOption: Identifiable, Equatable, Hashable, Sendable {
     }
 }
 
-public struct RadioOption: Identifiable, Equatable, Hashable, Sendable {
-    public let value: String
-    public let textKey: String
-
-    public var id: String { value }
-
-    public init(value: String, textKey: String) {
-        self.value = value
-        self.textKey = textKey
-    }
-}
-
 public struct FormField: Identifiable, Equatable, Hashable, Sendable {
     public let id: Int
     /// Key used for state, validation and the submitted payload. e.g. "idNumber".
@@ -2013,13 +1994,12 @@ public struct FormField: Identifiable, Equatable, Hashable, Sendable {
     /// Localization key for the placeholder.
     public let placeholderKey: String
     public let dropdownOptions: [DropdownOption]
-    public let radioOptions: [RadioOption]
 
     public init(id: Int, identifier: String, name: String, labelKey: String,
                 type: FieldType, inputType: InputType, textStyle: String,
                 validationMessageKey: String, isRequired: Bool, isVisible: Bool, isReadOnly: Bool,
                 regex: String?, prefix: String, suffix: String, placeholderKey: String,
-                dropdownOptions: [DropdownOption], radioOptions: [RadioOption]) {
+                dropdownOptions: [DropdownOption]) {
         self.id = id
         self.identifier = identifier
         self.name = name
@@ -2036,12 +2016,11 @@ public struct FormField: Identifiable, Equatable, Hashable, Sendable {
         self.suffix = suffix
         self.placeholderKey = placeholderKey
         self.dropdownOptions = dropdownOptions
-        self.radioOptions = radioOptions
     }
 
     /// Fields that hold a value: rendered, validated and submitted.
     public var carriesValue: Bool {
-        isVisible && !type.isDecorative
+        isVisible
     }
 
     public var isSecure: Bool { inputType == .password }
@@ -2561,18 +2540,12 @@ public struct FormFieldDTO: Decodable {
     let suffix: String?
     let fieldPlaceholder: String?
     let fieldDropdowns: [FieldDropdownDTO]?
-    let fieldRadioGroup: [FieldRadioDTO]?
 }
 
 public struct FieldDropdownDTO: Decodable {
     let value: String
     let text: String?
     let regex: String?
-}
-
-public struct FieldRadioDTO: Decodable {
-    let value: String
-    let text: String?
 }
 ```
 
@@ -2634,9 +2607,6 @@ public enum FormMapper {
             placeholderKey: dto.fieldPlaceholder ?? dto.fieldIdentifier,
             dropdownOptions: (dto.fieldDropdowns ?? []).map {
                 DropdownOption(value: $0.value, textKey: $0.text ?? $0.value, regex: $0.regex)
-            },
-            radioOptions: (dto.fieldRadioGroup ?? []).map {
-                RadioOption(value: $0.value, textKey: $0.text ?? $0.value)
             }
         )
     }
@@ -3184,8 +3154,7 @@ public enum FormPreview {
                              required: Bool = true,
                              regex: String? = nil,
                              prefix: String = "",
-                             dropdowns: [DropdownOption] = [],
-                             radios: [RadioOption] = []) -> FormField {
+                             dropdowns: [DropdownOption] = []) -> FormField {
         FormField(
             id: abs(identifier.hashValue % 10_000),
             identifier: identifier,
@@ -3202,8 +3171,7 @@ public enum FormPreview {
             prefix: prefix,
             suffix: "",
             placeholderKey: placeholder ?? identifier,
-            dropdownOptions: dropdowns,
-            radioOptions: radios
+            dropdownOptions: dropdowns
         )
     }
 
@@ -4245,7 +4213,7 @@ final class FieldValidatorTests: XCTestCase {
                   type: type, inputType: inputType, textStyle: "Regular",
                   validationMessageKey: "regex", isRequired: required, isVisible: true, isReadOnly: false,
                   regex: regex, prefix: "", suffix: "", placeholderKey: identifier,
-                  dropdownOptions: [], radioOptions: [])
+                  dropdownOptions: [])
     }
 
     // MARK: Real patterns from the registration schema
@@ -4314,7 +4282,7 @@ final class FieldValidatorTests: XCTestCase {
                       type: f.type, inputType: f.inputType, textStyle: f.textStyle,
                       validationMessageKey: f.validationMessageKey, isRequired: true,
                       isVisible: false, isReadOnly: false, regex: f.regex,
-                      prefix: "", suffix: "", placeholderKey: "", dropdownOptions: [], radioOptions: [])
+                      prefix: "", suffix: "", placeholderKey: "", dropdownOptions: [])
         XCTAssertTrue(validator.validate(.text(""), against: f).isValid)
     }
 
