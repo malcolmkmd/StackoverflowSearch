@@ -7,8 +7,8 @@ struct DropdownFieldView: View {
     @ObservedObject var model: DynamicFormModel
 
     var body: some View {
-        JackpotLabeledField(model.localized(field.labelKey), error: model.error(for: field)) {
-            JackpotDropdown(model.localized(field.placeholderKey),
+        JackpotLabeledField(error: model.error(for: field)) {
+            JackpotDropdown(model.localized(field.labelKey),
                             selection: model.selection(for: field),
                             options: model.options(for: field))
                 .disabled(field.isReadOnly)

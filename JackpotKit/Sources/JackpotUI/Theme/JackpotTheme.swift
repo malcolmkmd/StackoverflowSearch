@@ -43,17 +43,17 @@ public struct JackpotColors: Equatable, Sendable {
 /// still compare equal — a dynamic `Color` compares by identity.
 ///
 /// Same hex is one entry. Android roles that shared a value (`background` = `fieldBackground`,
-/// `formBackground` = `surface`, `link` / selected chrome = `accent`, track / divider =
+/// `formBackground` = `surface`, `link` / selected shell = `accent`, track / divider =
 /// `fieldBorder`) are not given a second name.
 enum Palette {
     /// #FFFFFF / #131316. Android `formBackground` (BG Layer 2 / BG Base).
     static let surface = Color.adaptive(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x131316))
 
-    /// #F0F0F2 / #202126. Field fill, secondary button, checklist. Android `fieldBackground`
+    /// #F0F0F2 / #202126. Field fill, disabled primary, checklist. Android `fieldBackground`
     /// and dialog `background` are this pair, so they share this token.
     static let fieldBackground = Color.adaptive(light: Color(hex: 0xF0F0F2), dark: Color(hex: 0x202126))
 
-    /// #E1E2E6 / #3E3E48. Hairline, progress track, divider.
+    /// #E1E2E6 / #3E3E48. Hairline, progress track, divider, secondary button.
     static let fieldBorder = Color.adaptive(light: Color(hex: 0xE1E2E6), dark: Color(hex: 0x3E3E48))
 
     /// #E1E1E5. Android reused this for the focused border and every dark-mode text / icon.
@@ -72,7 +72,7 @@ enum Palette {
     /// was #E1E1E5 on a #E1E1E5 fill — an unfinished placeholder.
     static let textOnAccent = Color.white
 
-    /// Accent as *text* and tint — tertiary labels, selected chrome. This is the Android
+    /// Accent as *text* and tint — tertiary labels, selected shell. This is the Android
     /// `link` role; the token is not named `link`. Light #E1E1E5 is unreadable, so the
     /// isolated brand blue stays. Dark stays the lighter blue so selected state does not
     /// collapse into `textSecondary` (both would otherwise be #E1E1E5).

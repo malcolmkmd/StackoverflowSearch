@@ -38,15 +38,23 @@ public struct JackpotDropdown: View {
             }
         } label: {
             HStack {
-                Text(selected?.label ?? placeholder)
-                    .jackpotForegroundStyle(valueColor)
-                Spacer()
+                ZStack(alignment: .leading) {
+                    if let selected {
+                        Text(selected.label)
+                            .jackpotTextStyle(\.fieldText)
+                            .padding(.top, theme.sizes.spacing)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    JackpotFloatingLabel(title: placeholder, isFloating: isFloating)
+                        .offset(y: isFloating ? -16 : 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.down").jackpotForegroundStyle(\.textPrimary)
             }
-            .jackpotFont(\.fieldText)
             .padding(.horizontal, theme.sizes.contentPadding)
             .frame(height: theme.sizes.controlHeight)
             .jackpotFieldBackground()
+            .animation(.easeOut(duration: 0.15), value: isFloating)
         }
         .accessibilityLabel(placeholder)
         .accessibilityValue(selected?.label ?? "None")
@@ -56,7 +64,7 @@ public struct JackpotDropdown: View {
         options.first { $0.id == selection }
     }
 
-    private var valueColor: KeyPath<JackpotColors, Color> {
-        selected == nil ? \.textSecondary : \.textPrimary
+    private var isFloating: Bool {
+        selected != nil
     }
 }

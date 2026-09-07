@@ -37,7 +37,7 @@ public struct JackpotButtonStyle: ButtonStyle {
                 }
                 .frame(maxWidth: .infinity, minHeight: theme.sizes.controlHeight)
                 .foregroundStyle(foreground)
-                .background(background, in: theme.sizes.fieldShape)
+                .background { shell }
                 .contentShape(theme.sizes.fieldShape)
                 .opacity(configuration.isPressed ? 0.85 : 1)
                 .scaleEffect(configuration.isPressed ? 0.98 : 1)
@@ -48,11 +48,15 @@ public struct JackpotButtonStyle: ButtonStyle {
         /// `jackpotLoading(_:)` disables the button, but mid-submit it should still look live.
         private var isDimmed: Bool { !isEnabled && !isLoading }
 
-        private var background: Color {
+        @ViewBuilder
+        private var shell: some View {
             switch prominence {
-            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill
-            case .secondary: return theme.colors.fieldBackground
-            case .tertiary:  return .clear
+            case .primary:
+                theme.sizes.fieldShape.fill(isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill)
+            case .secondary:
+                JackpotButtonHairline(fill: theme.colors.surface)
+            case .tertiary:
+                theme.sizes.fieldShape.fill(Color.clear)
             }
         }
 
@@ -71,6 +75,21 @@ public extension ButtonStyle where Self == JackpotButtonStyle {
 
     static func jackpot(_ prominence: JackpotButtonStyle.Prominence) -> JackpotButtonStyle {
         JackpotButtonStyle(prominence)
+    }
+}
+
+private struct JackpotButtonHairline: View {
+    let fill: Color
+
+    @Environment(\.jackpotTheme) private var theme
+
+    var body: some View {
+        theme.sizes.fieldShape
+            .fill(fill)
+            .overlay {
+                theme.sizes.fieldShape
+                    .strokeBorder(theme.colors.fieldBorder, lineWidth: theme.sizes.borderWidth)
+            }
     }
 }
 

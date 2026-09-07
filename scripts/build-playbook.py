@@ -101,11 +101,16 @@ def drop_from_marker(body, marker, rel):
 def registration_button_style(body, rel):
     body = require_replace(body, "        case primary\n        case secondary\n        case tertiary\n",
                            "        case primary\n        case secondary\n", rel)
-    body = require_replace(body, "            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill\n"
-                                 "            case .secondary: return theme.colors.fieldBackground\n"
-                                 "            case .tertiary:  return .clear\n",
-                           "            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill\n"
-                           "            case .secondary: return theme.colors.fieldBackground\n", rel)
+    body = require_replace(body, "            case .primary:\n"
+                                 "                theme.sizes.fieldShape.fill(isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill)\n"
+                                 "            case .secondary:\n"
+                                 "                JackpotButtonHairline(fill: theme.colors.surface)\n"
+                                 "            case .tertiary:\n"
+                                 "                theme.sizes.fieldShape.fill(Color.clear)\n",
+                           "            case .primary:\n"
+                           "                theme.sizes.fieldShape.fill(isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill)\n"
+                           "            case .secondary:\n"
+                           "                JackpotButtonHairline(fill: theme.colors.surface)\n", rel)
     body = require_replace(body, "            case .primary:   return isDimmed ? theme.colors.textSecondary : theme.colors.textOnAccent\n"
                                  "            case .secondary: return isDimmed ? theme.colors.textSecondary : theme.colors.textPrimary\n"
                                  "            case .tertiary:  return isDimmed ? theme.colors.textSecondary : theme.colors.accent\n",
@@ -143,8 +148,8 @@ def registration_field_kind(body, rel):
 
 
 def registration_theme(body, rel):
-    body = require_replace(body, "    /// Accent as *text* and tint — tertiary labels, selected chrome. This is the Android\n",
-                           "    /// Accent as *text* and tint — selected chrome. This is the Android\n", rel)
+    body = require_replace(body, "    /// Accent as *text* and tint — tertiary labels, selected shell. This is the Android\n",
+                           "    /// Accent as *text* and tint — selected shell. This is the Android\n", rel)
     return require_replace(body, "    public var progressBarHeight: CGFloat = JackpotSpacing.xxs.rawValue\n"
                                  "    public var textAreaMinHeight: CGFloat = 110\n"
                                  "    public var cardMinHeight: CGFloat = 140\n",
@@ -488,14 +493,20 @@ text(
     "still maps `username` to `.phoneNumber`)."
 )
 text(
-    "Chrome the form actually uses: `JackpotLabeledField` / field chrome, `FormNavigationBar`\n"
-    "with `.jackpot` / `.jackpot(.secondary)` (Next / Sign Up / Previous — see below),\n"
-    "`.jackpotBar` progress, `JackpotErrorView` on load failure, and the locked colour /\n"
-    "spacing / size tokens below."
+    "Input and Dropdown keep the label **inside** the control: it sits in the field and floats\n"
+    "to the top edge on focus or when the field has a value. `dateOfBirth` keeps\n"
+    "`JackpotLabeledField` above `JackpotDateField`. Checkboxes keep the toggle label. Error\n"
+    "text stays below the control."
+)
+text(
+    "The form shell actually uses: `JackpotLabeledField` (above-field label on date; error\n"
+    "shell on Input / Dropdown / Checkbox), `FormNavigationBar` with `.jackpot` /\n"
+    "`.jackpot(.secondary)` (Next / Sign Up / Previous — see below), `.jackpotBar` progress,\n"
+    "`JackpotErrorView` on load failure, and the locked colour / spacing / size tokens below."
 )
 text("### How to go to the next screen")
 text(
-    "The gold/blue button at the bottom of registration is **host UI chrome** on\n"
+    "The gold/blue button at the bottom of registration is **host shell** on\n"
     "`FormNavigationBar` in `DynamicFormView.swift`. `RegistrationView` is a thin wrapper\n"
     "around `DynamicFormView`. The bundled `registration.json` and the live CRM schema\n"
     "(`GET …/cron/forms/jackpotcity/JZA/registration?api-version=2.0`) are the twelve fields\n"
@@ -514,7 +525,9 @@ text(
     "validates (`isCurrentSectionValid`). Tapping it marks the section touched, revalidates,\n"
     "and if valid increments `sectionIndex` (step 1 → step 2). `Sign Up` stays disabled until\n"
     "`isFormValid`, then `RegistrationView`'s callback calls `RegistrationService.register`.\n"
-    "A progress bar (`.jackpotBar`) sits above the scroll view when `sections.count > 1`."
+    "A progress bar (`.jackpotBar`) sits above the scroll view when `sections.count > 1`.\n"
+    "Previous is `surface` + `fieldBorder` + `textPrimary`. Next / Sign Up use `accentFill` +\n"
+    "`textOnAccent` when enabled, and the field-fill disabled treatment when not."
 )
 text("### Registration preview path")
 text(
@@ -535,9 +548,9 @@ text(
     "6. **FormPreview.** `PreviewFixtures.swift` is the hand-built twin used by per-field\n"
     "   `#Preview`s (`InputFieldView`, `DateFieldView`, …) and by `DynamicFormView` section\n"
     "   previews. The catalog is the twelve registration fields.\n"
-    "7. **Gallery.** `JackpotPreviewPanel.swift` is the JackpotUI sheet for registration chrome\n"
+    "7. **Gallery.** `JackpotPreviewPanel.swift` is the JackpotUI sheet for registration shell\n"
     "   (text field, checklist, dropdown, date, checkbox, progress, Next / Sign Up / Previous).\n"
-    "8. **FormNavigationBar.** Host chrome on `DynamicFormView`: Previous (`.jackpot(.secondary)`)\n"
+    "8. **FormNavigationBar.** Host shell on `DynamicFormView`: Previous (`.jackpot(.secondary)`)\n"
     "   on section 2, Next (`.jackpot`) while a later section exists, Sign Up (`.jackpot`) on\n"
     "   the last section."
 )
@@ -567,15 +580,15 @@ text(
 table(
     ["Token", "Light", "Dark", "Role"],
     [
-        ["`surface`", "#FFFFFF", "#131316", "Form / page background (Android `formBackground`)"],
-        ["`fieldBackground`", "#F0F0F2", "#202126", "Field fill, secondary button, checklist (also Android dialog `background`)"],
-        ["`fieldBorder`", "#E1E2E6", "#3E3E48", "Hairline, progress track"],
+        ["`surface`", "#FFFFFF", "#131316", "Form / page background, Previous button fill (Android `formBackground`)"],
+        ["`fieldBackground`", "#F0F0F2", "#202126", "Field fill, disabled Next / Sign Up, checklist (also Android dialog `background`)"],
+        ["`fieldBorder`", "#E1E2E6", "#3E3E48", "Hairline, progress track, Previous button"],
         ["`fieldBorderFocused`", "#E1E1E5", "#E1E1E5", "Focus ring. Shared `Palette.emphasis` hex"],
         ["`fieldBorderInvalid`", "#DF0000", "#FF6B6B", "Invalid ring — same value as `error`"],
         ["`textPrimary`", "#2F2F37", "#E1E1E5", "Titles and values (Android `titleText` / Text Priority)"],
         ["`textSecondary`", "#565A63", "#E1E1E5", "Labels and placeholders"],
         ["`textOnAccent`", "#FFFFFF", "#FFFFFF", "Label on `accentFill`"],
-        ["`accent`", "#0060EC", "#4D8FFF", "Tint, selected chrome (Android `link`)"],
+        ["`accent`", "#0060EC", "#4D8FFF", "Tint, selected shell (Android `link`)"],
         ["`accentFill`", "#0060EC", "#0060EC", "Primary button fill"],
         ["`error`", "#DF0000", "#FF6B6B", "Validation and load errors"],
         ["`warning`", "#945C05", "#F59E21", "Checklist incomplete"],
@@ -634,7 +647,9 @@ files(
         "JackpotKit/Sources/JackpotUI/Theme/JackpotStyling.swift",
         (
             "JackpotKit/Sources/JackpotUI/Styles/JackpotButtonStyle.swift",
-            "`.jackpot` is Next / Sign Up. `.jackpot(.secondary)` is Previous.",
+            "`.jackpot` is Next / Sign Up: `accentFill` + `textOnAccent` when enabled, field fill when\n"
+            "disabled. `.jackpot(.secondary)` is Previous: `surface` fill, `fieldBorder` hairline,\n"
+            "`textPrimary` label.",
             registration_button_style,
         ),
         (
@@ -645,7 +660,8 @@ files(
         "JackpotKit/Sources/JackpotUI/Styles/JackpotProgressViewStyle.swift",
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotFieldChrome.swift",
-            "The shared background and the label/error row every registration field sits in.",
+            "The shared background, the in-field floating label, and `JackpotLabeledField` — date\n"
+            "keeps the above-field label; Input / Dropdown / Checkbox use it for the error row.",
             registration_field_chrome,
         ),
         (
@@ -654,11 +670,19 @@ files(
             "email, phone, number, and new-password.",
             registration_field_kind,
         ),
-        "JackpotKit/Sources/JackpotUI/Fields/JackpotTextField.swift",
-        "JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift",
+        (
+            "JackpotKit/Sources/JackpotUI/Fields/JackpotTextField.swift",
+            "In-field label floats on focus or when the field has a value. Prefix cell and\n"
+            "secure reveal stay as they were.",
+        ),
+        (
+            "JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift",
+            "In-field label floats when a value is selected.",
+        ),
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotDateField.swift",
-            "The `Calender` input type: a read-only field presenting a graphical picker in a sheet.",
+            "The `Calender` input type: a read-only field presenting a graphical picker in a sheet.\n"
+            "`DateFieldView` wraps it in `JackpotLabeledField` so the label stays above the control.",
         ),
         (
             "JackpotKit/Sources/JackpotUI/Components/JackpotChecklist.swift",
@@ -671,7 +695,7 @@ files(
         (
             "JackpotKit/Sources/JackpotUI/Preview/JackpotPreviewPanel.swift",
             "The panel wraps a preview in the themed surface. Resume **Gallery** for registration\n"
-            "chrome (Input / Dropdown / Checkbox / date / FormNavigationBar buttons).",
+            "shell (Input / Dropdown / Checkbox / date / FormNavigationBar buttons).",
         ),
         "JackpotKit/Tests/JackpotUITests/JackpotThemeTests.swift",
     ]
@@ -814,7 +838,7 @@ files(
         ),
         (
             "JackpotKit/Sources/JackpotFormsUI/DynamicFormView.swift",
-            "`FormNavigationBar` is the Next / Previous / Sign Up chrome. That is how step 1 becomes\n"
+            "`FormNavigationBar` is the Next / Previous / Sign Up shell. That is how step 1 becomes\n"
             "step 2. `RegistrationView` just hosts this view.",
         ),
         (
