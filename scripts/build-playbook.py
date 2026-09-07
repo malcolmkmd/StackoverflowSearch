@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Rebuild docs/BUILD-PLAYBOOK.md (and .pdf) from the files actually on disk.
 
+Scoped to the registration flow (`DynamicFormView(formName: .registration)` +
+`registration.json`). Kitchen-sink / unused field types are not reproduced.
+
 Every code block in the playbook is read from source at build time, so the document cannot
 drift from the code it documents. Content is recorded once as a list of structured blocks and
 rendered twice, so the Markdown and the PDF cannot drift from each other either.
@@ -95,12 +98,64 @@ text(
     "marked. Every file is reproduced in full, so a step is done when the file matches."
 )
 text(
+    "This playbook is scoped to the **registration** path only:\n"
+    "`DynamicFormView(formName: .registration)` driven by\n"
+    "`JackpotKit/Sources/JackpotFormsUI/Resources/registration.json` (and the test fixture).\n"
+    "Shared theme tokens stay because those screens consume them. Field types, components, and\n"
+    "demos that registration never renders are listed under **Out of scope** and are not\n"
+    "reproduced here."
+)
+text(
     "`JackpotKit` is one package; each folder under `Sources/` is a module, and later PRs append\n"
     "targets to the same manifest. The whole suite runs in a simulator via\n"
     "`xcodebuild -scheme JackpotKit-Package` — there is no macOS destination, because `JackpotUI`\n"
     "imports `UIKit`."
 )
-text("**152 tests** through PR 5. The follow-up section takes it to 181.")
+text("**152 tests** through PR 5.")
+text("### Registration catalog")
+text(
+    "Twelve fields over two sections. `fieldType` values in the schema are **Input**, **Dropdown**,\n"
+    "and **Checkbox** only. Date of birth is `Input` + `inputType: Calender`."
+)
+table(
+    ["Step", "Identifier", "`fieldType`", "`inputType`", "Renders as"],
+    [
+        ["1.1", "`username`", "Input", "Number", "`JackpotTextField` + `+27` prefix, `.phoneNumber` / `.number`"],
+        ["1.2", "`password`", "Input", "Password", "`JackpotTextField` + `JackpotChecklist` while focused"],
+        ["1.3", "`firstname`", "Input", "Text", "`JackpotTextField`, `.givenName`"],
+        ["1.4", "`lastname`", "Input", "Text", "`JackpotTextField`, `.familyName`"],
+        ["1.5", "`email`", "Input", "Email", "`JackpotTextField`, `.email`"],
+        ["1.6", "`referralCode`", "Input", "Text", "`JackpotTextField` (optional)"],
+        ["2.1", "`idNumberType`", "Dropdown", "Text", "`JackpotDropdown` (drives `idNumber` regex)"],
+        ["2.2", "`idNumber`", "Input", "Text", "`JackpotTextField`"],
+        ["2.3", "`dateOfBirth`", "Input", "Calender", "`JackpotDateField`"],
+        ["2.4", "`sourceOfFunds`", "Dropdown", "Text", "`JackpotDropdown`"],
+        ["2.5", "`receivePromotionalInformation`", "Checkbox", "Text", "Toggle + `.jackpotCheckbox`"],
+        ["2.6", "`terms`", "Checkbox", "Text", "Toggle + `.jackpotCheckbox` (required `^true$`)"],
+    ],
+)
+text(
+    "Chrome the form actually uses: `JackpotLabeledField` / field chrome, `.jackpot` and\n"
+    "`.jackpot(.secondary)` buttons (Next / Sign Up / Previous), `.jackpotBar` progress,\n"
+    "`JackpotErrorView` on load failure, and the locked colour / spacing / size tokens below."
+)
+text("### Out of scope")
+text(
+    "Present in the package for other forms or the kitchen-sink demo. **Not** part of\n"
+    "registration, so this playbook does not reproduce them:"
+)
+text(
+    "- **Field types:** `Text Area`, `Radio` / `Radio Group`, `Toggle`, `Divider`, `Welcome Offer`,\n"
+    "  `Button`, `reCAPTCHA` v2/v3, `SignaturePad`, and any `unknown` CRM type\n"
+    "- **Components:** `JackpotTextArea`, `JackpotRadioGroup`, `JackpotDivider`, `JackpotLockedOverlay`,\n"
+    "  `JackpotCardButtonStyle`, `.jackpot(.tertiary)`, `.jackpotSwitch`\n"
+    "- **Form views:** `TextAreaFieldView`, `RadioGroupFieldView`, `ToggleFieldView`,\n"
+    "  `WelcomeOfferFieldView`, `RecaptchaPlaceholderView`\n"
+    "- **Demos / fixtures:** `kitchenSink.json`, `FormName.kitchenSink`, `FormSandboxView`,\n"
+    "  the JackpotUI **Gallery** preview (radio, welcome-offer cards, locked overlay, persist-login switch)\n"
+    "- **Follow-up infra:** `JackpotAppData`, `TranslationsStore` / `TranslationsRepository`,\n"
+    "  `ConditionalRequest` (ETag) — not on the registration call path"
+)
 rule()
 
 # ---------------------------------------------------------------- PR 1
@@ -109,7 +164,7 @@ text("## PR 1 — JackpotUI")
 text(
     "The design system, with no knowledge of forms. Components take a value and a binding; the theme\n"
     "and the per-field configuration travel through the environment, so no component carries styling\n"
-    "parameters."
+    "parameters. Only the pieces registration renders are listed below."
 )
 text("### Colour tokens")
 text(
@@ -182,42 +237,39 @@ files(
             "`jackpotFieldState`/`jackpotFieldError` once and every field below reads it.",
         ),
         "JackpotKit/Sources/JackpotUI/Theme/JackpotStyling.swift",
-        "JackpotKit/Sources/JackpotUI/Styles/JackpotButtonStyle.swift",
-        "JackpotKit/Sources/JackpotUI/Styles/JackpotToggleStyle.swift",
+        (
+            "JackpotKit/Sources/JackpotUI/Styles/JackpotButtonStyle.swift",
+            "Registration uses `.jackpot` (Next / Sign Up) and `.jackpot(.secondary)` (Previous).\n"
+            "`.jackpot(.tertiary)` and `JackpotCardButtonStyle` are kitchen-sink / welcome-offer only.",
+        ),
+        (
+            "JackpotKit/Sources/JackpotUI/Styles/JackpotToggleStyle.swift",
+            "Registration checkboxes use `.jackpotCheckbox`. `.jackpotSwitch` is the unused Toggle type.",
+        ),
         "JackpotKit/Sources/JackpotUI/Styles/JackpotProgressViewStyle.swift",
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotFieldChrome.swift",
-            "The shared background and the label/error row every field sits in.",
+            "The shared background and the label/error row every registration field sits in.\n"
+            "`JackpotDivider` in this file is unused on this path.",
         ),
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotFieldKind.swift",
-            "One value per input type the registration schema asks for, applied with `jackpotField(_:)`.",
+            "One value per input type the registration schema asks for, applied with `jackpotField(_:)`.\n"
+            "`.oneTimeCode` is unused (no OTP field).",
         ),
         "JackpotKit/Sources/JackpotUI/Fields/JackpotTextField.swift",
-        "JackpotKit/Sources/JackpotUI/Fields/JackpotTextArea.swift",
         "JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift",
-        "JackpotKit/Sources/JackpotUI/Fields/JackpotRadioGroup.swift",
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotDateField.swift",
             "The `Calender` input type: a read-only field presenting a graphical picker in a sheet.",
         ),
         (
             "JackpotKit/Sources/JackpotUI/Components/JackpotChecklist.swift",
-            "The live password-rules panel.",
+            "The live password-rules panel on `password`.",
         ),
         (
             "JackpotKit/Sources/JackpotUI/Components/JackpotErrorView.swift",
             "Shown when a form fails to load.",
-        ),
-        (
-            "JackpotKit/Sources/JackpotUI/Components/JackpotLockedOverlay.swift",
-            "Dims and un-hits content gated behind something else — the Welcome offer picker, until the\n"
-            "fields above it validate.",
-        ),
-        (
-            "JackpotKit/Sources/JackpotUI/Preview/JackpotPreviewPanel.swift",
-            "The panel wraps a preview in the themed surface; the gallery is how you check the components\n"
-            "without running the app.",
         ),
         "JackpotKit/Tests/JackpotUITests/JackpotThemeTests.swift",
     ]
@@ -227,7 +279,10 @@ bash(TEST_CMD)
 rule()
 text("### ▶ Create PR — JackpotUI")
 text("`JackpotUITests: Executed 13 tests, with 0 failures`")
-text("Open `JackpotPreviewPanel.swift` and resume the **Gallery** preview.")
+text(
+    "Check the registration field previews on `JackpotTextField`, `JackpotDropdown`,\n"
+    "`JackpotDateField`, and `JackpotChecklist` — not the kitchen-sink Gallery."
+)
 rule()
 
 # ---------------------------------------------------------------- PR 2
@@ -237,7 +292,8 @@ text(
     "Three modules pointing one way: `JackpotFormsDomain` (types and rules, no I/O),\n"
     "`JackpotFormsData` (wire shapes and the bundled stub), `JackpotFormsUI` (the engine and the\n"
     "renderer). Nothing here knows how a form is fetched — the engine only ever sees\n"
-    "`FormRepository`, which is what lets PR 3 swap the stub for the network without touching it."
+    "`FormRepository`, which is what lets PR 3 swap the stub for the network without touching it.\n"
+    "The catalog is the registration schema, not every field type the decoder can accept."
 )
 
 bash(
@@ -271,9 +327,16 @@ swift_literal(
 
 files(
     [
-        "JackpotKit/Sources/JackpotFormsDomain/FormName.swift",
+        (
+            "JackpotKit/Sources/JackpotFormsDomain/FormName.swift",
+            "Registration uses `.registration`. `.kitchenSink` is a demo name, not this flow.",
+        ),
         "JackpotKit/Sources/JackpotFormsDomain/FormValue.swift",
-        "JackpotKit/Sources/JackpotFormsDomain/FormField.swift",
+        (
+            "JackpotKit/Sources/JackpotFormsDomain/FormField.swift",
+            "The CRM type list is wider than registration. This flow only constructs Input, Dropdown,\n"
+            "and Checkbox (plus `InputType.calendar` for DOB). `RadioOption` is unused here.",
+        ),
         "JackpotKit/Sources/JackpotFormsDomain/Form.swift",
         "JackpotKit/Sources/JackpotFormsDomain/FormSubmitResult.swift",
         "JackpotKit/Sources/JackpotFormsDomain/PasswordPolicy.swift",
@@ -293,13 +356,12 @@ files(
 
 bash(
     "cp registration.json JackpotKit/Sources/JackpotFormsUI/Resources/registration.json\n"
-    "cp kitchenSink.json  JackpotKit/Sources/JackpotFormsUI/Resources/kitchenSink.json\n"
     "cp JackpotKit/Sources/JackpotFormsUI/Resources/registration.json \\\n"
     "   JackpotKit/Tests/JackpotFormsTests/Fixtures/registration.json",
-    note="`registration.json` is the CRM's response saved verbatim — 12 fields over two sections;\n"
-    "`kitchenSink.json` exercises the field types the real schema doesn't use. `JackpotFormsUI`\n"
-    "processes both as resources. The mirror under `Fixtures/` lets the suites load the schema from\n"
-    "their own `Bundle.module` instead of reaching into another target's.",
+    note="`registration.json` is the CRM's response saved verbatim — 12 fields over two sections.\n"
+    "`JackpotFormsUI` processes it as a resource. The mirror under `Fixtures/` lets the suites load\n"
+    "the schema from their own `Bundle.module` instead of reaching into another target's.\n"
+    "`kitchenSink.json` exists in the package for the demo harness; it is not this flow.",
 )
 
 files(
@@ -311,21 +373,28 @@ files(
             "stays silent until Next, and `applyRegexDependencies` is how selecting Passport relaxes the\n"
             "SA-ID rule on a different field.",
         ),
-        "JackpotKit/Sources/JackpotFormsUI/Demo/PreviewFixtures.swift",
+        (
+            "JackpotKit/Sources/JackpotFormsUI/Demo/PreviewFixtures.swift",
+            "Hand-built fixtures mirroring the real registration schema. Extra kitchen-sink fields in\n"
+            "this file (`notes`, `contactMethod`, `welcomeOffer`) are not on the registration path.",
+        ),
         (
             "JackpotKit/Sources/JackpotFormsUI/Fields/FieldRenderer.swift",
-            "The switch below is the whole contract between the form builder and the app.",
+            "The switch is the whole contract. Registration only hits `.input` (including Calender →\n"
+            "`DateFieldView`), `.dropdown`, and `.checkbox`. Other cases are CRM forwards-compat.",
         ),
         "JackpotKit/Sources/JackpotFormsUI/Fields/InputFieldView.swift",
-        "JackpotKit/Sources/JackpotFormsUI/Fields/TextAreaFieldView.swift",
         "JackpotKit/Sources/JackpotFormsUI/Fields/DropdownFieldView.swift",
-        "JackpotKit/Sources/JackpotFormsUI/Fields/RadioGroupFieldView.swift",
         "JackpotKit/Sources/JackpotFormsUI/Fields/DateFieldView.swift",
-        "JackpotKit/Sources/JackpotFormsUI/Fields/CheckboxFieldView.swift",
-        "JackpotKit/Sources/JackpotFormsUI/Fields/WelcomeOfferFieldView.swift",
+        (
+            "JackpotKit/Sources/JackpotFormsUI/Fields/CheckboxFieldView.swift",
+            "`receivePromotionalInformation` and `terms`. `ToggleFieldView` in this file is unused.",
+        ),
         "JackpotKit/Sources/JackpotFormsUI/DynamicFormView.swift",
-        "JackpotKit/Sources/JackpotFormsUI/Demo/PreviewSupport.swift",
-        "JackpotKit/Sources/JackpotFormsUI/Demo/FormSandboxView.swift",
+        (
+            "JackpotKit/Sources/JackpotFormsUI/Demo/PreviewSupport.swift",
+            "The registration copy table used by previews and `.mock()`.",
+        ),
         "JackpotKit/Tests/JackpotFormsTests/FormDecodingTests.swift",
         "JackpotKit/Tests/JackpotFormsTests/FieldValidatorTests.swift",
         (
@@ -341,7 +410,7 @@ bash(TEST_CMD)
 rule()
 text("### ▶ Create PR — JackpotForms")
 text("`JackpotFormsTests: Executed 48 tests, with 0 failures`")
-text("Open `DynamicFormView.swift` and resume the whole-form previews.")
+text("Open `DynamicFormView.swift` and resume the registration whole-form previews.")
 rule()
 
 # ---------------------------------------------------------------- PR 3
@@ -398,12 +467,6 @@ files(
         "JackpotKit/Sources/JackpotNetworking/APIEndpoint.swift",
         "JackpotKit/Sources/JackpotNetworking/APIError.swift",
         "JackpotKit/Sources/JackpotNetworking/RequestInterceptor.swift",
-        (
-            "JackpotKit/Sources/JackpotNetworking/ConditionalRequest.swift",
-            "`ETag`/`Last-Modified` handling. Nothing in this PR sends a conditional request; it is here\n"
-            "because `APIError` and the client have to agree on what a 304 means, and the follow-up\n"
-            "app-data loader is built on it.",
-        ),
         "JackpotKit/Sources/JackpotNetworking/RemoteApiClient.swift",
         "JackpotKit/Tests/JackpotNetworkingTests/MockHTTPClient.swift",
         "JackpotKit/Tests/JackpotNetworkingTests/APIEndpointTests.swift",
@@ -438,9 +501,14 @@ files(
         "JackpotKit/Sources/JackpotForms/TranslationsLocalizer.swift",
         (
             "JackpotKit/Sources/JackpotForms/JackpotForms.swift",
-            "The composition root: `.mock` for previews and the sandbox, `.live` for the app.",
+            "The composition root: `.mock` for previews, `.live` for the app. The `FormSandboxView`\n"
+            "extension in this file is kitchen-sink demo wiring, not the registration screen.",
         ),
-        "JackpotKit/Sources/JackpotForms/Previews.swift",
+        (
+            "JackpotKit/Sources/JackpotForms/Previews.swift",
+            "JSON-backed registration previews (loading / offline / 404). The kitchen-sink and sandbox\n"
+            "previews in this file are out of scope.",
+        ),
         "JackpotKit/Tests/JackpotLocalizationTests/TranslationsTests.swift",
         "JackpotKit/Tests/JackpotFormsTests/FormErrorMappingTests.swift",
         (
@@ -604,33 +672,6 @@ rule()
 text("### ▶ Create PR — Replace registration flow")
 text("Build and run. Open sign-up from the header and the bottom bar; complete both pages.")
 rule()
-
-# ---------------------------------------------------------------- follow-up
-
-text("## Follow-up — app-data and the translations store")
-text(
-    "Not one of the five, and not reproduced here. `JackpotAppData` and the rest of\n"
-    "`JackpotLocalization` are already in the package:"
-)
-text(
-    "- `AppData.swift` — `AppDataResponse` decodes the once-per-session bootstrap payload one section\n"
-    "  at a time, so a malformed `sportsbook` block cannot cost you the translations.\n"
-    "- `AppDataCache.swift`, `AppDataLoader.swift` — stale-while-revalidate over `ETag`, which is why\n"
-    "  `ConditionalRequest.swift` exists in PR 3.\n"
-    "- `TranslationsRepository.swift`, `TranslationsStore.swift` — fetching the table and holding it for\n"
-    "  the session. This is the pair that makes `JackpotLocalization` depend on `JackpotNetworking` and\n"
-    "  `JackpotAppData`; PR 3 only needs `Translations.swift`, which depends on neither."
-)
-text(
-    "Adopting them turns `getTranslation` into a shim over `Translations` and replaces the\n"
-    "`ClosureLocalizer` above with `TranslationsLocalizer`, at which point `.live(translations:)`\n"
-    "replaces `.live(localizer:)` and the seam is gone. See `docs/OPEN-QUESTIONS.md` and\n"
-    "`docs/adr/0001-app-data-decoding-and-configuration-decomposition.md`."
-)
-text(
-    "`JackpotAppDataTests: Executed 23 tests` · `JackpotLocalizationTests: Executed 22 tests`\n"
-    "(the 16 above plus 6 for the store) — **181 in total**."
-)
 
 # ================================================================ renderers
 
