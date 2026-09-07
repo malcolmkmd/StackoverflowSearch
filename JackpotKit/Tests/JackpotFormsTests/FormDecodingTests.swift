@@ -1,6 +1,7 @@
 import XCTest
 @testable import JackpotFormsData
 import JackpotFormsDomain
+import JackpotFormsUI
 
 final class FormDecodingTests: XCTestCase {
 
@@ -78,6 +79,22 @@ final class FormDecodingTests: XCTestCase {
         XCTAssertEqual(options.map(\.value), ["idNumber", "passport"])
         XCTAssertEqual(options[0].textKey, "jpc-reg-idnumber")
         XCTAssertEqual(options[0].regex, "idNumberRegex")
+    }
+
+    func testKitchenSinkIsTheRegistrationFieldCatalog() throws {
+        let form = try StubFormRepository.decode(FormPreviewData.bundledJSON(named: FormName.kitchenSink.rawValue))
+        XCTAssertEqual(form.codeName, .kitchenSink)
+        XCTAssertEqual(form.allFields.count, 12)
+        XCTAssertEqual(Set(form.allFields.map(\.type)), [.input, .dropdown, .checkbox])
+        XCTAssertEqual(form.allFields.map(\.identifier), [
+            "username", "password", "firstname", "lastname", "email", "referralCode",
+            "idNumberType", "idNumber", "dateOfBirth", "sourceOfFunds",
+            "receivePromotionalInformation", "terms",
+        ])
+        XCTAssertEqual(form.field(identifiedBy: "username")?.inputType, .number)
+        XCTAssertEqual(form.field(identifiedBy: "password")?.inputType, .password)
+        XCTAssertEqual(form.field(identifiedBy: "email")?.inputType, .email)
+        XCTAssertEqual(form.field(identifiedBy: "dateOfBirth")?.inputType, .calendar)
     }
 }
 

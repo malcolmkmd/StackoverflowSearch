@@ -2,8 +2,9 @@
 """Rebuild docs/BUILD-PLAYBOOK.md (and .pdf) from the files actually on disk.
 
 Documents the registration flow (`DynamicFormView(formName: .registration)` +
-`registration.json`) and the kitchen-sink / Gallery / FormPreview path used to render
-previews. Types that appear in neither are not reproduced — the Swift stays in the package.
+`registration.json`) and the registration-only preview harness. Unused CRM types
+(Text Area, Radio Group, Toggle, Divider, Welcome Offer, SignaturePad, reCAPTCHA)
+are not reproduced — the Swift stays in the package.
 
 Every code block in the playbook is read from source at build time, so the document cannot
 drift from the code it documents. Content is recorded once as a list of structured blocks and
@@ -100,10 +101,10 @@ text(
 )
 text(
     "This playbook documents the **registration** path and the **preview harness** that renders\n"
-    "every supported field type. Registration is `DynamicFormView(formName: .registration)` driven\n"
+    "those same twelve fields. Registration is `DynamicFormView(formName: .registration)` driven\n"
     "by `JackpotKit/Sources/JackpotFormsUI/Resources/registration.json` (mirrored under Tests).\n"
     "The live CRM schema at `config.jpc.africa/cron/forms/jackpotcity/JZA/registration` uses the\n"
-    "same `fieldType` set. Shared theme tokens stay because both paths consume them."
+    "same `fieldType` set. Shared theme tokens stay because those screens consume them."
 )
 text(
     "`JackpotKit` is one package; each folder under `Sources/` is a module, and later PRs append\n"
@@ -111,7 +112,7 @@ text(
     "`xcodebuild -scheme JackpotKit-Package` — there is no macOS destination, because `JackpotUI`\n"
     "imports `UIKit`."
 )
-text("**152 tests** through PR 5.")
+text("**153 tests** through PR 5.")
 text("### Registration catalog")
 text(
     "Twelve fields over two sections. Re-checked against the bundled fixture, the test fixture,\n"
@@ -178,67 +179,65 @@ text(
 )
 text(
     "A CRM `fieldType: Button` is a different thing. `FieldType.button` is decorative\n"
-    "(`isDecorative`), `FieldRenderer` maps it to `EmptyView()`, and the comment says the\n"
-    "footer owns navigation. Do not look for a schema Button to page the wizard — that\n"
-    "control is already on screen as `FormNavigationBar`."
+    "(`isDecorative`), `FieldRenderer` maps it to `EmptyView()`, and the footer owns\n"
+    "navigation. Do not look for a schema Button to page the wizard — that control is\n"
+    "already on screen as `FormNavigationBar`."
 )
-text("### Kitchen-sink preview path")
+text("### Registration preview path")
 text(
-    "`kitchenSink.json` is **not** a dead demo to strip. It is the bundled schema the preview\n"
-    "harness decodes when you want every renderer on screen. Leave the Swift in the package."
+    "`kitchenSink.json` is the bundled **registration-fields** schema — the same twelve\n"
+    "identifiers and three `fieldType`s as `registration.json`. It is not an all-types catalog.\n"
+    "Leave unused CRM Swift in the package."
 )
 text(
     "1. **Schema.** `JackpotFormsUI/Resources/kitchenSink.json` — `formCodeName: kitchenSink`,\n"
-    "   two sections (Inputs / Choices). Types: `Input` (Text / Number / Password / Calender),\n"
-    "   `Text Area`, `Divider`, `SignaturePad` (unknown — skipped, listed in DEBUG),\n"
-    "   `Dropdown`, `Radio Group`, `Toggle`, `Checkbox`, `Welcome Offer`.\n"
+    "   `formTitle: Registration fields`. Types: `Input` (Text / Number / Password / Email /\n"
+    "   Calender), `Dropdown`, `Checkbox`. Same twelve fields as registration.\n"
     "2. **Name.** `FormName.kitchenSink` is in `FormName.bundled` with `.registration`.\n"
     "3. **Load.** `FormPreviewData.bundledForms` reads both JSON resources into\n"
     "   `StubFormRepository`. `.mock()` and the on-device sandbox use that dictionary.\n"
     "4. **Sandbox.** `FormSandboxView.mocked()` and `RegistrationSandbox` pick\n"
-    "   Registration / All field types. Choosing All Fields loads `.kitchenSink` through\n"
-    "   `DynamicFormView` — same engine as sign-up, different schema.\n"
+    "   Registration / Registration fields. Both load through `DynamicFormView`.\n"
     "5. **Canvas.** `JackpotForms/Previews.swift` → `DynamicFormView(formName: .kitchenSink)`\n"
-    "   titled **All field types — from JSON**. That is the JSON-backed kitchen-sink preview.\n"
+    "   titled **Registration fields — from JSON**.\n"
     "6. **FormPreview.** `PreviewFixtures.swift` is the hand-built twin used by per-field\n"
     "   `#Preview`s (`InputFieldView`, `DateFieldView`, …) and by `DynamicFormView` section\n"
-    "   previews. Extra fixtures (`notes`, `contactMethod`, `welcomeOffer`) exist so those\n"
-    "   Canvas canvases can render kitchen-sink types without decoding the bundle.\n"
-    "7. **Gallery.** `JackpotPreviewPanel.swift` is the JackpotUI component sheet (text field,\n"
-    "   checklist, dropdown, date, radio, checkbox, switch, welcome-offer cards, buttons).\n"
-    "   Resume **Gallery** to check chrome without running the form engine."
+    "   previews. The catalog is the twelve registration fields.\n"
+    "7. **Gallery.** `JackpotPreviewPanel.swift` is the JackpotUI sheet for registration chrome\n"
+    "   (text field, checklist, dropdown, date, checkbox, progress, Next / Sign Up / Previous).\n"
+    "8. **FormNavigationBar.** Host chrome on `DynamicFormView`: Previous (`.jackpot(.secondary)`)\n"
+    "   on section 2, Next (`.jackpot`) while a later section exists, Sign Up (`.jackpot`) on\n"
+    "   the last section. Not a CRM `Button` field type."
 )
 text(
-    "`Divider` **is** used on this path: kitchen-sink row `spacer` is `fieldType: Divider`, and\n"
-    "`FieldRenderer` maps `.divider` to `JackpotDivider`. That is the only place the type appears."
+    "`Divider` is **not** on this path. `FormRowView` renders only the schema's visible fields\n"
+    "through `FieldRenderer`. The SwiftUI `Divider()` on `FormSandboxView` is chrome between the\n"
+    "form picker and the form, not a CRM `fieldType`."
 )
 table(
     ["`fieldType`", "Where it renders in preview", "On registration?"],
     [
-        ["Input", "Kitchen-sink + Gallery + `FormPreview` field previews", "Yes"],
-        ["Dropdown", "Kitchen-sink + Gallery + `DropdownFieldView` previews", "Yes"],
-        ["Checkbox", "Kitchen-sink + Gallery + `CheckboxFieldView` previews", "Yes"],
-        ["Text Area", "`TextAreaFieldView` ← kitchen-sink `notes` + `FormPreview.notes`", "No"],
-        ["Divider", "`JackpotDivider` ← kitchen-sink `spacer`", "No"],
-        ["Radio Group", "`RadioGroupFieldView` ← kitchen-sink + Gallery + `FormPreview.contactMethod`", "No"],
-        ["Toggle", "`ToggleFieldView` (`.jackpotSwitch`) ← kitchen-sink `optIn`", "No"],
-        ["Welcome Offer", "`WelcomeOfferFieldView` + Gallery cards / lock overlay", "No"],
-        ["SignaturePad", "Unknown type — `EmptyView`, listed in `unsupportedFields`", "No"],
+        ["Input", "Registration JSON + Gallery + `FormPreview` field previews", "Yes"],
+        ["Dropdown", "Registration JSON + Gallery + `DropdownFieldView` previews", "Yes"],
+        ["Checkbox", "Registration JSON + Gallery + `CheckboxFieldView` previews", "Yes"],
     ],
 )
 text("### Out of scope")
 text(
-    "Not used by registration **and** not needed to render the kitchen-sink / Gallery /\n"
-    "`FormPreview` path. The playbook does not reproduce them. **Do not delete the Swift.**"
+    "Not used by registration and not in the preview catalog. The playbook does not reproduce\n"
+    "them. **Do not delete the Swift.**"
 )
 text(
     "- **CRM `fieldType: Button`:** recognised by `FieldType` and treated as decorative\n"
     "  (`EmptyView` in `FieldRenderer`). It is **not** on registration (bundled or live) and\n"
-    "  **not** on kitchen-sink. It is **not** the Next / Sign Up / Previous control — that\n"
-    "  is host chrome (`FormNavigationBar`), documented above, and **in scope**.\n"
-    "- **Field types:** `reCAPTCHA` v2/v3, `Radio` as a distinct CRM spelling of `Radio Group`\n"
-    "  (the renderer already aliases both)\n"
-    "- **Form views:** `RecaptchaPlaceholderView`\n"
+    "  **not** on the registration-fields preview. It is **not** the Next / Sign Up / Previous\n"
+    "  control — that is host chrome (`FormNavigationBar`), documented above, and **in scope**.\n"
+    "- **Field types:** `Text Area`, `Radio` / `Radio Group`, `Toggle`, `Divider`, `Welcome Offer`,\n"
+    "  `SignaturePad`, `reCAPTCHA` v2/v3, and any `unknown` CRM type\n"
+    "- **Components:** `JackpotTextArea`, `JackpotRadioGroup`, `JackpotDivider`, `JackpotLockedOverlay`,\n"
+    "  `JackpotCardButtonStyle`, `.jackpot(.tertiary)`, `.jackpotSwitch`\n"
+    "- **Form views:** `TextAreaFieldView`, `RadioGroupFieldView`, `ToggleFieldView`,\n"
+    "  `WelcomeOfferFieldView`, `RecaptchaPlaceholderView`\n"
     "- **Follow-up infra:** `JackpotAppData`, `TranslationsStore` / `TranslationsRepository`,\n"
     "  `ConditionalRequest` (ETag) — not on the registration or preview call path"
 )
@@ -250,7 +249,7 @@ text("## PR 1 — JackpotUI")
 text(
     "The design system, with no knowledge of forms. Components take a value and a binding; the theme\n"
     "and the per-field configuration travel through the environment, so no component carries styling\n"
-    "parameters. Registration chrome plus the Gallery / kitchen-sink preview pieces."
+    "parameters. Only the pieces registration and its preview harness render are listed below."
 )
 text("### Colour tokens")
 text(
@@ -326,18 +325,17 @@ files(
         (
             "JackpotKit/Sources/JackpotUI/Styles/JackpotButtonStyle.swift",
             "Registration uses `.jackpot` (Next / Sign Up) and `.jackpot(.secondary)` (Previous).\n"
-            "`.jackpot(.tertiary)` and `JackpotCardButtonStyle` are the Gallery / Welcome Offer preview.",
+            "`.jackpot(.tertiary)` and `JackpotCardButtonStyle` are unused on this path.",
         ),
         (
             "JackpotKit/Sources/JackpotUI/Styles/JackpotToggleStyle.swift",
-            "Registration checkboxes use `.jackpotCheckbox`. `.jackpotSwitch` is the kitchen-sink\n"
-            "`Toggle` field and the Gallery persist-login row.",
+            "Registration checkboxes use `.jackpotCheckbox`. `.jackpotSwitch` is the unused Toggle type.",
         ),
         "JackpotKit/Sources/JackpotUI/Styles/JackpotProgressViewStyle.swift",
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotFieldChrome.swift",
-            "The shared background and the label/error row every field sits in.\n"
-            "`JackpotDivider` in this file is the kitchen-sink `Divider` type — not registration layout.",
+            "The shared background and the label/error row every registration field sits in.\n"
+            "`JackpotDivider` in this file is unused on this path.",
         ),
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotFieldKind.swift",
@@ -345,15 +343,7 @@ files(
             "email, phone, number, and new-password. `.oneTimeCode` is not on this form.",
         ),
         "JackpotKit/Sources/JackpotUI/Fields/JackpotTextField.swift",
-        (
-            "JackpotKit/Sources/JackpotUI/Fields/JackpotTextArea.swift",
-            "Kitchen-sink `Text Area` (`notes`). Not a registration field.",
-        ),
         "JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift",
-        (
-            "JackpotKit/Sources/JackpotUI/Fields/JackpotRadioGroup.swift",
-            "Kitchen-sink / Gallery `Radio Group`. Not a registration field.",
-        ),
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotDateField.swift",
             "The `Calender` input type: a read-only field presenting a graphical picker in a sheet.",
@@ -367,13 +357,9 @@ files(
             "Shown when a form fails to load.",
         ),
         (
-            "JackpotKit/Sources/JackpotUI/Components/JackpotLockedOverlay.swift",
-            "Gallery and Welcome Offer preview — dims the offer cards until the form validates.",
-        ),
-        (
             "JackpotKit/Sources/JackpotUI/Preview/JackpotPreviewPanel.swift",
-            "The panel wraps a preview in the themed surface. Resume the **Gallery** preview to check\n"
-            "JackpotUI chrome without running the form engine.",
+            "The panel wraps a preview in the themed surface. Resume **Gallery** for registration\n"
+            "chrome (Input / Dropdown / Checkbox / date / FormNavigationBar buttons).",
         ),
         "JackpotKit/Tests/JackpotUITests/JackpotThemeTests.swift",
     ]
@@ -398,8 +384,8 @@ text(
     "`JackpotFormsData` (wire shapes and the bundled stub), `JackpotFormsUI` (the engine and the\n"
     "renderer). Nothing here knows how a form is fetched — the engine only ever sees\n"
     "`FormRepository`, which is what lets PR 3 swap the stub for the network without touching it.\n"
-    "The catalog is the registration schema. Kitchen-sink types stay in the decoder and the\n"
-    "preview harness so Canvas can render every supported field."
+    "The catalog is the registration schema. Unused CRM types stay in the decoder for\n"
+    "forwards-compat; they are not in the preview catalog."
 )
 
 bash(
@@ -435,15 +421,14 @@ files(
     [
         (
             "JackpotKit/Sources/JackpotFormsDomain/FormName.swift",
-            "`.registration` is the live form. `.kitchenSink` is the bundled preview schema — keep it;\n"
-            "Canvas and the sandbox load it by this name.",
+            "`.registration` is the live form. `.kitchenSink` is the bundled registration-fields\n"
+            "preview schema — same twelve fields, loaded by Canvas and the sandbox.",
         ),
         "JackpotKit/Sources/JackpotFormsDomain/FormValue.swift",
         (
             "JackpotKit/Sources/JackpotFormsDomain/FormField.swift",
             "The CRM type list is wider than registration. This flow constructs Input, Dropdown, and\n"
-            "Checkbox (plus `InputType.calendar` for DOB). Kitchen-sink constructs the rest, including\n"
-            "`Divider` and `RadioOption`.",
+            "Checkbox (plus `InputType.calendar` for DOB). Other cases are forwards-compat.",
         ),
         "JackpotKit/Sources/JackpotFormsDomain/Form.swift",
         "JackpotKit/Sources/JackpotFormsDomain/FormSubmitResult.swift",
@@ -468,9 +453,9 @@ bash(
     "cp JackpotKit/Sources/JackpotFormsUI/Resources/registration.json \\\n"
     "   JackpotKit/Tests/JackpotFormsTests/Fixtures/registration.json",
     note="`registration.json` is the CRM's response saved verbatim — 12 fields over two sections.\n"
-    "`kitchenSink.json` is the preview schema: every renderer, including `Divider`.\n"
-    "`JackpotFormsUI` processes both as resources. The fixture mirror lets the suites load\n"
-    "registration from their own `Bundle.module` instead of reaching into another target.",
+    "`kitchenSink.json` is the bundled registration-fields preview of those same twelve fields\n"
+    "(Input / Dropdown / Checkbox only). `JackpotFormsUI` processes both as resources. The\n"
+    "fixture mirror lets the suites load registration from their own `Bundle.module`.",
 )
 
 files(
@@ -485,35 +470,21 @@ files(
         ),
         (
             "JackpotKit/Sources/JackpotFormsUI/Demo/PreviewFixtures.swift",
-            "Hand-built `FormPreview` fixtures. `registration` mirrors the CRM schema. Extra fields\n"
-            "(`notes`, `contactMethod`, `welcomeOffer`) feed kitchen-sink Canvas previews.",
+            "Hand-built `FormPreview` fixtures. `registration` mirrors the CRM schema. Extra unused-type\n"
+            "helpers stay so leftover field-view canvases compile; they are not the catalog.",
         ),
         (
             "JackpotKit/Sources/JackpotFormsUI/Fields/FieldRenderer.swift",
-            "The switch is the whole contract. Registration hits `.input` (Calender → `DateFieldView`),\n"
-            "`.dropdown`, and `.checkbox`. Kitchen-sink also hits `.textArea`, `.divider` →\n"
-            "`JackpotDivider`, `.toggle`, `.radio` / `.radioGroup`, and `.welcomeOffer`.\n"
+            "The switch is the whole contract. Registration and the preview schema hit `.input`\n"
+            "(Calender → `DateFieldView`), `.dropdown`, and `.checkbox`. Other cases are forwards-compat.\n"
             "`.button` is `EmptyView()` — a CRM field type, not the footer Next / Sign Up chrome.",
         ),
         "JackpotKit/Sources/JackpotFormsUI/Fields/InputFieldView.swift",
-        (
-            "JackpotKit/Sources/JackpotFormsUI/Fields/TextAreaFieldView.swift",
-            "Kitchen-sink `Text Area`. Keep — the preview path renders it.",
-        ),
         "JackpotKit/Sources/JackpotFormsUI/Fields/DropdownFieldView.swift",
-        (
-            "JackpotKit/Sources/JackpotFormsUI/Fields/RadioGroupFieldView.swift",
-            "Kitchen-sink / Gallery `Radio Group`. Keep — the preview path renders it.",
-        ),
         "JackpotKit/Sources/JackpotFormsUI/Fields/DateFieldView.swift",
         (
             "JackpotKit/Sources/JackpotFormsUI/Fields/CheckboxFieldView.swift",
-            "`receivePromotionalInformation` and `terms`. `ToggleFieldView` in this file is the\n"
-            "kitchen-sink `Toggle` type (`.jackpotSwitch`).",
-        ),
-        (
-            "JackpotKit/Sources/JackpotFormsUI/Fields/WelcomeOfferFieldView.swift",
-            "Kitchen-sink / Gallery Welcome Offer. Keep — the preview path renders it.",
+            "`receivePromotionalInformation` and `terms`. `ToggleFieldView` in this file is unused.",
         ),
         (
             "JackpotKit/Sources/JackpotFormsUI/DynamicFormView.swift",
@@ -522,12 +493,12 @@ files(
         ),
         (
             "JackpotKit/Sources/JackpotFormsUI/Demo/PreviewSupport.swift",
-            "Registration copy table, plus `FormPreviewData.bundledForms` (registration + kitchen-sink).",
+            "Registration copy table, plus `FormPreviewData.bundledForms` (registration + registration-fields preview).",
         ),
         (
             "JackpotKit/Sources/JackpotFormsUI/Demo/FormSandboxView.swift",
-            "The review harness: pick Registration or All field types (kitchen-sink) and submit into\n"
-            "a sheet. `RegistrationSandbox` in the app target wraps this.",
+            "The review harness: pick Registration or Registration fields and submit into a sheet.\n"
+            "`RegistrationSandbox` in the app target wraps this.",
         ),
         "JackpotKit/Tests/JackpotFormsTests/FormDecodingTests.swift",
         "JackpotKit/Tests/JackpotFormsTests/FieldValidatorTests.swift",
@@ -543,10 +514,10 @@ files(
 bash(TEST_CMD)
 rule()
 text("### ▶ Create PR — JackpotForms")
-text("`JackpotFormsTests: Executed 48 tests, with 0 failures`")
+text("`JackpotFormsTests: Executed 49 tests, with 0 failures`")
 text(
     "Open `DynamicFormView.swift` and resume the registration whole-form previews. Open\n"
-    "`JackpotForms/Previews.swift` and resume **All field types — from JSON** (kitchen-sink)."
+    "`JackpotForms/Previews.swift` and resume **Registration fields — from JSON**."
 )
 rule()
 
@@ -638,13 +609,13 @@ files(
         "JackpotKit/Sources/JackpotForms/TranslationsLocalizer.swift",
         (
             "JackpotKit/Sources/JackpotForms/JackpotForms.swift",
-            "The composition root: `.mock` for previews (bundled registration + kitchen-sink),\n"
+            "The composition root: `.mock` for previews (bundled registration + registration-fields),\n"
             "`.live` for the app. `FormSandboxView.mocked()` is the preview harness.",
         ),
         (
             "JackpotKit/Sources/JackpotForms/Previews.swift",
             "JSON-backed previews: registration (loading / offline / 404) and\n"
-            "`DynamicFormView(formName: .kitchenSink)` — **All field types — from JSON**.",
+            "`DynamicFormView(formName: .kitchenSink)` — **Registration fields — from JSON**.",
         ),
         "JackpotKit/Tests/JackpotLocalizationTests/TranslationsTests.swift",
         "JackpotKit/Tests/JackpotFormsTests/FormErrorMappingTests.swift",
@@ -662,7 +633,7 @@ text("### ▶ Create PR — JackpotNetworking + live repository")
 text(
     "`JackpotNetworkingTests: Executed 34 tests, with 0 failures`\n"
     "`JackpotLocalizationTests: Executed 16 tests, with 0 failures`\n"
-    "`JackpotFormsTests: Executed 80 tests, with 0 failures`"
+    "`JackpotFormsTests: Executed 81 tests, with 0 failures`"
 )
 rule()
 

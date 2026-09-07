@@ -34,11 +34,8 @@ struct JackpotUI_Previews: PreviewProvider {
         @State private var touched = false
         @State private var promotions = false
         @State private var agreed = true
-        @State private var persistLogin = false
         @State private var income: String? = nil
-        @State private var contactMethod: String? = "email"
         @State private var dateOfBirth: Date? = nil
-        @State private var offer: String? = "depositMatch"
 
         var body: some View {
             ScrollView {
@@ -76,44 +73,20 @@ struct JackpotUI_Previews: PreviewProvider {
                         JackpotDateField("Enter Date Of Birth", selection: $dateOfBirth)
                     }
 
-                    JackpotLabeledField("Preferred Contact") {
-                        JackpotRadioGroup(selection: $contactMethod, options: [
-                            .init(id: "sms", label: "SMS"),
-                            .init(id: "email", label: "Email"),
-                        ])
-                    }
-
                     Toggle("Send Jackpot City Promotions to me", isOn: $promotions)
                         .toggleStyle(.jackpotCheckbox)
                     Toggle("I am over 18 years of age & I accept the Terms & Conditions", isOn: $agreed)
                         .toggleStyle(.jackpotCheckbox)
-                    Toggle("Keep me logged in", isOn: $persistLogin)
-                        .toggleStyle(.jackpotSwitch)
 
                     ProgressView(value: 0.45).progressViewStyle(.jackpotBar)
-
-                    HStack(spacing: .sm) {
-                        offerCard("100% Deposit Match", id: "depositMatch")
-                        offerCard("50 Free Spins", id: "freeSpins")
-                    }
-                    .jackpotLocked(true, message: "Complete your registration above to unlock your Welcome offer selection")
 
                     Button("Next") {}.buttonStyle(.jackpot).disabled(true)
                     Button("Sign Up") {}.buttonStyle(.jackpot).jackpotLoading()
                     Button("Previous") {}.buttonStyle(.jackpot(.secondary))
-                    Button("Skip for now") {}.buttonStyle(.jackpot(.tertiary))
                 }
             }
             .jackpotTheme(.jackpotCity)
             .jackpotBackground(\.surface)
-        }
-
-        private func offerCard(_ label: String, id: String) -> some View {
-            Button { offer = id } label: {
-                Text(label).jackpotTextStyle(\.button).multilineTextAlignment(.center)
-            }
-            .buttonStyle(.jackpotCard)
-            .jackpotSelected(offer == id)
         }
     }
 
