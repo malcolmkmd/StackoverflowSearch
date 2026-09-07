@@ -43,7 +43,7 @@ public struct JackpotColors: Equatable, Sendable {
 /// still compare equal — a dynamic `Color` compares by identity.
 ///
 /// Same hex is one entry. Android roles that shared a value (`background` = `fieldBackground`,
-/// `formBackground` = `surface`, `link` / selected chrome = `accent`, track / divider =
+/// `formBackground` = `surface`, `link` / selected shell = `accent`, track / divider =
 /// `fieldBorder`) are not given a second name.
 enum Palette {
     /// #FFFFFF / #131316. Android `formBackground` (BG Layer 2 / BG Base).
@@ -72,7 +72,7 @@ enum Palette {
     /// was #E1E1E5 on a #E1E1E5 fill — an unfinished placeholder.
     static let textOnAccent = Color.white
 
-    /// Accent as *text* and tint — tertiary labels, selected chrome. This is the Android
+    /// Accent as *text* and tint — tertiary labels, selected shell. This is the Android
     /// `link` role; the token is not named `link`. Light #E1E1E5 is unreadable, so the
     /// isolated brand blue stays. Dark stays the lighter blue so selected state does not
     /// collapse into `textSecondary` (both would otherwise be #E1E1E5).

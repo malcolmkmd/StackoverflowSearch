@@ -47,14 +47,14 @@ to the top edge on focus or when the field has a value. `dateOfBirth` keeps
 `JackpotLabeledField` above `JackpotDateField`. Checkboxes keep the toggle label. Error
 text stays below the control.
 
-Chrome the form actually uses: `JackpotLabeledField` (above-field label on date; error
-chrome on Input / Dropdown / Checkbox), `FormNavigationBar` with `.jackpot` /
+The form shell actually uses: `JackpotLabeledField` (above-field label on date; error
+shell on Input / Dropdown / Checkbox), `FormNavigationBar` with `.jackpot` /
 `.jackpot(.secondary)` (Next / Sign Up / Previous — see below), `.jackpotBar` progress,
 `JackpotErrorView` on load failure, and the locked colour / spacing / size tokens below.
 
 ### How to go to the next screen
 
-The gold/blue button at the bottom of registration is **host UI chrome** on
+The gold/blue button at the bottom of registration is **host shell** on
 `FormNavigationBar` in `DynamicFormView.swift`. `RegistrationView` is a thin wrapper
 around `DynamicFormView`. The bundled `registration.json` and the live CRM schema
 (`GET …/cron/forms/jackpotcity/JZA/registration?api-version=2.0`) are the twelve fields
@@ -92,9 +92,9 @@ identifiers and three `fieldType`s as `registration.json`.
 6. **FormPreview.** `PreviewFixtures.swift` is the hand-built twin used by per-field
    `#Preview`s (`InputFieldView`, `DateFieldView`, …) and by `DynamicFormView` section
    previews. The catalog is the twelve registration fields.
-7. **Gallery.** `JackpotPreviewPanel.swift` is the JackpotUI sheet for registration chrome
+7. **Gallery.** `JackpotPreviewPanel.swift` is the JackpotUI sheet for registration shell
    (text field, checklist, dropdown, date, checkbox, progress, Next / Sign Up / Previous).
-8. **FormNavigationBar.** Host chrome on `DynamicFormView`: Previous (`.jackpot(.secondary)`)
+8. **FormNavigationBar.** Host shell on `DynamicFormView`: Previous (`.jackpot(.secondary)`)
    on section 2, Next (`.jackpot`) while a later section exists, Sign Up (`.jackpot`) on
    the last section.
 
@@ -127,7 +127,7 @@ at it. There is no `link` token; that Android role is `accent`.
 | `textPrimary` | #2F2F37 | #E1E1E5 | Titles and values (Android `titleText` / Text Priority) |
 | `textSecondary` | #565A63 | #E1E1E5 | Labels and placeholders |
 | `textOnAccent` | #FFFFFF | #FFFFFF | Label on `accentFill` |
-| `accent` | #0060EC | #4D8FFF | Tint, selected chrome (Android `link`) |
+| `accent` | #0060EC | #4D8FFF | Tint, selected shell (Android `link`) |
 | `accentFill` | #0060EC | #0060EC | Primary button fill |
 | `error` | #DF0000 | #FF6B6B | Validation and load errors |
 | `warning` | #945C05 | #F59E21 | Checklist incomplete |
@@ -219,7 +219,7 @@ public struct JackpotColors: Equatable, Sendable {
 /// still compare equal — a dynamic `Color` compares by identity.
 ///
 /// Same hex is one entry. Android roles that shared a value (`background` = `fieldBackground`,
-/// `formBackground` = `surface`, `link` / selected chrome = `accent`, track / divider =
+/// `formBackground` = `surface`, `link` / selected shell = `accent`, track / divider =
 /// `fieldBorder`) are not given a second name.
 enum Palette {
     /// #FFFFFF / #131316. Android `formBackground` (BG Layer 2 / BG Base).
@@ -248,7 +248,7 @@ enum Palette {
     /// was #E1E1E5 on a #E1E1E5 fill — an unfinished placeholder.
     static let textOnAccent = Color.white
 
-    /// Accent as *text* and tint — selected chrome. This is the Android
+    /// Accent as *text* and tint — selected shell. This is the Android
     /// `link` role; the token is not named `link`. Light #E1E1E5 is unreadable, so the
     /// isolated brand blue stays. Dark stays the lighter blue so selected state does not
     /// collapse into `textSecondary` (both would otherwise be #E1E1E5).
@@ -569,7 +569,7 @@ public struct JackpotButtonStyle: ButtonStyle {
                 }
                 .frame(maxWidth: .infinity, minHeight: theme.sizes.controlHeight)
                 .foregroundStyle(foreground)
-                .background { chrome }
+                .background { shell }
                 .contentShape(theme.sizes.fieldShape)
                 .opacity(configuration.isPressed ? 0.85 : 1)
                 .scaleEffect(configuration.isPressed ? 0.98 : 1)
@@ -581,7 +581,7 @@ public struct JackpotButtonStyle: ButtonStyle {
         private var isDimmed: Bool { !isEnabled && !isLoading }
 
         @ViewBuilder
-        private var chrome: some View {
+        private var shell: some View {
             switch prominence {
             case .primary:
                 theme.sizes.fieldShape.fill(isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill)
@@ -1401,7 +1401,7 @@ public struct JackpotErrorView: View {
 **16.** `JackpotKit/Sources/JackpotUI/Preview/JackpotPreviewPanel.swift`
 
 The panel wraps a preview in the themed surface. Resume **Gallery** for registration
-chrome (Input / Dropdown / Checkbox / date / FormNavigationBar buttons).
+shell (Input / Dropdown / Checkbox / date / FormNavigationBar buttons).
 
 ```swift
 #if DEBUG
@@ -3685,7 +3685,7 @@ struct CheckboxFieldView_Previews: PreviewProvider {
 
 **44.** `JackpotKit/Sources/JackpotFormsUI/DynamicFormView.swift`
 
-`FormNavigationBar` is the Next / Previous / Sign Up chrome. That is how step 1 becomes
+`FormNavigationBar` is the Next / Previous / Sign Up shell. That is how step 1 becomes
 step 2. `RegistrationView` just hosts this view.
 
 ```swift

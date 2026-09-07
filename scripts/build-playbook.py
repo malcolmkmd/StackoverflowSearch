@@ -148,8 +148,8 @@ def registration_field_kind(body, rel):
 
 
 def registration_theme(body, rel):
-    body = require_replace(body, "    /// Accent as *text* and tint — tertiary labels, selected chrome. This is the Android\n",
-                           "    /// Accent as *text* and tint — selected chrome. This is the Android\n", rel)
+    body = require_replace(body, "    /// Accent as *text* and tint — tertiary labels, selected shell. This is the Android\n",
+                           "    /// Accent as *text* and tint — selected shell. This is the Android\n", rel)
     return require_replace(body, "    public var progressBarHeight: CGFloat = JackpotSpacing.xxs.rawValue\n"
                                  "    public var textAreaMinHeight: CGFloat = 110\n"
                                  "    public var cardMinHeight: CGFloat = 140\n",
@@ -499,14 +499,14 @@ text(
     "text stays below the control."
 )
 text(
-    "Chrome the form actually uses: `JackpotLabeledField` (above-field label on date; error\n"
-    "chrome on Input / Dropdown / Checkbox), `FormNavigationBar` with `.jackpot` /\n"
+    "The form shell actually uses: `JackpotLabeledField` (above-field label on date; error\n"
+    "shell on Input / Dropdown / Checkbox), `FormNavigationBar` with `.jackpot` /\n"
     "`.jackpot(.secondary)` (Next / Sign Up / Previous — see below), `.jackpotBar` progress,\n"
     "`JackpotErrorView` on load failure, and the locked colour / spacing / size tokens below."
 )
 text("### How to go to the next screen")
 text(
-    "The gold/blue button at the bottom of registration is **host UI chrome** on\n"
+    "The gold/blue button at the bottom of registration is **host shell** on\n"
     "`FormNavigationBar` in `DynamicFormView.swift`. `RegistrationView` is a thin wrapper\n"
     "around `DynamicFormView`. The bundled `registration.json` and the live CRM schema\n"
     "(`GET …/cron/forms/jackpotcity/JZA/registration?api-version=2.0`) are the twelve fields\n"
@@ -548,9 +548,9 @@ text(
     "6. **FormPreview.** `PreviewFixtures.swift` is the hand-built twin used by per-field\n"
     "   `#Preview`s (`InputFieldView`, `DateFieldView`, …) and by `DynamicFormView` section\n"
     "   previews. The catalog is the twelve registration fields.\n"
-    "7. **Gallery.** `JackpotPreviewPanel.swift` is the JackpotUI sheet for registration chrome\n"
+    "7. **Gallery.** `JackpotPreviewPanel.swift` is the JackpotUI sheet for registration shell\n"
     "   (text field, checklist, dropdown, date, checkbox, progress, Next / Sign Up / Previous).\n"
-    "8. **FormNavigationBar.** Host chrome on `DynamicFormView`: Previous (`.jackpot(.secondary)`)\n"
+    "8. **FormNavigationBar.** Host shell on `DynamicFormView`: Previous (`.jackpot(.secondary)`)\n"
     "   on section 2, Next (`.jackpot`) while a later section exists, Sign Up (`.jackpot`) on\n"
     "   the last section."
 )
@@ -588,7 +588,7 @@ table(
         ["`textPrimary`", "#2F2F37", "#E1E1E5", "Titles and values (Android `titleText` / Text Priority)"],
         ["`textSecondary`", "#565A63", "#E1E1E5", "Labels and placeholders"],
         ["`textOnAccent`", "#FFFFFF", "#FFFFFF", "Label on `accentFill`"],
-        ["`accent`", "#0060EC", "#4D8FFF", "Tint, selected chrome (Android `link`)"],
+        ["`accent`", "#0060EC", "#4D8FFF", "Tint, selected shell (Android `link`)"],
         ["`accentFill`", "#0060EC", "#0060EC", "Primary button fill"],
         ["`error`", "#DF0000", "#FF6B6B", "Validation and load errors"],
         ["`warning`", "#945C05", "#F59E21", "Checklist incomplete"],
@@ -695,7 +695,7 @@ files(
         (
             "JackpotKit/Sources/JackpotUI/Preview/JackpotPreviewPanel.swift",
             "The panel wraps a preview in the themed surface. Resume **Gallery** for registration\n"
-            "chrome (Input / Dropdown / Checkbox / date / FormNavigationBar buttons).",
+            "shell (Input / Dropdown / Checkbox / date / FormNavigationBar buttons).",
         ),
         "JackpotKit/Tests/JackpotUITests/JackpotThemeTests.swift",
     ]
@@ -838,7 +838,7 @@ files(
         ),
         (
             "JackpotKit/Sources/JackpotFormsUI/DynamicFormView.swift",
-            "`FormNavigationBar` is the Next / Previous / Sign Up chrome. That is how step 1 becomes\n"
+            "`FormNavigationBar` is the Next / Previous / Sign Up shell. That is how step 1 becomes\n"
             "step 2. `RegistrationView` just hosts this view.",
         ),
         (

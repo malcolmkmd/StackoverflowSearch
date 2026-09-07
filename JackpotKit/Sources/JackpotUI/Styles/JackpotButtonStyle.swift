@@ -37,7 +37,7 @@ public struct JackpotButtonStyle: ButtonStyle {
                 }
                 .frame(maxWidth: .infinity, minHeight: theme.sizes.controlHeight)
                 .foregroundStyle(foreground)
-                .background { chrome }
+                .background { shell }
                 .contentShape(theme.sizes.fieldShape)
                 .opacity(configuration.isPressed ? 0.85 : 1)
                 .scaleEffect(configuration.isPressed ? 0.98 : 1)
@@ -49,7 +49,7 @@ public struct JackpotButtonStyle: ButtonStyle {
         private var isDimmed: Bool { !isEnabled && !isLoading }
 
         @ViewBuilder
-        private var chrome: some View {
+        private var shell: some View {
             switch prominence {
             case .primary:
                 theme.sizes.fieldShape.fill(isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill)
