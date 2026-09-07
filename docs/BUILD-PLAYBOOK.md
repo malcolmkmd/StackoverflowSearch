@@ -3,12 +3,11 @@
 Create the files in the order given. Run the commands where they appear. Open a PR where
 marked. Every file is reproduced in full, so a step is done when the file matches.
 
-This playbook is scoped to the **registration** path only:
-`DynamicFormView(formName: .registration)` driven by
-`JackpotKit/Sources/JackpotFormsUI/Resources/registration.json` (and the test fixture).
-Shared theme tokens stay because those screens consume them. Field types, components, and
-demos that registration never renders are listed under **Out of scope** and are not
-reproduced here.
+This playbook documents the **registration** path and the **preview harness** that renders
+every supported field type. Registration is `DynamicFormView(formName: .registration)` driven
+by `JackpotKit/Sources/JackpotFormsUI/Resources/registration.json` (mirrored under Tests).
+The live CRM schema at `config.jpc.africa/cron/forms/jackpotcity/JZA/registration` uses the
+same `fieldType` set. Shared theme tokens stay because both paths consume them.
 
 `JackpotKit` is one package; each folder under `Sources/` is a module, and later PRs append
 targets to the same manifest. The whole suite runs in a simulator via
@@ -19,12 +18,19 @@ imports `UIKit`.
 
 ### Registration catalog
 
-Twelve fields over two sections. `fieldType` values in the schema are **Input**, **Dropdown**,
-and **Checkbox** only. Date of birth is `Input` + `inputType: Calender`.
+Twelve fields over two sections. Re-checked against the bundled fixture, the test fixture,
+and the live CRM response. The only `fieldType` values on registration are **Input**,
+**Dropdown**, and **Checkbox**. Date of birth is `Input` + `inputType: Calender` (the schema
+spelling).
+
+`Divider` is **not** a registration field. `FormRowView` renders only the schema's visible
+fields through `FieldRenderer` — it does not insert `JackpotDivider` (or any other type)
+between rows. The SwiftUI `Divider()` on `FormSandboxView` is chrome between the form picker
+and the form, not a CRM `fieldType`.
 
 | Step | Identifier | `fieldType` | `inputType` | Renders as |
 | --- | --- | --- | --- | --- |
-| 1.1 | `username` | Input | Number | `JackpotTextField` + `+27` prefix, `.phoneNumber` / `.number` |
+| 1.1 | `username` | Input | Number | `JackpotTextField` + `+27` prefix (bundled), `.phoneNumber` / `.number` |
 | 1.2 | `password` | Input | Password | `JackpotTextField` + `JackpotChecklist` while focused |
 | 1.3 | `firstname` | Input | Text | `JackpotTextField`, `.givenName` |
 | 1.4 | `lastname` | Input | Text | `JackpotTextField`, `.familyName` |
@@ -37,25 +43,64 @@ and **Checkbox** only. Date of birth is `Input` + `inputType: Calender`.
 | 2.5 | `receivePromotionalInformation` | Checkbox | Text | Toggle + `.jackpotCheckbox` |
 | 2.6 | `terms` | Checkbox | Text | Toggle + `.jackpotCheckbox` (required `^true$`) |
 
+Live CRM matches those twelve identifiers and three `fieldType`s. The bundled capture still
+ships `username.prefix = "+27"`; the live payload currently leaves prefix empty (the view
+still maps `username` to `.phoneNumber`).
+
 Chrome the form actually uses: `JackpotLabeledField` / field chrome, `.jackpot` and
 `.jackpot(.secondary)` buttons (Next / Sign Up / Previous), `.jackpotBar` progress,
 `JackpotErrorView` on load failure, and the locked colour / spacing / size tokens below.
 
+### Kitchen-sink preview path
+
+`kitchenSink.json` is **not** a dead demo to strip. It is the bundled schema the preview
+harness decodes when you want every renderer on screen. Leave the Swift in the package.
+
+1. **Schema.** `JackpotFormsUI/Resources/kitchenSink.json` — `formCodeName: kitchenSink`,
+   two sections (Inputs / Choices). Types: `Input` (Text / Number / Password / Calender),
+   `Text Area`, `Divider`, `SignaturePad` (unknown — skipped, listed in DEBUG),
+   `Dropdown`, `Radio Group`, `Toggle`, `Checkbox`, `Welcome Offer`.
+2. **Name.** `FormName.kitchenSink` is in `FormName.bundled` with `.registration`.
+3. **Load.** `FormPreviewData.bundledForms` reads both JSON resources into
+   `StubFormRepository`. `.mock()` and the on-device sandbox use that dictionary.
+4. **Sandbox.** `FormSandboxView.mocked()` and `RegistrationSandbox` pick
+   Registration / All field types. Choosing All Fields loads `.kitchenSink` through
+   `DynamicFormView` — same engine as sign-up, different schema.
+5. **Canvas.** `JackpotForms/Previews.swift` → `DynamicFormView(formName: .kitchenSink)`
+   titled **All field types — from JSON**. That is the JSON-backed kitchen-sink preview.
+6. **FormPreview.** `PreviewFixtures.swift` is the hand-built twin used by per-field
+   `#Preview`s (`InputFieldView`, `DateFieldView`, …) and by `DynamicFormView` section
+   previews. Extra fixtures (`notes`, `contactMethod`, `welcomeOffer`) exist so those
+   Canvas canvases can render kitchen-sink types without decoding the bundle.
+7. **Gallery.** `JackpotPreviewPanel.swift` is the JackpotUI component sheet (text field,
+   checklist, dropdown, date, radio, checkbox, switch, welcome-offer cards, buttons).
+   Resume **Gallery** to check chrome without running the form engine.
+
+`Divider` **is** used on this path: kitchen-sink row `spacer` is `fieldType: Divider`, and
+`FieldRenderer` maps `.divider` to `JackpotDivider`. That is the only place the type appears.
+
+| `fieldType` | Where it renders in preview | On registration? |
+| --- | --- | --- |
+| Input | Kitchen-sink + Gallery + `FormPreview` field previews | Yes |
+| Dropdown | Kitchen-sink + Gallery + `DropdownFieldView` previews | Yes |
+| Checkbox | Kitchen-sink + Gallery + `CheckboxFieldView` previews | Yes |
+| Text Area | `TextAreaFieldView` ← kitchen-sink `notes` + `FormPreview.notes` | No |
+| Divider | `JackpotDivider` ← kitchen-sink `spacer` | No |
+| Radio Group | `RadioGroupFieldView` ← kitchen-sink + Gallery + `FormPreview.contactMethod` | No |
+| Toggle | `ToggleFieldView` (`.jackpotSwitch`) ← kitchen-sink `optIn` | No |
+| Welcome Offer | `WelcomeOfferFieldView` + Gallery cards / lock overlay | No |
+| SignaturePad | Unknown type — `EmptyView`, listed in `unsupportedFields` | No |
+
 ### Out of scope
 
-Present in the package for other forms or the kitchen-sink demo. **Not** part of
-registration, so this playbook does not reproduce them:
+Not used by registration **and** not needed to render the kitchen-sink / Gallery /
+`FormPreview` path. The playbook does not reproduce them. **Do not delete the Swift.**
 
-- **Field types:** `Text Area`, `Radio` / `Radio Group`, `Toggle`, `Divider`, `Welcome Offer`,
-  `Button`, `reCAPTCHA` v2/v3, `SignaturePad`, and any `unknown` CRM type
-- **Components:** `JackpotTextArea`, `JackpotRadioGroup`, `JackpotDivider`, `JackpotLockedOverlay`,
-  `JackpotCardButtonStyle`, `.jackpot(.tertiary)`, `.jackpotSwitch`
-- **Form views:** `TextAreaFieldView`, `RadioGroupFieldView`, `ToggleFieldView`,
-  `WelcomeOfferFieldView`, `RecaptchaPlaceholderView`
-- **Demos / fixtures:** `kitchenSink.json`, `FormName.kitchenSink`, `FormSandboxView`,
-  the JackpotUI **Gallery** preview (radio, welcome-offer cards, locked overlay, persist-login switch)
+- **Field types:** `Button` (footer owns navigation), `reCAPTCHA` v2/v3, `Radio` as a
+  distinct CRM spelling of `Radio Group` (the renderer already aliases both)
+- **Form views:** `RecaptchaPlaceholderView`
 - **Follow-up infra:** `JackpotAppData`, `TranslationsStore` / `TranslationsRepository`,
-  `ConditionalRequest` (ETag) — not on the registration call path
+  `ConditionalRequest` (ETag) — not on the registration or preview call path
 
 ---
 
@@ -63,7 +108,7 @@ registration, so this playbook does not reproduce them:
 
 The design system, with no knowledge of forms. Components take a value and a binding; the theme
 and the per-field configuration travel through the environment, so no component carries styling
-parameters. Only the pieces registration renders are listed below.
+parameters. Registration chrome plus the Gallery / kitchen-sink preview pieces.
 
 ### Colour tokens
 
@@ -487,7 +532,7 @@ private struct JackpotFontStyle: ViewModifier {
 **6.** `JackpotKit/Sources/JackpotUI/Styles/JackpotButtonStyle.swift`
 
 Registration uses `.jackpot` (Next / Sign Up) and `.jackpot(.secondary)` (Previous).
-`.jackpot(.tertiary)` and `JackpotCardButtonStyle` are kitchen-sink / welcome-offer only.
+`.jackpot(.tertiary)` and `JackpotCardButtonStyle` are the Gallery / Welcome Offer preview.
 
 ```swift
 import SwiftUI
@@ -609,7 +654,8 @@ public extension ButtonStyle where Self == JackpotCardButtonStyle {
 
 **7.** `JackpotKit/Sources/JackpotUI/Styles/JackpotToggleStyle.swift`
 
-Registration checkboxes use `.jackpotCheckbox`. `.jackpotSwitch` is the unused Toggle type.
+Registration checkboxes use `.jackpotCheckbox`. `.jackpotSwitch` is the kitchen-sink
+`Toggle` field and the Gallery persist-login row.
 
 ```swift
 import SwiftUI
@@ -745,8 +791,8 @@ private extension Double {
 
 **9.** `JackpotKit/Sources/JackpotUI/Fields/JackpotFieldChrome.swift`
 
-The shared background and the label/error row every registration field sits in.
-`JackpotDivider` in this file is unused on this path.
+The shared background and the label/error row every field sits in.
+`JackpotDivider` in this file is the kitchen-sink `Divider` type — not registration layout.
 
 ```swift
 import SwiftUI
@@ -853,8 +899,8 @@ public struct JackpotDivider: View {
 
 **10.** `JackpotKit/Sources/JackpotUI/Fields/JackpotFieldKind.swift`
 
-One value per input type the registration schema asks for, applied with `jackpotField(_:)`.
-`.oneTimeCode` is unused (no OTP field).
+Keyboard / autofill kinds applied with `jackpotField(_:)`. Registration uses text, name,
+email, phone, number, and new-password. `.oneTimeCode` is not on this form.
 
 ```swift
 import SwiftUI
@@ -1063,7 +1109,71 @@ public struct JackpotTextField: View {
 }
 ```
 
-**12.** `JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift`
+**12.** `JackpotKit/Sources/JackpotUI/Fields/JackpotTextArea.swift`
+
+Kitchen-sink `Text Area` (`notes`). Not a registration field.
+
+```swift
+import SwiftUI
+
+public struct JackpotTextArea: View {
+    @Binding private var text: String
+    private let placeholder: String
+    private var editingEndedAction: (() -> Void)?
+
+    @Environment(\.jackpotTheme) private var theme
+    @FocusState private var isFocused: Bool
+
+    public init(_ placeholder: String, text: Binding<String>) {
+        self.placeholder = placeholder
+        self._text = text
+    }
+
+    /// Fires on blur. Chain it before any `View` modifier, like `Gesture.onEnded`.
+    public func onEditingEnded(_ action: @escaping () -> Void) -> Self {
+        var copy = self
+        copy.editingEndedAction = action
+        return copy
+    }
+
+    public var body: some View {
+        ZStack(alignment: .topLeading) {
+            editor
+                .focused($isFocused)
+                .frame(minHeight: theme.sizes.textAreaMinHeight)
+                .padding(.s)
+                .jackpotTextStyle(\.fieldText)
+                .accessibilityLabel(placeholder)
+
+            if text.isEmpty {
+                Text(placeholder)
+                    .jackpotTextStyle(\.fieldText, color: \.textSecondary)
+                    .padding(.horizontal, .sm)
+                    .padding(.vertical, .m)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .jackpotFieldBackground(isFocused: isFocused)
+        .onChange(of: isFocused) { focused in
+            if !focused { editingEndedAction?() }
+        }
+    }
+
+    /// Before iOS 16 the only way to clear the editor's opaque background is
+    /// `UITextView.appearance()`, which would affect every text view in the app.
+    @ViewBuilder
+    private var editor: some View {
+        if #available(iOS 16.0, *) {
+            TextEditor(text: $text).scrollContentBackground(.hidden)
+        } else {
+            TextEditor(text: $text)
+        }
+    }
+}
+```
+
+**13.** `JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift`
 
 ```swift
 import SwiftUI
@@ -1130,7 +1240,53 @@ public struct JackpotDropdown: View {
 }
 ```
 
-**13.** `JackpotKit/Sources/JackpotUI/Fields/JackpotDateField.swift`
+**14.** `JackpotKit/Sources/JackpotUI/Fields/JackpotRadioGroup.swift`
+
+Kitchen-sink / Gallery `Radio Group`. Not a registration field.
+
+```swift
+import SwiftUI
+
+public struct JackpotRadioGroup: View {
+    @Binding private var selection: String?
+    private let options: [JackpotOption]
+
+    @Environment(\.jackpotTheme) private var theme
+
+    public init(selection: Binding<String?>, options: [JackpotOption]) {
+        self._selection = selection
+        self.options = options
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: .s) {
+            ForEach(options) { option in
+                row(for: option)
+            }
+        }
+    }
+
+    private func row(for option: JackpotOption) -> some View {
+        let isSelected = selection == option.id
+        return Button {
+            selection = option.id
+        } label: {
+            HStack(spacing: theme.sizes.spacing) {
+                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(isSelected ? theme.colors.accent : theme.colors.textSecondary)
+                    .animation(.easeOut(duration: 0.15), value: isSelected)
+                Text(option.label).jackpotTextStyle(\.rowLabel)
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: theme.sizes.minimumHitTarget)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+```
+
+**15.** `JackpotKit/Sources/JackpotUI/Fields/JackpotDateField.swift`
 
 The `Calender` input type: a read-only field presenting a graphical picker in a sheet.
 
@@ -1233,7 +1389,7 @@ public struct JackpotDateField: View {
 }
 ```
 
-**14.** `JackpotKit/Sources/JackpotUI/Components/JackpotChecklist.swift`
+**16.** `JackpotKit/Sources/JackpotUI/Components/JackpotChecklist.swift`
 
 The live password-rules panel on `password`.
 
@@ -1313,7 +1469,7 @@ public struct JackpotChecklist: View {
 }
 ```
 
-**15.** `JackpotKit/Sources/JackpotUI/Components/JackpotErrorView.swift`
+**17.** `JackpotKit/Sources/JackpotUI/Components/JackpotErrorView.swift`
 
 Shown when a form fails to load.
 
@@ -1363,7 +1519,200 @@ public struct JackpotErrorView: View {
 }
 ```
 
-**16.** `JackpotKit/Tests/JackpotUITests/JackpotThemeTests.swift`
+**18.** `JackpotKit/Sources/JackpotUI/Components/JackpotLockedOverlay.swift`
+
+Gallery and Welcome Offer preview — dims the offer cards until the form validates.
+
+```swift
+import SwiftUI
+
+public struct JackpotLockedOverlay: ViewModifier {
+    private let isLocked: Bool
+    private let message: String
+
+    @Environment(\.jackpotTheme) private var theme
+
+    public init(isLocked: Bool, message: String) {
+        self.isLocked = isLocked
+        self.message = message
+    }
+
+    public func body(content: Content) -> some View {
+        ZStack {
+            content
+                .opacity(isLocked ? 0.35 : 1)
+                .allowsHitTesting(!isLocked)
+                .accessibilityHidden(isLocked)
+
+            if isLocked {
+                Text(message)
+                    .jackpotTextStyle(\.sectionTitle)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, .l)
+                    .shadow(radius: .xxs)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: isLocked)
+    }
+}
+
+public extension View {
+    func jackpotLocked(_ isLocked: Bool, message: String) -> some View {
+        modifier(JackpotLockedOverlay(isLocked: isLocked, message: message))
+    }
+}
+```
+
+**19.** `JackpotKit/Sources/JackpotUI/Preview/JackpotPreviewPanel.swift`
+
+The panel wraps a preview in the themed surface. Resume the **Gallery** preview to check
+JackpotUI chrome without running the form engine.
+
+```swift
+#if DEBUG
+import SwiftUI
+
+public struct JackpotPreviewPanel<Content: View>: View {
+    private let title: String?
+    private let content: Content
+
+    public init(_ title: String? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: .sm) {
+            if let title {
+                Text(title).font(.caption).jackpotForegroundStyle(\.textSecondary)
+            }
+            content
+        }
+        .padding(.m)
+        .frame(width: 390)
+        .jackpotTheme(.jackpotCity)
+        .jackpotBackground(\.surface)
+    }
+}
+
+// MARK: - Component gallery
+
+struct JackpotUI_Previews: PreviewProvider {
+    struct Harness: View {
+        @State private var mobile = ""
+        @State private var email = ""
+        @State private var secret = "Passwo1"
+        @State private var touched = false
+        @State private var promotions = false
+        @State private var agreed = true
+        @State private var persistLogin = false
+        @State private var income: String? = nil
+        @State private var contactMethod: String? = "email"
+        @State private var dateOfBirth: Date? = nil
+        @State private var offer: String? = "depositMatch"
+
+        var body: some View {
+            ScrollView {
+                JackpotPreviewPanel("Gallery") {
+                    JackpotLabeledField("Mobile") {
+                        JackpotTextField("Enter Mobile Number", text: $mobile)
+                            .onEditingEnded { touched = true }
+                            .jackpotField(.phoneNumber)
+                            .jackpotFieldPrefix("+27")
+                    }
+
+                    JackpotLabeledField("Email") {
+                        JackpotTextField("Enter Email Address", text: $email)
+                            .jackpotField(.email)
+                    }
+
+                    JackpotLabeledField(error: "Password must be 8–20 characters") {
+                        JackpotTextField("Password", text: $secret)
+                            .jackpotField(.newPassword)
+                    }
+
+                    JackpotChecklist("Password Validity", items: [
+                        .init(id: "min", text: "Minimum of 8 characters", isSatisfied: false),
+                        .init(id: "max", text: "Maximum of 20 characters", isSatisfied: true),
+                    ])
+
+                    JackpotLabeledField("Source Of Income", error: "Please choose one") {
+                        JackpotDropdown("Enter Source Of Income", selection: $income, options: [
+                            .init(id: "salary", label: "Salary or Wages"),
+                            .init(id: "pension", label: "Pension or Grant"),
+                        ])
+                    }
+
+                    JackpotLabeledField("Date Of Birth") {
+                        JackpotDateField("Enter Date Of Birth", selection: $dateOfBirth)
+                    }
+
+                    JackpotLabeledField("Preferred Contact") {
+                        JackpotRadioGroup(selection: $contactMethod, options: [
+                            .init(id: "sms", label: "SMS"),
+                            .init(id: "email", label: "Email"),
+                        ])
+                    }
+
+                    Toggle("Send Jackpot City Promotions to me", isOn: $promotions)
+                        .toggleStyle(.jackpotCheckbox)
+                    Toggle("I am over 18 years of age & I accept the Terms & Conditions", isOn: $agreed)
+                        .toggleStyle(.jackpotCheckbox)
+                    Toggle("Keep me logged in", isOn: $persistLogin)
+                        .toggleStyle(.jackpotSwitch)
+
+                    ProgressView(value: 0.45).progressViewStyle(.jackpotBar)
+
+                    HStack(spacing: .sm) {
+                        offerCard("100% Deposit Match", id: "depositMatch")
+                        offerCard("50 Free Spins", id: "freeSpins")
+                    }
+                    .jackpotLocked(true, message: "Complete your registration above to unlock your Welcome offer selection")
+
+                    Button("Next") {}.buttonStyle(.jackpot).disabled(true)
+                    Button("Sign Up") {}.buttonStyle(.jackpot).jackpotLoading()
+                    Button("Previous") {}.buttonStyle(.jackpot(.secondary))
+                    Button("Skip for now") {}.buttonStyle(.jackpot(.tertiary))
+                }
+            }
+            .jackpotTheme(.jackpotCity)
+            .jackpotBackground(\.surface)
+        }
+
+        private func offerCard(_ label: String, id: String) -> some View {
+            Button { offer = id } label: {
+                Text(label).jackpotTextStyle(\.button).multilineTextAlignment(.center)
+            }
+            .buttonStyle(.jackpotCard)
+            .jackpotSelected(offer == id)
+        }
+    }
+
+    static var previews: some View {
+        Group {
+            Harness().preferredColorScheme(.dark).previewDisplayName("Gallery — dark")
+            Harness().preferredColorScheme(.light).previewDisplayName("Gallery — light")
+            JackpotPreviewPanel("Error") {
+                JackpotErrorView("The network connection was lost.").onRetry {}
+            }
+            .preferredColorScheme(.dark)
+            .previewDisplayName("Error — dark")
+            JackpotPreviewPanel("Error") {
+                JackpotErrorView("The network connection was lost.").onRetry {}
+            }
+            .preferredColorScheme(.light)
+            .previewDisplayName("Error — light")
+            Harness()
+                .environment(\.sizeCategory, .accessibilityLarge)
+                .previewDisplayName("Gallery — XL text")
+        }
+        .previewLayout(.sizeThatFits)
+    }
+}
+#endif
+```
+
+**20.** `JackpotKit/Tests/JackpotUITests/JackpotThemeTests.swift`
 
 ```swift
 import SwiftUI
@@ -1617,7 +1966,7 @@ final class JackpotOptionTests: XCTestCase {
 }
 ```
 
-**17.**
+**21.**
 
 ```bash
 cd JackpotKit
@@ -1630,8 +1979,9 @@ xcodebuild -scheme JackpotKit-Package -destination 'platform=iOS Simulator,name=
 
 `JackpotUITests: Executed 13 tests, with 0 failures`
 
-Check the registration field previews on `JackpotTextField`, `JackpotDropdown`,
-`JackpotDateField`, and `JackpotChecklist` — not the kitchen-sink Gallery.
+Open `JackpotPreviewPanel.swift` and resume the **Gallery** preview. Then check the
+registration field previews on `JackpotTextField`, `JackpotDropdown`, `JackpotDateField`,
+and `JackpotChecklist`.
 
 ---
 
@@ -1641,9 +1991,10 @@ Three modules pointing one way: `JackpotFormsDomain` (types and rules, no I/O),
 `JackpotFormsData` (wire shapes and the bundled stub), `JackpotFormsUI` (the engine and the
 renderer). Nothing here knows how a form is fetched — the engine only ever sees
 `FormRepository`, which is what lets PR 3 swap the stub for the network without touching it.
-The catalog is the registration schema, not every field type the decoder can accept.
+The catalog is the registration schema. Kitchen-sink types stay in the decoder and the
+preview harness so Canvas can render every supported field.
 
-**18.**
+**22.**
 
 ```bash
 mkdir -p JackpotKit/Sources/{JackpotFormsDomain,JackpotFormsData}
@@ -1651,7 +2002,7 @@ mkdir -p JackpotKit/Sources/JackpotFormsUI/{Fields,Demo,Resources}
 mkdir -p JackpotKit/Tests/JackpotFormsTests/Fixtures
 ```
 
-**19.** `JackpotKit/Package.swift` — add to `products:` and `targets:`
+**23.** `JackpotKit/Package.swift` — add to `products:` and `targets:`
 
 ```swift
         .library(
@@ -1673,9 +2024,10 @@ mkdir -p JackpotKit/Tests/JackpotFormsTests/Fixtures
         ),
 ```
 
-**20.** `JackpotKit/Sources/JackpotFormsDomain/FormName.swift`
+**24.** `JackpotKit/Sources/JackpotFormsDomain/FormName.swift`
 
-Registration uses `.registration`. `.kitchenSink` is a demo name, not this flow.
+`.registration` is the live form. `.kitchenSink` is the bundled preview schema — keep it;
+Canvas and the sandbox load it by this name.
 
 ```swift
 import Foundation
@@ -1728,7 +2080,7 @@ public extension FormName {
 }
 ```
 
-**21.** `JackpotKit/Sources/JackpotFormsDomain/FormValue.swift`
+**25.** `JackpotKit/Sources/JackpotFormsDomain/FormValue.swift`
 
 ```swift
 import Foundation
@@ -1821,10 +2173,11 @@ public struct FormSubmission: Equatable, Sendable {
 }
 ```
 
-**22.** `JackpotKit/Sources/JackpotFormsDomain/FormField.swift`
+**26.** `JackpotKit/Sources/JackpotFormsDomain/FormField.swift`
 
-The CRM type list is wider than registration. This flow only constructs Input, Dropdown,
-and Checkbox (plus `InputType.calendar` for DOB). `RadioOption` is unused here.
+The CRM type list is wider than registration. This flow constructs Input, Dropdown, and
+Checkbox (plus `InputType.calendar` for DOB). Kitchen-sink constructs the rest, including
+`Divider` and `RadioOption`.
 
 ```swift
 import Foundation
@@ -1988,7 +2341,7 @@ public struct FormField: Identifiable, Equatable, Hashable, Sendable {
 }
 ```
 
-**23.** `JackpotKit/Sources/JackpotFormsDomain/Form.swift`
+**27.** `JackpotKit/Sources/JackpotFormsDomain/Form.swift`
 
 ```swift
 import Foundation
@@ -2056,7 +2409,7 @@ public struct FormRow: Identifiable, Equatable, Sendable {
 }
 ```
 
-**24.** `JackpotKit/Sources/JackpotFormsDomain/FormSubmitResult.swift`
+**28.** `JackpotKit/Sources/JackpotFormsDomain/FormSubmitResult.swift`
 
 ```swift
 import Foundation
@@ -2108,7 +2461,7 @@ public struct FormComplianceResult: Equatable, Sendable {
 }
 ```
 
-**25.** `JackpotKit/Sources/JackpotFormsDomain/PasswordPolicy.swift`
+**29.** `JackpotKit/Sources/JackpotFormsDomain/PasswordPolicy.swift`
 
 ```swift
 import Foundation
@@ -2172,7 +2525,7 @@ public struct PasswordPolicy: PasswordPolicyProviding {
 }
 ```
 
-**26.** `JackpotKit/Sources/JackpotFormsDomain/RegexResolving.swift`
+**30.** `JackpotKit/Sources/JackpotFormsDomain/RegexResolving.swift`
 
 How a dropdown changes another field's rule: the schema names a pattern, this resolves it.
 
@@ -2220,7 +2573,7 @@ public extension String {
 }
 ```
 
-**27.** `JackpotKit/Sources/JackpotFormsDomain/FieldValidator.swift`
+**31.** `JackpotKit/Sources/JackpotFormsDomain/FieldValidator.swift`
 
 ```swift
 import Foundation
@@ -2301,7 +2654,7 @@ private final class RegexCache: @unchecked Sendable {
 }
 ```
 
-**28.** `JackpotKit/Sources/JackpotFormsDomain/FormLoadError.swift`
+**32.** `JackpotKit/Sources/JackpotFormsDomain/FormLoadError.swift`
 
 ```swift
 import Foundation
@@ -2334,7 +2687,7 @@ public enum FormLoadError: LocalizedError, Equatable {
 }
 ```
 
-**29.** `JackpotKit/Sources/JackpotFormsDomain/FormLocalizing.swift`
+**33.** `JackpotKit/Sources/JackpotFormsDomain/FormLocalizing.swift`
 
 ```swift
 import Foundation
@@ -2427,7 +2780,7 @@ public struct ClosureLocalizer: FormLocalizing {
 }
 ```
 
-**30.** `JackpotKit/Sources/JackpotFormsDomain/FormRepository.swift`
+**34.** `JackpotKit/Sources/JackpotFormsDomain/FormRepository.swift`
 
 ```swift
 import Foundation
@@ -2450,7 +2803,7 @@ public extension FormRepository {
 }
 ```
 
-**31.** `JackpotKit/Sources/JackpotFormsData/FormDTO.swift`
+**35.** `JackpotKit/Sources/JackpotFormsData/FormDTO.swift`
 
 ```swift
 import Foundation
@@ -2516,7 +2869,7 @@ public struct FieldRadioDTO: Decodable {
 }
 ```
 
-**32.** `JackpotKit/Sources/JackpotFormsData/FormMapper.swift`
+**36.** `JackpotKit/Sources/JackpotFormsData/FormMapper.swift`
 
 ```swift
 import Foundation
@@ -2583,7 +2936,7 @@ public enum FormMapper {
 }
 ```
 
-**33.** `JackpotKit/Sources/JackpotFormsData/StubFormRepository.swift`
+**37.** `JackpotKit/Sources/JackpotFormsData/StubFormRepository.swift`
 
 ```swift
 import Foundation
@@ -2637,20 +2990,21 @@ public struct StubFormRepository: FormRepository {
 }
 ```
 
-**34.**
+**38.**
 
 ```bash
 cp registration.json JackpotKit/Sources/JackpotFormsUI/Resources/registration.json
+cp kitchenSink.json  JackpotKit/Sources/JackpotFormsUI/Resources/kitchenSink.json
 cp JackpotKit/Sources/JackpotFormsUI/Resources/registration.json \
    JackpotKit/Tests/JackpotFormsTests/Fixtures/registration.json
 ```
 
 `registration.json` is the CRM's response saved verbatim — 12 fields over two sections.
-`JackpotFormsUI` processes it as a resource. The mirror under `Fixtures/` lets the suites load
-the schema from their own `Bundle.module` instead of reaching into another target's.
-`kitchenSink.json` exists in the package for the demo harness; it is not this flow.
+`kitchenSink.json` is the preview schema: every renderer, including `Divider`.
+`JackpotFormsUI` processes both as resources. The fixture mirror lets the suites load
+registration from their own `Bundle.module` instead of reaching into another target.
 
-**35.** `JackpotKit/Sources/JackpotFormsUI/FormDependencies.swift`
+**39.** `JackpotKit/Sources/JackpotFormsUI/FormDependencies.swift`
 
 ```swift
 import SwiftUI
@@ -2756,7 +3110,7 @@ public extension FormDependencies {
 #endif
 ```
 
-**36.** `JackpotKit/Sources/JackpotFormsUI/DynamicFormModel.swift`
+**40.** `JackpotKit/Sources/JackpotFormsUI/DynamicFormModel.swift`
 
 The engine. Two things here are worth reading closely: `touched` is why an untouched field
 stays silent until Next, and `applyRegexDependencies` is how selecting Passport relaxes the
@@ -3093,10 +3447,10 @@ public extension DynamicFormModel {
 #endif
 ```
 
-**37.** `JackpotKit/Sources/JackpotFormsUI/Demo/PreviewFixtures.swift`
+**41.** `JackpotKit/Sources/JackpotFormsUI/Demo/PreviewFixtures.swift`
 
-Hand-built fixtures mirroring the real registration schema. Extra kitchen-sink fields in
-this file (`notes`, `contactMethod`, `welcomeOffer`) are not on the registration path.
+Hand-built `FormPreview` fixtures. `registration` mirrors the CRM schema. Extra fields
+(`notes`, `contactMethod`, `welcomeOffer`) feed kitchen-sink Canvas previews.
 
 ```swift
 #if DEBUG
@@ -3270,10 +3624,11 @@ public enum FormPreview {
 #endif
 ```
 
-**38.** `JackpotKit/Sources/JackpotFormsUI/Fields/FieldRenderer.swift`
+**42.** `JackpotKit/Sources/JackpotFormsUI/Fields/FieldRenderer.swift`
 
-The switch is the whole contract. Registration only hits `.input` (including Calender →
-`DateFieldView`), `.dropdown`, and `.checkbox`. Other cases are CRM forwards-compat.
+The switch is the whole contract. Registration hits `.input` (Calender → `DateFieldView`),
+`.dropdown`, and `.checkbox`. Kitchen-sink also hits `.textArea`, `.divider` →
+`JackpotDivider`, `.toggle`, `.radio` / `.radioGroup`, and `.welcomeOffer`.
 
 ```swift
 import SwiftUI
@@ -3392,7 +3747,7 @@ extension DynamicFormModel {
 }
 ```
 
-**39.** `JackpotKit/Sources/JackpotFormsUI/Fields/InputFieldView.swift`
+**43.** `JackpotKit/Sources/JackpotFormsUI/Fields/InputFieldView.swift`
 
 ```swift
 import SwiftUI
@@ -3495,7 +3850,42 @@ struct InputFieldView_Previews: PreviewProvider {
 #endif
 ```
 
-**40.** `JackpotKit/Sources/JackpotFormsUI/Fields/DropdownFieldView.swift`
+**44.** `JackpotKit/Sources/JackpotFormsUI/Fields/TextAreaFieldView.swift`
+
+Kitchen-sink `Text Area`. Keep — the preview path renders it.
+
+```swift
+import SwiftUI
+import JackpotUI
+import JackpotFormsDomain
+
+struct TextAreaFieldView: View {
+    let field: FormField
+    @ObservedObject var model: DynamicFormModel
+
+    var body: some View {
+        JackpotLabeledField(model.localized(field.labelKey), error: model.error(for: field)) {
+            JackpotTextArea(model.localized(field.placeholderKey),
+                            text: model.text(for: field))
+                .onEditingEnded { model.markTouched(field) }
+                .disabled(field.isReadOnly)
+        }
+    }
+}
+
+#if DEBUG
+struct TextAreaFieldView_Previews: PreviewProvider {
+    static var previews: some View {
+        JackpotPreviewPanel("Empty") {
+            TextAreaFieldView(field: FormPreview.notes, model: FormPreview.model([FormPreview.notes]))
+        }
+        .previewLayout(.sizeThatFits)
+    }
+}
+#endif
+```
+
+**45.** `JackpotKit/Sources/JackpotFormsUI/Fields/DropdownFieldView.swift`
 
 ```swift
 import SwiftUI
@@ -3538,7 +3928,47 @@ struct DropdownFieldView_Previews: PreviewProvider {
 #endif
 ```
 
-**41.** `JackpotKit/Sources/JackpotFormsUI/Fields/DateFieldView.swift`
+**46.** `JackpotKit/Sources/JackpotFormsUI/Fields/RadioGroupFieldView.swift`
+
+Kitchen-sink / Gallery `Radio Group`. Keep — the preview path renders it.
+
+```swift
+import SwiftUI
+import JackpotUI
+import JackpotFormsDomain
+
+struct RadioGroupFieldView: View {
+    let field: FormField
+    @ObservedObject var model: DynamicFormModel
+
+    var body: some View {
+        JackpotLabeledField(model.localized(field.labelKey), error: model.error(for: field)) {
+            JackpotRadioGroup(selection: model.selection(for: field),
+                              options: model.radioOptions(for: field))
+                .disabled(field.isReadOnly)
+        }
+    }
+}
+
+#if DEBUG
+struct RadioGroupFieldView_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            JackpotPreviewPanel("Nothing chosen") {
+                RadioGroupFieldView(field: FormPreview.contactMethod, model: FormPreview.model([FormPreview.contactMethod]))
+            }.previewDisplayName("Radio — empty")
+            JackpotPreviewPanel("Chosen") {
+                RadioGroupFieldView(field: FormPreview.contactMethod,
+                                    model: FormPreview.model([FormPreview.contactMethod], values: ["contactMethod": .option("email")]))
+            }.previewDisplayName("Radio — selected")
+        }
+        .previewLayout(.sizeThatFits)
+    }
+}
+#endif
+```
+
+**47.** `JackpotKit/Sources/JackpotFormsUI/Fields/DateFieldView.swift`
 
 ```swift
 import SwiftUI
@@ -3586,9 +4016,10 @@ struct DateFieldView_Previews: PreviewProvider {
 #endif
 ```
 
-**42.** `JackpotKit/Sources/JackpotFormsUI/Fields/CheckboxFieldView.swift`
+**48.** `JackpotKit/Sources/JackpotFormsUI/Fields/CheckboxFieldView.swift`
 
-`receivePromotionalInformation` and `terms`. `ToggleFieldView` in this file is unused.
+`receivePromotionalInformation` and `terms`. `ToggleFieldView` in this file is the
+kitchen-sink `Toggle` type (`.jackpotSwitch`).
 
 ```swift
 import SwiftUI
@@ -3644,7 +4075,78 @@ struct CheckboxFieldView_Previews: PreviewProvider {
 #endif
 ```
 
-**43.** `JackpotKit/Sources/JackpotFormsUI/DynamicFormView.swift`
+**49.** `JackpotKit/Sources/JackpotFormsUI/Fields/WelcomeOfferFieldView.swift`
+
+Kitchen-sink / Gallery Welcome Offer. Keep — the preview path renders it.
+
+```swift
+import SwiftUI
+import JackpotUI
+import JackpotFormsDomain
+
+/// "Welcome Offer" is a first-class field type in the builder's type list. Options come from
+/// `fieldDropdowns`; the picker unlocks with `model.isFormValid`, matching the design.
+struct WelcomeOfferFieldView: View {
+    let field: FormField
+    @ObservedObject var model: DynamicFormModel
+
+    private var isUnlocked: Bool { model.isFormValid }
+    private var selected: String { model.value(for: field).stringValue }
+
+    var body: some View {
+        VStack(spacing: .sm) {
+            Text(model.localized(field.labelKey))
+                .jackpotTextStyle(\.sectionTitle)
+
+            HStack(spacing: .sm) {
+                ForEach(model.options(for: field)) { option in
+                    Button {
+                        model.setValue(.option(option.id), for: field)
+                        model.markTouched(field)
+                    } label: {
+                        Text(option.label)
+                            .jackpotTextStyle(\.button)
+                            .multilineTextAlignment(.center)
+                    }
+                    .buttonStyle(.jackpotCard)
+                    .jackpotSelected(selected == option.id)
+                }
+            }
+            .disabled(!isUnlocked)
+            .jackpotLocked(!isUnlocked, message: "Complete your registration above to unlock your Welcome offer selection")
+
+            Button("Not yet") {
+                model.setValue(.option(""), for: field)
+                model.markTouched(field)
+            }
+            .buttonStyle(.jackpot(.secondary))
+            .disabled(!isUnlocked)
+        }
+    }
+}
+
+#if DEBUG
+struct WelcomeOfferFieldView_Previews: PreviewProvider {
+    private static let fields = [FormPreview.mobile, FormPreview.email, FormPreview.welcomeOffer]
+
+    static var previews: some View {
+        Group {
+            JackpotPreviewPanel("Locked") {
+                WelcomeOfferFieldView(field: FormPreview.welcomeOffer, model: FormPreview.model(fields))
+            }.previewDisplayName("Welcome offer — locked")
+            JackpotPreviewPanel("Unlocked · selected") {
+                WelcomeOfferFieldView(field: FormPreview.welcomeOffer, model: FormPreview.model(fields, values: [
+                    "username": .text("849134302"), "email": .text("hi@example.com"), "welcomeOffer": .option("depositMatch"),
+                ]))
+            }.previewDisplayName("Welcome offer — selected")
+        }
+        .previewLayout(.sizeThatFits)
+    }
+}
+#endif
+```
+
+**50.** `JackpotKit/Sources/JackpotFormsUI/DynamicFormView.swift`
 
 ```swift
 import SwiftUI
@@ -3895,9 +4397,9 @@ struct DynamicFormView_Previews: PreviewProvider {
 #endif
 ```
 
-**44.** `JackpotKit/Sources/JackpotFormsUI/Demo/PreviewSupport.swift`
+**51.** `JackpotKit/Sources/JackpotFormsUI/Demo/PreviewSupport.swift`
 
-The registration copy table used by previews and `.mock()`.
+Registration copy table, plus `FormPreviewData.bundledForms` (registration + kitchen-sink).
 
 ```swift
 import Foundation
@@ -3970,7 +4472,128 @@ public enum FormPreviewData {
 }
 ```
 
-**45.** `JackpotKit/Tests/JackpotFormsTests/FormDecodingTests.swift`
+**52.** `JackpotKit/Sources/JackpotFormsUI/Demo/FormSandboxView.swift`
+
+The review harness: pick Registration or All field types (kitchen-sink) and submit into
+a sheet. `RegistrationSandbox` in the app target wraps this.
+
+```swift
+import SwiftUI
+import JackpotFormsDomain
+import JackpotUI
+
+/// The review harness: pick a form, watch it render from JSON alone, submit it, and read back
+/// exactly what the callback received. Nothing here is app-specific.
+public struct FormSandboxView: View {
+
+    public struct Sample: Identifiable, Hashable {
+        public let id: FormName
+        public let title: String
+        public init(id: FormName, title: String) {
+            self.id = id
+            self.title = title
+        }
+    }
+
+    private let samples: [Sample]
+    private let dependencies: FormDependencies
+
+    @State private var selected: Sample
+    @State private var lastSubmission: [String: String]?
+    @State private var showsSubmission = false
+
+    public init(samples: [Sample], dependencies: FormDependencies) {
+        precondition(!samples.isEmpty, "FormSandboxView needs at least one sample form")
+        self.samples = samples
+        self.dependencies = dependencies
+        _selected = State(initialValue: samples[0])
+    }
+
+    public var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                picker
+                Divider()
+                DynamicFormView(formName: selected.id) { submission in
+                    // Deliberately not posting anywhere: the sandbox proves the callback
+                    // contract, not the registration endpoint.
+                    lastSubmission = submission.stringValues
+                    showsSubmission = true
+                }
+                .id(selected.id)                 // rebuild the engine when the form changes
+                .formDependencies(dependencies)
+            }
+            .navigationTitle("Form Sandbox")
+            .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showsSubmission) {
+                SubmissionResultView(values: lastSubmission ?? [:])
+            }
+        }
+        .navigationViewStyle(.stack)
+    }
+
+    private var picker: some View {
+        Picker("Form", selection: $selected) {
+            ForEach(samples) { sample in
+                Text(sample.title).tag(sample)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.sm)
+    }
+}
+
+struct SubmissionResultView: View {
+    let values: [String: String]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            List(values.keys.sorted(), id: \.self) { key in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(key).font(.caption).foregroundColor(.secondary)
+                    Text(values[key]?.isEmpty == false ? values[key]! : "—")
+                        .font(.body.monospaced())
+                }
+            }
+            .navigationTitle("Submitted")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .navigationViewStyle(.stack)
+    }
+}
+
+#if DEBUG
+struct FormSandboxView_Previews: PreviewProvider {
+    /// Serves the hand-built fixtures, so the sandbox previews without the bundle.
+    private struct FixtureRepository: FormRepository {
+        func form(named name: FormName) async throws -> FormSchema {
+            try await Task.sleep(nanoseconds: 300_000_000)
+            return FormPreview.registration
+        }
+
+        func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult { FormSubmitResult() }
+    }
+
+    static var previews: some View {
+        FormSandboxView(
+            samples: [.init(id: .registration, title: "Registration")],
+            dependencies: FormDependencies(repository: FixtureRepository(),
+                                           localizer: ComposedKeyLocalizer.jpcRegistration)
+        )
+        .preferredColorScheme(.dark)
+        .previewDisplayName("Sandbox")
+    }
+}
+#endif
+```
+
+**53.** `JackpotKit/Tests/JackpotFormsTests/FormDecodingTests.swift`
 
 ```swift
 import XCTest
@@ -4088,7 +4711,7 @@ final class FormNameTests: XCTestCase {
 }
 ```
 
-**46.** `JackpotKit/Tests/JackpotFormsTests/FieldValidatorTests.swift`
+**54.** `JackpotKit/Tests/JackpotFormsTests/FieldValidatorTests.swift`
 
 ```swift
 import XCTest
@@ -4236,7 +4859,7 @@ final class FieldValidatorTests: XCTestCase {
 }
 ```
 
-**47.** `JackpotKit/Tests/JackpotFormsTests/DynamicFormModelTests.swift`
+**55.** `JackpotKit/Tests/JackpotFormsTests/DynamicFormModelTests.swift`
 
 The behaviour a user experiences: untouched fields stay silent, Next reveals every error at
 once, section gating, submit blocked while invalid, and the payload keyed by
@@ -4601,7 +5224,7 @@ final class IDTypeRegexDependencyTests: XCTestCase {
 }
 ```
 
-**48.**
+**56.**
 
 ```bash
 cd JackpotKit
@@ -4614,7 +5237,8 @@ xcodebuild -scheme JackpotKit-Package -destination 'platform=iOS Simulator,name=
 
 `JackpotFormsTests: Executed 48 tests, with 0 failures`
 
-Open `DynamicFormView.swift` and resume the registration whole-form previews.
+Open `DynamicFormView.swift` and resume the registration whole-form previews. Open
+`JackpotForms/Previews.swift` and resume **All field types — from JSON** (kitchen-sink).
 
 ---
 
@@ -4625,14 +5249,14 @@ is the point of the protocol. `JackpotForms` arrives as the composition target: 
 module that sees both the network and the UI, so it is the only one that has to change when the
 wiring does.
 
-**49.**
+**57.**
 
 ```bash
 mkdir -p JackpotKit/Sources/{JackpotNetworking,JackpotLocalization,JackpotFormsRemote,JackpotForms}
 mkdir -p JackpotKit/Tests/{JackpotNetworkingTests,JackpotLocalizationTests}
 ```
 
-**50.** `JackpotKit/Package.swift` — add to `products:` and `targets:`
+**58.** `JackpotKit/Package.swift` — add to `products:` and `targets:`
 
 `JackpotFormsRemote` and `JackpotForms` join the `JackpotForms` library product, and
 `JackpotFormsTests` gains all four new targets as dependencies.
@@ -4663,7 +5287,7 @@ mkdir -p JackpotKit/Tests/{JackpotNetworkingTests,JackpotLocalizationTests}
         ),
 ```
 
-**51.** `JackpotKit/Sources/JackpotNetworking/HTTPMethod.swift`
+**59.** `JackpotKit/Sources/JackpotNetworking/HTTPMethod.swift`
 
 ```swift
 import Foundation
@@ -4673,7 +5297,7 @@ public enum HTTPMethod: String, Sendable {
 }
 ```
 
-**52.** `JackpotKit/Sources/JackpotNetworking/HTTPClient.swift`
+**60.** `JackpotKit/Sources/JackpotNetworking/HTTPClient.swift`
 
 ```swift
 import Foundation
@@ -4709,7 +5333,7 @@ public struct URLSessionHTTPClient: HTTPClient {
 }
 ```
 
-**53.** `JackpotKit/Sources/JackpotNetworking/APIEnvironment.swift`
+**61.** `JackpotKit/Sources/JackpotNetworking/APIEnvironment.swift`
 
 ```swift
 import Foundation
@@ -4732,7 +5356,7 @@ public struct APIEnvironment: Sendable {
 }
 ```
 
-**54.** `JackpotKit/Sources/JackpotNetworking/APIEndpoint.swift`
+**62.** `JackpotKit/Sources/JackpotNetworking/APIEndpoint.swift`
 
 ```swift
 import Foundation
@@ -4801,7 +5425,7 @@ public extension APIEndpoint {
 }
 ```
 
-**55.** `JackpotKit/Sources/JackpotNetworking/APIError.swift`
+**63.** `JackpotKit/Sources/JackpotNetworking/APIError.swift`
 
 ```swift
 import Foundation
@@ -4890,7 +5514,7 @@ public enum APIError: Error, Sendable, Equatable {
 }
 ```
 
-**56.** `JackpotKit/Sources/JackpotNetworking/RequestInterceptor.swift`
+**64.** `JackpotKit/Sources/JackpotNetworking/RequestInterceptor.swift`
 
 ```swift
 import Foundation
@@ -4932,7 +5556,7 @@ public struct BearerTokenInterceptor: RequestInterceptor {
 }
 ```
 
-**57.** `JackpotKit/Sources/JackpotNetworking/RemoteApiClient.swift`
+**65.** `JackpotKit/Sources/JackpotNetworking/RemoteApiClient.swift`
 
 ```swift
 import Foundation
@@ -5073,7 +5697,7 @@ public struct RemoteApiClient: ApiClient {
 }
 ```
 
-**58.** `JackpotKit/Tests/JackpotNetworkingTests/MockHTTPClient.swift`
+**66.** `JackpotKit/Tests/JackpotNetworkingTests/MockHTTPClient.swift`
 
 ```swift
 import Foundation
@@ -5167,7 +5791,7 @@ extension APIEnvironment {
 }
 ```
 
-**59.** `JackpotKit/Tests/JackpotNetworkingTests/APIEndpointTests.swift`
+**67.** `JackpotKit/Tests/JackpotNetworkingTests/APIEndpointTests.swift`
 
 ```swift
 import XCTest
@@ -5232,7 +5856,7 @@ final class APIEndpointTests: XCTestCase {
 }
 ```
 
-**60.** `JackpotKit/Tests/JackpotNetworkingTests/APIProblemTests.swift`
+**68.** `JackpotKit/Tests/JackpotNetworkingTests/APIProblemTests.swift`
 
 ```swift
 import XCTest
@@ -5298,7 +5922,7 @@ final class APIProblemTests: XCTestCase {
 }
 ```
 
-**61.** `JackpotKit/Tests/JackpotNetworkingTests/RemoteApiClientTests.swift`
+**69.** `JackpotKit/Tests/JackpotNetworkingTests/RemoteApiClientTests.swift`
 
 The retry policy is the part worth asserting: a 5xx or a dropped connection is retried, a
 4xx never is, and a non-idempotent request is retried only when the transport failed before
@@ -5512,7 +6136,7 @@ private func AssertThrows<T>(_ expression: @autoclosure () async throws -> T,
 }
 ```
 
-**62.**
+**70.**
 
 ```bash
 cd JackpotKit
@@ -5521,7 +6145,7 @@ xcodebuild -scheme JackpotKit-Package -destination 'platform=iOS Simulator,name=
 
 `JackpotNetworkingTests: Executed 34 tests`. Now the repository.
 
-**63.** `JackpotKit/Sources/JackpotLocalization/Translations.swift`
+**71.** `JackpotKit/Sources/JackpotLocalization/Translations.swift`
 
 The session's localisation table. Two lookups matter: keys are tried region-suffixed first
 (`terms-jza` before `terms`), and API error codes are keys too, which is what lets a server
@@ -5581,7 +6205,7 @@ public struct Translations: Sendable, Equatable {
 }
 ```
 
-**64.** `JackpotKit/Sources/JackpotFormsRemote/CRMEnvironment.swift`
+**72.** `JackpotKit/Sources/JackpotFormsRemote/CRMEnvironment.swift`
 
 ```swift
 import Foundation
@@ -5613,7 +6237,7 @@ public extension APIEnvironment {
 }
 ```
 
-**65.** `JackpotKit/Sources/JackpotFormsRemote/FormEndpoints.swift`
+**73.** `JackpotKit/Sources/JackpotFormsRemote/FormEndpoints.swift`
 
 ```swift
 import Foundation
@@ -5798,7 +6422,7 @@ extension FormComplianceResult {
 }
 ```
 
-**66.** `JackpotKit/Sources/JackpotFormsRemote/FormErrorMapper.swift`
+**74.** `JackpotKit/Sources/JackpotFormsRemote/FormErrorMapper.swift`
 
 The boundary that decides what the user reads. `JackpotFormsUI` cannot see `APIError`, so
 anything not translated here becomes a generic failure on screen.
@@ -5851,7 +6475,7 @@ enum FormErrorMapper {
 }
 ```
 
-**67.** `JackpotKit/Sources/JackpotFormsRemote/RemoteFormRepository.swift`
+**75.** `JackpotKit/Sources/JackpotFormsRemote/RemoteFormRepository.swift`
 
 ```swift
 import Foundation
@@ -5920,7 +6544,7 @@ public struct RemoteFormRepository: FormRepository {
 }
 ```
 
-**68.** `JackpotKit/Sources/JackpotForms/TranslationsLocalizer.swift`
+**76.** `JackpotKit/Sources/JackpotForms/TranslationsLocalizer.swift`
 
 ```swift
 import Foundation
@@ -5954,10 +6578,10 @@ public struct TranslationsLocalizer: FormLocalizing {
 }
 ```
 
-**69.** `JackpotKit/Sources/JackpotForms/JackpotForms.swift`
+**77.** `JackpotKit/Sources/JackpotForms/JackpotForms.swift`
 
-The composition root: `.mock` for previews, `.live` for the app. The `FormSandboxView`
-extension in this file is kitchen-sink demo wiring, not the registration screen.
+The composition root: `.mock` for previews (bundled registration + kitchen-sink),
+`.live` for the app. `FormSandboxView.mocked()` is the preview harness.
 
 ```swift
 import Foundation
@@ -6046,10 +6670,10 @@ public extension FormSandboxView {
 }
 ```
 
-**70.** `JackpotKit/Sources/JackpotForms/Previews.swift`
+**78.** `JackpotKit/Sources/JackpotForms/Previews.swift`
 
-JSON-backed registration previews (loading / offline / 404). The kitchen-sink and sandbox
-previews in this file are out of scope.
+JSON-backed previews: registration (loading / offline / 404) and
+`DynamicFormView(formName: .kitchenSink)` — **All field types — from JSON**.
 
 ```swift
 #if DEBUG
@@ -6103,7 +6727,7 @@ struct MockedSandbox_Previews: PreviewProvider {
 #endif
 ```
 
-**71.** `JackpotKit/Tests/JackpotLocalizationTests/TranslationsTests.swift`
+**79.** `JackpotKit/Tests/JackpotLocalizationTests/TranslationsTests.swift`
 
 ```swift
 import XCTest
@@ -6233,7 +6857,7 @@ final class TranslationsTests: XCTestCase {
 }
 ```
 
-**72.** `JackpotKit/Tests/JackpotFormsTests/FormErrorMappingTests.swift`
+**80.** `JackpotKit/Tests/JackpotFormsTests/FormErrorMappingTests.swift`
 
 ```swift
 import XCTest
@@ -6386,7 +7010,7 @@ final class TranslationsAsFormLocalizerTests: XCTestCase {
 }
 ```
 
-**73.** `JackpotKit/Tests/JackpotFormsTests/FormRepositoryTests.swift`
+**81.** `JackpotKit/Tests/JackpotFormsTests/FormRepositoryTests.swift`
 
 Both repositories are driven through the same protocol here, which is the check that the
 stub and the live one are actually interchangeable.
@@ -6598,7 +7222,7 @@ final class ScriptedApiClient: ApiClient, @unchecked Sendable {
 }
 ```
 
-**74.**
+**82.**
 
 ```bash
 cd JackpotKit
@@ -6620,14 +7244,14 @@ xcodebuild -scheme JackpotKit-Package -destination 'platform=iOS Simulator,name=
 The feature: a registration service, the screen that drives the two-page form, and the
 `UIHostingController` the existing popup container can hold as-is.
 
-**75.**
+**83.**
 
 ```bash
 mkdir -p JackpotKit/Sources/JackpotRegistration
 mkdir -p JackpotKit/Tests/JackpotRegistrationTests
 ```
 
-**76.** `JackpotKit/Package.swift` — add to `products:` and `targets:`
+**84.** `JackpotKit/Package.swift` — add to `products:` and `targets:`
 
 ```swift
         .library(name: "JackpotRegistration", targets: ["JackpotRegistration"]),
@@ -6653,7 +7277,7 @@ mkdir -p JackpotKit/Tests/JackpotRegistrationTests
         ),
 ```
 
-**77.** `JackpotKit/Sources/JackpotRegistration/RegistrationService.swift`
+**85.** `JackpotKit/Sources/JackpotRegistration/RegistrationService.swift`
 
 ```swift
 import Foundation
@@ -6782,7 +7406,7 @@ public enum RegistrationError: LocalizedError, Equatable {
 }
 ```
 
-**78.** `JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift`
+**86.** `JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift`
 
 ```swift
 import SwiftUI
@@ -6839,7 +7463,7 @@ public struct RegistrationView: View {
 }
 ```
 
-**79.** `JackpotKit/Sources/JackpotRegistration/RegistrationPanelController.swift`
+**87.** `JackpotKit/Sources/JackpotRegistration/RegistrationPanelController.swift`
 
 A drop-in for the view controller PR 5 deletes: same `addChild`/`popupContainer` call site,
 SwiftUI behind it.
@@ -6879,7 +7503,7 @@ public final class RegistrationPanelController: UIHostingController<Registration
 }
 ```
 
-**80.** `JackpotKit/Sources/JackpotRegistration/Previews.swift`
+**88.** `JackpotKit/Sources/JackpotRegistration/Previews.swift`
 
 ```swift
 #if DEBUG
@@ -6913,7 +7537,7 @@ struct RegistrationView_Previews: PreviewProvider {
 #endif
 ```
 
-**81.** `JackpotKit/Tests/JackpotRegistrationTests/RegistrationServiceTests.swift`
+**89.** `JackpotKit/Tests/JackpotRegistrationTests/RegistrationServiceTests.swift`
 
 ```swift
 import XCTest
@@ -7030,7 +7654,7 @@ private struct FakeFormRepository: FormRepository {
 }
 ```
 
-**82.**
+**90.**
 
 ```bash
 cd JackpotKit
@@ -7052,7 +7676,7 @@ Open `Previews.swift` and run the flow end to end.
 **In Xcode:** File → Add Package Dependencies → Add Local… → `JackpotKit`, then add
 **JackpotRegistration** to the app target's frameworks.
 
-**83.** `Sources/Features/Registration/RegistrationPresenter.swift`
+**91.** `Sources/Features/Registration/RegistrationPresenter.swift`
 
 `ClosureLocalizer` is the migration seam. The app's `getTranslation` returns the key itself on
 a miss; mapping that back to `nil` is what lets the engine fall through to humanised copy instead
@@ -7095,14 +7719,14 @@ extension MainViewController {
 }
 ```
 
-**84.** Point every existing entry point at `presentRegistration()`:
+**92.** Point every existing entry point at `presentRegistration()`:
 
 - the header **SIGN UP** button
 - the bottom bar **Sign Up** item
 - `NavigationHandler` — the `registration` sitemap branch
 - the Login panel's **Sign Up ›** link
 
-**85.** Delete:
+**93.** Delete:
 
 ```
 RegistrationViewController.swift
@@ -7121,7 +7745,7 @@ flowOneViewController
 flowTwoViewController
 ```
 
-**86.**
+**94.**
 
 ```bash
 grep -rn "registrationPopup\|flowOneViewController\|flowTwoViewController" --include=*.swift .
