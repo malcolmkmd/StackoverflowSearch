@@ -52,14 +52,26 @@ public extension View {
 struct JackpotFloatingLabel: View {
     let title: String
     let isFloating: Bool
+    var isFocused: Bool = false
+
+    @Environment(\.jackpotTheme) private var theme
 
     var body: some View {
         Text(title)
-            .jackpotTextStyle(isFloating ? \.label : \.fieldText, color: \.textSecondary)
+            .font(isFloating ? theme.typography.label : theme.typography.fieldText)
+            .environment(\.font, isFloating ? theme.typography.label : theme.typography.fieldText)
+            .foregroundStyle(labelColor)
+            .scaleEffect(isFloating ? 0.75 : 1, anchor: .leading)
             .lineLimit(1)
-            .minimumScaleFactor(0.8)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+
+    private var labelColor: Color {
+        if isFloating {
+            return isFocused ? theme.colors.accent : theme.colors.textPrimary
+        }
+        return theme.colors.textSecondary
     }
 }
 

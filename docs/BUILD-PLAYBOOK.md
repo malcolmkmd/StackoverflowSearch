@@ -786,14 +786,26 @@ public extension View {
 struct JackpotFloatingLabel: View {
     let title: String
     let isFloating: Bool
+    var isFocused: Bool = false
+
+    @Environment(\.jackpotTheme) private var theme
 
     var body: some View {
         Text(title)
-            .jackpotTextStyle(isFloating ? \.label : \.fieldText, color: \.textSecondary)
+            .font(isFloating ? theme.typography.label : theme.typography.fieldText)
+            .environment(\.font, isFloating ? theme.typography.label : theme.typography.fieldText)
+            .foregroundStyle(labelColor)
+            .scaleEffect(isFloating ? 0.75 : 1, anchor: .leading)
             .lineLimit(1)
-            .minimumScaleFactor(0.8)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+
+    private var labelColor: Color {
+        if isFloating {
+            return isFocused ? theme.colors.accent : theme.colors.textPrimary
+        }
+        return theme.colors.textSecondary
     }
 }
 
@@ -993,7 +1005,7 @@ public struct JackpotTextField: View {
                     // VoiceOver to stumble over a stray "+27".
                     .accessibilityLabel(prefix.isEmpty ? Text(placeholder) : Text("\(placeholder), \(prefix)"))
 
-                JackpotFloatingLabel(title: placeholder, isFloating: isFloating)
+                JackpotFloatingLabel(title: placeholder, isFloating: isFloating, isFocused: isFocused)
                     .offset(y: isFloating ? -16 : 0)
             }
             .padding(.horizontal, theme.sizes.contentPadding)
@@ -1111,7 +1123,6 @@ public struct JackpotDropdown: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.down").jackpotForegroundStyle(\.textPrimary)
             }
-            .jackpotFont(\.fieldText)
             .padding(.horizontal, theme.sizes.contentPadding)
             .frame(height: theme.sizes.controlHeight)
             .jackpotFieldBackground()

@@ -63,7 +63,7 @@ public struct JackpotTextField: View {
                     // VoiceOver to stumble over a stray "+27".
                     .accessibilityLabel(prefix.isEmpty ? Text(placeholder) : Text("\(placeholder), \(prefix)"))
 
-                JackpotFloatingLabel(title: placeholder, isFloating: isFloating)
+                JackpotFloatingLabel(title: placeholder, isFloating: isFloating, isFocused: isFocused)
                     .offset(y: isFloating ? -16 : 0)
             }
             .padding(.horizontal, theme.sizes.contentPadding)

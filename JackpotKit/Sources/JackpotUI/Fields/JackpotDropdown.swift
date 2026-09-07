@@ -51,7 +51,6 @@ public struct JackpotDropdown: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.down").jackpotForegroundStyle(\.textPrimary)
             }
-            .jackpotFont(\.fieldText)
             .padding(.horizontal, theme.sizes.contentPadding)
             .frame(height: theme.sizes.controlHeight)
             .jackpotFieldBackground()
