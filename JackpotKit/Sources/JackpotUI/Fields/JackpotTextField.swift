@@ -79,7 +79,7 @@ public struct JackpotTextField: View {
                         .jackpotForegroundStyle(\.textPrimary)
                 }
                 .frame(width: theme.sizes.minimumHitTarget, height: theme.sizes.minimumHitTarget)
-                .padding(.trailing, JackpotSpacing.xs)
+                .padding(.trailing, .xs)
                 .accessibilityLabel(isRevealed ? "Hide password" : "Show password")
             }
         }

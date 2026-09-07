@@ -59,7 +59,7 @@ public struct FormSandboxView: View {
             }
         }
         .pickerStyle(.segmented)
-        .padding(JackpotSpacing.sm)
+        .padding(.sm)
     }
 }
 

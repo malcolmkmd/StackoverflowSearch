@@ -79,7 +79,7 @@ struct DynamicFormBody: View {
                 if model.sections.count > 1 {
                     ProgressView(value: model.progress)
                         .progressViewStyle(.jackpotBar)
-                        .padding(.horizontal, JackpotSpacing.m).padding(.top, JackpotSpacing.sm)
+                        .padding(.horizontal, .m).padding(.top, .sm)
                         .accessibilityLabel("Form progress")
                 }
 
@@ -99,7 +99,7 @@ struct DynamicFormBody: View {
                         }
                         #endif
                     }
-                    .padding(JackpotSpacing.m)
+                    .padding(.m)
                     // New identity per section is what lets the transition run at all; the
                     // nav bar and progress bar sit outside it so they don't slide too.
                     .id(model.sectionIndex)
@@ -110,7 +110,7 @@ struct DynamicFormBody: View {
                                   onSubmit: onSubmit,
                                   advance: advance,
                                   goBack: goBack)
-                    .padding(.horizontal, JackpotSpacing.m).padding(.vertical, JackpotSpacing.sm)
+                    .padding(.horizontal, .m).padding(.vertical, .sm)
             }
             .jackpotBackground(\.surface)
             .jackpotFocusedField($focusedField)
@@ -169,7 +169,7 @@ struct FormRowView: View {
         if visible.count == 1 {
             FieldRenderer(field: visible[0], model: model)
         } else if !visible.isEmpty {
-            HStack(alignment: .top, spacing: JackpotSpacing.s) {
+            HStack(alignment: .top, spacing: .s) {
                 ForEach(visible) { FieldRenderer(field: $0, model: model) }
             }
         }
@@ -183,7 +183,7 @@ struct FormNavigationBar: View {
     let goBack: () -> Void
 
     var body: some View {
-        HStack(spacing: JackpotSpacing.sm) {
+        HStack(spacing: .sm) {
             if !model.isFirstSection {
                 Button("Previous", action: goBack)
                     .buttonStyle(.jackpot(.secondary))

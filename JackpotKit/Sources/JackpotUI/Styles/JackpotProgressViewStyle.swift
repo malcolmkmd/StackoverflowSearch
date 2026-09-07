@@ -38,6 +38,10 @@ public extension ProgressViewStyle where Self == JackpotBarProgressViewStyle {
     static func jackpotBar(height: CGFloat) -> JackpotBarProgressViewStyle {
         JackpotBarProgressViewStyle(height: height)
     }
+
+    static func jackpotBar(height: JackpotSpacing) -> JackpotBarProgressViewStyle {
+        JackpotBarProgressViewStyle(height: height.rawValue)
+    }
 }
 
 private extension Double {

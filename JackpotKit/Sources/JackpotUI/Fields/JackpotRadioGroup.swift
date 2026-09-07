@@ -12,7 +12,7 @@ public struct JackpotRadioGroup: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: JackpotSpacing.s) {
+        VStack(alignment: .leading, spacing: .s) {
             ForEach(options) { option in
                 row(for: option)
             }

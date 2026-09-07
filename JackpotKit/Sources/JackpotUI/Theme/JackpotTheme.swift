@@ -101,30 +101,32 @@ extension Color {
 
 /// Layout scale for gaps, insets, and corner radii. Component sizes that are not
 /// spacing (control height, hit targets) live on `JackpotSizes`.
-public enum JackpotSpacing {
-    public static let xxs: CGFloat = 4
-    public static let xs: CGFloat = 6
-    public static let s: CGFloat = 8
-    public static let sm: CGFloat = 12
-    public static let m: CGFloat = 16
-    public static let lm: CGFloat = 20
-    public static let l: CGFloat = 24
-    public static let xl: CGFloat = 32
-    public static let xxl: CGFloat = 40
-    public static let xxxl: CGFloat = 48
+///
+/// Cases are `CGFloat`-backed so SwiftUI overloads can take `.sm` like a native inset.
+public enum JackpotSpacing: CGFloat, CaseIterable, Sendable {
+    case xxs = 4
+    case xs = 6
+    case s = 8
+    case sm = 12
+    case m = 16
+    case lm = 20
+    case l = 24
+    case xl = 32
+    case xxl = 40
+    case xxxl = 48
 }
 
 // MARK: - Sizes
 
 public struct JackpotSizes: Equatable, Sendable {
-    public var cornerRadius: CGFloat = JackpotSpacing.sm
+    public var cornerRadius: CGFloat = JackpotSpacing.sm.rawValue
     public var controlHeight: CGFloat = 52
-    public var spacing: CGFloat = JackpotSpacing.sm
-    public var contentPadding: CGFloat = JackpotSpacing.m
+    public var spacing: CGFloat = JackpotSpacing.sm.rawValue
+    public var contentPadding: CGFloat = JackpotSpacing.m.rawValue
     public var borderWidth: CGFloat = 1
     public var emphasizedBorderWidth: CGFloat = 2
     public var minimumHitTarget: CGFloat = 44
-    public var progressBarHeight: CGFloat = JackpotSpacing.xxs
+    public var progressBarHeight: CGFloat = JackpotSpacing.xxs.rawValue
     public var textAreaMinHeight: CGFloat = 110
     public var cardMinHeight: CGFloat = 140
 

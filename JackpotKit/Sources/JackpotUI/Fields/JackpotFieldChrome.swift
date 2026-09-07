@@ -63,7 +63,7 @@ public struct JackpotLabeledField<Content: View>: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: JackpotSpacing.xs) {
+        VStack(alignment: .leading, spacing: .xs) {
             if let label, !label.isEmpty {
                 Text(label).jackpotTextStyle(\.label, color: \.textSecondary)
             }
@@ -94,7 +94,7 @@ public struct JackpotDivider: View {
         Rectangle()
             .fill(theme.colors.fieldBorder)
             .frame(height: 1)
-            .padding(.vertical, JackpotSpacing.xxs)
+            .padding(.vertical, .xxs)
             .accessibilityHidden(true)
     }
 }

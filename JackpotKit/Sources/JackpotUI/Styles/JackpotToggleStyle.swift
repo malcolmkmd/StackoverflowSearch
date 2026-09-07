@@ -38,7 +38,7 @@ public struct JackpotToggleStyle: ToggleStyle {
                     Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
                         .font(.title3)
                         .foregroundStyle(boxColor)
-                        .frame(width: JackpotSpacing.l, height: JackpotSpacing.l)
+                        .frame(width: .l, height: .l)
                         .animation(.easeOut(duration: 0.15), value: configuration.isOn)
                     configuration.label
                         .jackpotTextStyle(\.rowLabel)

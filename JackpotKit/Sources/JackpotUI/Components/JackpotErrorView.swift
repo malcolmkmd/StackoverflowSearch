@@ -18,7 +18,7 @@ public struct JackpotErrorView: View {
     }
 
     public var body: some View {
-        VStack(spacing: JackpotSpacing.sm) {
+        VStack(spacing: .sm) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.largeTitle)
                 .jackpotForegroundStyle(\.textSecondary)
@@ -38,6 +38,6 @@ public struct JackpotErrorView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(JackpotSpacing.l)
+        .padding(.l)
     }
 }

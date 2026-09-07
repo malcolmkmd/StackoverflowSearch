@@ -25,15 +25,15 @@ public struct JackpotTextArea: View {
             editor
                 .focused($isFocused)
                 .frame(minHeight: theme.sizes.textAreaMinHeight)
-                .padding(JackpotSpacing.s)
+                .padding(.s)
                 .jackpotTextStyle(\.fieldText)
                 .accessibilityLabel(placeholder)
 
             if text.isEmpty {
                 Text(placeholder)
                     .jackpotTextStyle(\.fieldText, color: \.textSecondary)
-                    .padding(.horizontal, JackpotSpacing.sm)
-                    .padding(.vertical, JackpotSpacing.m)
+                    .padding(.horizontal, .sm)
+                    .padding(.vertical, .m)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }

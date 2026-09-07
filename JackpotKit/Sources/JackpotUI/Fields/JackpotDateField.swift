@@ -59,7 +59,7 @@ public struct JackpotDateField: View {
             VStack(spacing: theme.sizes.spacing) {
                 Text(fieldLabel ?? placeholder)
                     .jackpotTextStyle(\.button)
-                    .padding(.top, JackpotSpacing.lm)
+                    .padding(.top, .lm)
 
                 DatePicker("",
                            selection: Binding(get: { selection ?? range.upperBound },
@@ -80,7 +80,7 @@ public struct JackpotDateField: View {
                     isPresented = false
                 }
                 .buttonStyle(.jackpot)
-                .padding([.horizontal, .bottom], JackpotSpacing.m)
+                .padding([.horizontal, .bottom], .m)
             }
         }
     }

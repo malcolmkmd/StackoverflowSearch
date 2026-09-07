@@ -13,7 +13,7 @@ struct InputFieldView: View {
             DateFieldView(field: field, model: model)
         } else {
             JackpotLabeledField(error: model.error(for: field)) {
-                VStack(spacing: JackpotSpacing.xs) {
+                VStack(spacing: .xs) {
                     JackpotTextField(model.localized(field.placeholderKey),
                                      text: model.text(for: field))
                         .onEditingEnded { model.markTouched(field) }

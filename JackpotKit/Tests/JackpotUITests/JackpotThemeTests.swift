@@ -11,41 +11,54 @@ final class JackpotThemeTests: XCTestCase {
 
     func testWithReturnsACopyAndLeavesTheOriginalAlone() {
         let brand = JackpotTheme.jackpotCity
-        let roomy = brand.with { $0.sizes.cornerRadius = JackpotSpacing.l }
+        let roomy = brand.with { $0.sizes.cornerRadius = JackpotSpacing.l.rawValue }
 
-        XCTAssertEqual(roomy.sizes.cornerRadius, JackpotSpacing.l)
-        XCTAssertEqual(brand.sizes.cornerRadius, JackpotSpacing.sm)
+        XCTAssertEqual(roomy.sizes.cornerRadius, JackpotSpacing.l.rawValue)
+        XCTAssertEqual(brand.sizes.cornerRadius, JackpotSpacing.sm.rawValue)
         XCTAssertEqual(roomy.colors, brand.colors, "An unrelated slice should carry over untouched")
     }
 
     func testFieldShapeFollowsCornerRadius() {
-        let theme = JackpotTheme.jackpotCity.with { $0.sizes.cornerRadius = JackpotSpacing.xxs }
-        XCTAssertEqual(theme.sizes.fieldShape.cornerSize, CGSize(width: JackpotSpacing.xxs, height: JackpotSpacing.xxs))
+        let theme = JackpotTheme.jackpotCity.with { $0.sizes.cornerRadius = JackpotSpacing.xxs.rawValue }
+        XCTAssertEqual(theme.sizes.fieldShape.cornerSize, CGSize(width: JackpotSpacing.xxs.rawValue, height: JackpotSpacing.xxs.rawValue))
         XCTAssertEqual(theme.sizes.fieldShape.style, .continuous)
     }
 }
 
 final class JackpotSpacingTests: XCTestCase {
     func testScaleMatchesTheLockedLadder() {
-        XCTAssertEqual(JackpotSpacing.xxs, 4)
-        XCTAssertEqual(JackpotSpacing.xs, 6)
-        XCTAssertEqual(JackpotSpacing.s, 8)
-        XCTAssertEqual(JackpotSpacing.sm, 12)
-        XCTAssertEqual(JackpotSpacing.m, 16)
-        XCTAssertEqual(JackpotSpacing.lm, 20)
-        XCTAssertEqual(JackpotSpacing.l, 24)
-        XCTAssertEqual(JackpotSpacing.xl, 32)
-        XCTAssertEqual(JackpotSpacing.xxl, 40)
-        XCTAssertEqual(JackpotSpacing.xxxl, 48)
+        XCTAssertEqual(JackpotSpacing.xxs.rawValue, 4)
+        XCTAssertEqual(JackpotSpacing.xs.rawValue, 6)
+        XCTAssertEqual(JackpotSpacing.s.rawValue, 8)
+        XCTAssertEqual(JackpotSpacing.sm.rawValue, 12)
+        XCTAssertEqual(JackpotSpacing.m.rawValue, 16)
+        XCTAssertEqual(JackpotSpacing.lm.rawValue, 20)
+        XCTAssertEqual(JackpotSpacing.l.rawValue, 24)
+        XCTAssertEqual(JackpotSpacing.xl.rawValue, 32)
+        XCTAssertEqual(JackpotSpacing.xxl.rawValue, 40)
+        XCTAssertEqual(JackpotSpacing.xxxl.rawValue, 48)
     }
 
     func testStandardSizesReadSpacingForGapsAndRadii() {
         let sizes = JackpotSizes.standard
-        XCTAssertEqual(sizes.cornerRadius, JackpotSpacing.sm)
-        XCTAssertEqual(sizes.spacing, JackpotSpacing.sm)
-        XCTAssertEqual(sizes.contentPadding, JackpotSpacing.m)
-        XCTAssertEqual(sizes.progressBarHeight, JackpotSpacing.xxs)
-        XCTAssertEqual(sizes.fieldShape.cornerSize, CGSize(width: JackpotSpacing.sm, height: JackpotSpacing.sm))
+        XCTAssertEqual(sizes.cornerRadius, JackpotSpacing.sm.rawValue)
+        XCTAssertEqual(sizes.spacing, JackpotSpacing.sm.rawValue)
+        XCTAssertEqual(sizes.contentPadding, JackpotSpacing.m.rawValue)
+        XCTAssertEqual(sizes.progressBarHeight, JackpotSpacing.xxs.rawValue)
+        XCTAssertEqual(sizes.fieldShape.cornerSize, CGSize(width: JackpotSpacing.sm.rawValue, height: JackpotSpacing.sm.rawValue))
+    }
+
+    func testSwiftUIOverlaysAcceptSpacingCases() {
+        _ = EmptyView().padding(.sm)
+        _ = EmptyView().padding(.horizontal, .m)
+        _ = EmptyView().padding([.horizontal, .bottom], .l)
+        _ = EmptyView().cornerRadius(.sm)
+        _ = EmptyView().frame(width: .l, height: .l)
+        _ = EmptyView().shadow(radius: .xxs)
+        _ = VStack(spacing: .sm) { EmptyView() }
+        _ = HStack(alignment: .top, spacing: .xs) { EmptyView() }
+        XCTAssertEqual(EdgeInsets(.sm).top, JackpotSpacing.sm.rawValue)
+        XCTAssertEqual(EdgeInsets(.sm).leading, JackpotSpacing.sm.rawValue)
     }
 }
 

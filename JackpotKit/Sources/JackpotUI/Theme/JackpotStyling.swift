@@ -21,6 +21,56 @@ public extension View {
                           color: KeyPath<JackpotColors, Color> = \.textPrimary) -> some View {
         jackpotFont(font).jackpotForegroundStyle(color)
     }
+
+    func padding(_ spacing: JackpotSpacing) -> some View {
+        padding(spacing.rawValue)
+    }
+
+    func padding(_ edges: Edge.Set, _ spacing: JackpotSpacing) -> some View {
+        padding(edges, spacing.rawValue)
+    }
+
+    func cornerRadius(_ spacing: JackpotSpacing, antialiased: Bool = true) -> some View {
+        cornerRadius(spacing.rawValue, antialiased: antialiased)
+    }
+
+    func frame(width: JackpotSpacing,
+               height: JackpotSpacing,
+               alignment: Alignment = .center) -> some View {
+        frame(width: width.rawValue, height: height.rawValue, alignment: alignment)
+    }
+
+    func shadow(color: Color = Color(.sRGBLinear, white: 0, opacity: 0.33),
+                radius: JackpotSpacing,
+                x: CGFloat = 0,
+                y: CGFloat = 0) -> some View {
+        shadow(color: color, radius: radius.rawValue, x: x, y: y)
+    }
+}
+
+public extension VStack {
+    init(alignment: HorizontalAlignment = .center,
+         spacing: JackpotSpacing,
+         @ViewBuilder content: () -> Content) {
+        self.init(alignment: alignment, spacing: spacing.rawValue, content: content)
+    }
+}
+
+public extension HStack {
+    init(alignment: VerticalAlignment = .center,
+         spacing: JackpotSpacing,
+         @ViewBuilder content: () -> Content) {
+        self.init(alignment: alignment, spacing: spacing.rawValue, content: content)
+    }
+}
+
+public extension EdgeInsets {
+    init(_ spacing: JackpotSpacing) {
+        self.init(top: spacing.rawValue,
+                  leading: spacing.rawValue,
+                  bottom: spacing.rawValue,
+                  trailing: spacing.rawValue)
+    }
 }
 
 private struct JackpotForegroundStyle: ViewModifier {

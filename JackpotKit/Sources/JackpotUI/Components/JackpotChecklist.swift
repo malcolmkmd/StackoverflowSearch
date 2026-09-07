@@ -29,9 +29,9 @@ public struct JackpotChecklist: View {
     public var body: some View {
         if !items.isEmpty {
             DisclosureGroup(isExpanded: $isExpanded) {
-                VStack(alignment: .leading, spacing: JackpotSpacing.sm) {
+                VStack(alignment: .leading, spacing: .sm) {
                     ProgressView(value: satisfiedFraction)
-                        .progressViewStyle(.jackpotBar(height: JackpotSpacing.xs))
+                        .progressViewStyle(.jackpotBar(height: .xs))
                         .tint(satisfiedFraction < 1 ? theme.colors.warning : theme.colors.success)
                         .accessibilityLabel("Requirements met")
 
@@ -41,7 +41,7 @@ public struct JackpotChecklist: View {
                         row(for: item)
                     }
                 }
-                .padding(.top, JackpotSpacing.sm)
+                .padding(.top, .sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
             } label: {
                 Text(title).jackpotTextStyle(\.sectionTitle)
@@ -55,7 +55,7 @@ public struct JackpotChecklist: View {
     }
 
     private func row(for item: JackpotChecklistItem) -> some View {
-        HStack(spacing: JackpotSpacing.sm) {
+        HStack(spacing: .sm) {
             Image(systemName: item.isSatisfied ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(item.isSatisfied ? theme.colors.accent : theme.colors.textSecondary)
                 .animation(.easeOut(duration: 0.15), value: item.isSatisfied)
