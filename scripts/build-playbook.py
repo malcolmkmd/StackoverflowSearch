@@ -101,11 +101,16 @@ def drop_from_marker(body, marker, rel):
 def registration_button_style(body, rel):
     body = require_replace(body, "        case primary\n        case secondary\n        case tertiary\n",
                            "        case primary\n        case secondary\n", rel)
-    body = require_replace(body, "            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill\n"
-                                 "            case .secondary: return theme.colors.surface\n"
-                                 "            case .tertiary:  return .clear\n",
-                           "            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill\n"
-                           "            case .secondary: return theme.colors.surface\n", rel)
+    body = require_replace(body, "            case .primary:\n"
+                                 "                theme.sizes.fieldShape.fill(isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill)\n"
+                                 "            case .secondary:\n"
+                                 "                JackpotButtonHairline(fill: theme.colors.surface)\n"
+                                 "            case .tertiary:\n"
+                                 "                theme.sizes.fieldShape.fill(Color.clear)\n",
+                           "            case .primary:\n"
+                           "                theme.sizes.fieldShape.fill(isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill)\n"
+                           "            case .secondary:\n"
+                           "                JackpotButtonHairline(fill: theme.colors.surface)\n", rel)
     body = require_replace(body, "            case .primary:   return isDimmed ? theme.colors.textSecondary : theme.colors.textOnAccent\n"
                                  "            case .secondary: return isDimmed ? theme.colors.textSecondary : theme.colors.textPrimary\n"
                                  "            case .tertiary:  return isDimmed ? theme.colors.textSecondary : theme.colors.accent\n",
