@@ -71,6 +71,8 @@ validates (`isCurrentSectionValid`). Tapping it marks the section touched, reval
 and if valid increments `sectionIndex` (step 1 → step 2). `Sign Up` stays disabled until
 `isFormValid`, then `RegistrationView`'s callback calls `RegistrationService.register`.
 A progress bar (`.jackpotBar`) sits above the scroll view when `sections.count > 1`.
+Previous is `surface` + `fieldBorder` + `textPrimary`. Next / Sign Up use `accentFill` +
+`textOnAccent` when enabled, and the field-fill disabled treatment when not.
 
 ### Registration preview path
 
