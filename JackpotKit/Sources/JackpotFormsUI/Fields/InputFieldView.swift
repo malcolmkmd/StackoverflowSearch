@@ -14,7 +14,7 @@ struct InputFieldView: View {
         } else {
             JackpotLabeledField(error: model.error(for: field)) {
                 VStack(spacing: .xs) {
-                    JackpotTextField(model.localized(field.placeholderKey),
+                    JackpotTextField(model.localized(field.labelKey),
                                      text: model.text(for: field))
                         .onEditingEnded { model.markTouched(field) }
                         .onFocusChange { isEditing = $0 }

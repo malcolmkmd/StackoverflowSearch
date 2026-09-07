@@ -42,10 +42,15 @@ Live CRM matches those twelve identifiers and three `fieldType`s. The bundled ca
 ships `username.prefix = "+27"`; the live payload currently leaves prefix empty (the view
 still maps `username` to `.phoneNumber`).
 
-Chrome the form actually uses: `JackpotLabeledField` / field chrome, `FormNavigationBar`
-with `.jackpot` / `.jackpot(.secondary)` (Next / Sign Up / Previous — see below),
-`.jackpotBar` progress, `JackpotErrorView` on load failure, and the locked colour /
-spacing / size tokens below.
+Input and Dropdown keep the label **inside** the control: it sits in the field and floats
+to the top edge on focus or when the field has a value. `dateOfBirth` keeps
+`JackpotLabeledField` above `JackpotDateField`. Checkboxes keep the toggle label. Error
+text stays below the control.
+
+Chrome the form actually uses: `JackpotLabeledField` (above-field label on date; error
+chrome on Input / Dropdown / Checkbox), `FormNavigationBar` with `.jackpot` /
+`.jackpot(.secondary)` (Next / Sign Up / Previous — see below), `.jackpotBar` progress,
+`JackpotErrorView` on load failure, and the locked colour / spacing / size tokens below.
 
 ### How to go to the next screen
 
@@ -91,11 +96,11 @@ identifiers and three `fieldType`s as `registration.json`.
    on section 2, Next (`.jackpot`) while a later section exists, Sign Up (`.jackpot`) on
    the last section.
 
-| `fieldType` | Where it renders in preview | On registration? |
-| --- | --- | --- |
-| Input | Registration JSON + Gallery + `FormPreview` field previews | Yes |
-| Dropdown | Registration JSON + Gallery + `DropdownFieldView` previews | Yes |
-| Checkbox | Registration JSON + Gallery + `CheckboxFieldView` previews | Yes |
+| `fieldType` | Where it renders |
+| --- | --- |
+| Input | Registration JSON + Gallery + `FormPreview` field previews |
+| Dropdown | Registration JSON + Gallery + `DropdownFieldView` previews |
+| Checkbox | Registration JSON + Gallery + `CheckboxFieldView` previews |
 
 ---
 
@@ -723,7 +728,8 @@ private extension Double {
 
 **9.** `JackpotKit/Sources/JackpotUI/Fields/JackpotFieldChrome.swift`
 
-The shared background and the label/error row every registration field sits in.
+The shared background, the in-field floating label, and `JackpotLabeledField` — date
+keeps the above-field label; Input / Dropdown / Checkbox use it for the error row.
 
 ```swift
 import SwiftUI
@@ -774,6 +780,20 @@ public struct JackpotFieldBackground: ViewModifier {
 public extension View {
     func jackpotFieldBackground(isFocused: Bool = false) -> some View {
         modifier(JackpotFieldBackground(isFocused: isFocused))
+    }
+}
+
+struct JackpotFloatingLabel: View {
+    let title: String
+    let isFloating: Bool
+
+    var body: some View {
+        Text(title)
+            .jackpotTextStyle(isFloating ? \.label : \.fieldText, color: \.textSecondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
@@ -904,6 +924,9 @@ private struct JackpotFieldKindModifier: ViewModifier {
 
 **11.** `JackpotKit/Sources/JackpotUI/Fields/JackpotTextField.swift`
 
+In-field label floats on focus or when the field has a value. Prefix cell and
+secure reveal stay as they were.
+
 ```swift
 import SwiftUI
 
@@ -960,15 +983,22 @@ public struct JackpotTextField: View {
                     .accessibilityHidden(true)
             }
 
-            input
-                .jackpotTextStyle(\.fieldText)
-                .focused($isFocused)
-                .submitLabel(submitLabel)
-                .padding(.horizontal, theme.sizes.contentPadding)
-                .frame(height: theme.sizes.controlHeight)
-                // The prefix cell is hidden above, so fold it in rather than leaving
-                // VoiceOver to stumble over a stray "+27".
-                .accessibilityLabel(prefix.isEmpty ? Text(placeholder) : Text("\(placeholder), \(prefix)"))
+            ZStack(alignment: .leading) {
+                input
+                    .jackpotTextStyle(\.fieldText)
+                    .focused($isFocused)
+                    .submitLabel(submitLabel)
+                    .padding(.top, isFloating ? theme.sizes.spacing : 0)
+                    // The prefix cell is hidden above, so fold it in rather than leaving
+                    // VoiceOver to stumble over a stray "+27".
+                    .accessibilityLabel(prefix.isEmpty ? Text(placeholder) : Text("\(placeholder), \(prefix)"))
+
+                JackpotFloatingLabel(title: placeholder, isFloating: isFloating)
+                    .offset(y: isFloating ? -16 : 0)
+            }
+            .padding(.horizontal, theme.sizes.contentPadding)
+            .frame(height: theme.sizes.controlHeight)
+            .animation(.easeOut(duration: 0.15), value: isFloating)
 
             if !suffix.isEmpty {
                 Text(suffix)
@@ -1008,18 +1038,24 @@ public struct JackpotTextField: View {
         }
     }
 
+    private var isFloating: Bool {
+        isFocused || !text.isEmpty
+    }
+
     @ViewBuilder
     private var input: some View {
         if isSecure, !isRevealed {
-            SecureField(placeholder, text: $text)
+            SecureField("", text: $text)
         } else {
-            TextField(placeholder, text: $text)
+            TextField("", text: $text)
         }
     }
 }
 ```
 
 **12.** `JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift`
+
+In-field label floats when a value is selected.
 
 ```swift
 import SwiftUI
@@ -1062,15 +1098,24 @@ public struct JackpotDropdown: View {
             }
         } label: {
             HStack {
-                Text(selected?.label ?? placeholder)
-                    .jackpotForegroundStyle(valueColor)
-                Spacer()
+                ZStack(alignment: .leading) {
+                    if let selected {
+                        Text(selected.label)
+                            .jackpotTextStyle(\.fieldText)
+                            .padding(.top, theme.sizes.spacing)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    JackpotFloatingLabel(title: placeholder, isFloating: isFloating)
+                        .offset(y: isFloating ? -16 : 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.down").jackpotForegroundStyle(\.textPrimary)
             }
             .jackpotFont(\.fieldText)
             .padding(.horizontal, theme.sizes.contentPadding)
             .frame(height: theme.sizes.controlHeight)
             .jackpotFieldBackground()
+            .animation(.easeOut(duration: 0.15), value: isFloating)
         }
         .accessibilityLabel(placeholder)
         .accessibilityValue(selected?.label ?? "None")
@@ -1080,8 +1125,8 @@ public struct JackpotDropdown: View {
         options.first { $0.id == selection }
     }
 
-    private var valueColor: KeyPath<JackpotColors, Color> {
-        selected == nil ? \.textSecondary : \.textPrimary
+    private var isFloating: Bool {
+        selected != nil
     }
 }
 ```
@@ -1089,6 +1134,7 @@ public struct JackpotDropdown: View {
 **13.** `JackpotKit/Sources/JackpotUI/Fields/JackpotDateField.swift`
 
 The `Calender` input type: a read-only field presenting a graphical picker in a sheet.
+`DateFieldView` wraps it in `JackpotLabeledField` so the label stays above the control.
 
 ```swift
 import SwiftUI
@@ -1367,17 +1413,13 @@ struct JackpotUI_Previews: PreviewProvider {
         var body: some View {
             ScrollView {
                 JackpotPreviewPanel("Gallery") {
-                    JackpotLabeledField("Mobile") {
-                        JackpotTextField("Enter Mobile Number", text: $mobile)
-                            .onEditingEnded { touched = true }
-                            .jackpotField(.phoneNumber)
-                            .jackpotFieldPrefix("+27")
-                    }
+                    JackpotTextField("Mobile Number", text: $mobile)
+                        .onEditingEnded { touched = true }
+                        .jackpotField(.phoneNumber)
+                        .jackpotFieldPrefix("+27")
 
-                    JackpotLabeledField("Email") {
-                        JackpotTextField("Enter Email Address", text: $email)
-                            .jackpotField(.email)
-                    }
+                    JackpotTextField("Email", text: $email)
+                        .jackpotField(.email)
 
                     JackpotLabeledField(error: "Password must be 8–20 characters") {
                         JackpotTextField("Password", text: $secret)
@@ -1389,8 +1431,8 @@ struct JackpotUI_Previews: PreviewProvider {
                         .init(id: "max", text: "Maximum of 20 characters", isSatisfied: true),
                     ])
 
-                    JackpotLabeledField("Source Of Income", error: "Please choose one") {
-                        JackpotDropdown("Enter Source Of Income", selection: $income, options: [
+                    JackpotLabeledField(error: "Please choose one") {
+                        JackpotDropdown("Source Of Income", selection: $income, options: [
                             .init(id: "salary", label: "Salary or Wages"),
                             .init(id: "pension", label: "Pension or Grant"),
                         ])
@@ -3389,7 +3431,7 @@ struct InputFieldView: View {
         } else {
             JackpotLabeledField(error: model.error(for: field)) {
                 VStack(spacing: .xs) {
-                    JackpotTextField(model.localized(field.placeholderKey),
+                    JackpotTextField(model.localized(field.labelKey),
                                      text: model.text(for: field))
                         .onEditingEnded { model.markTouched(field) }
                         .onFocusChange { isEditing = $0 }
@@ -3484,8 +3526,8 @@ struct DropdownFieldView: View {
     @ObservedObject var model: DynamicFormModel
 
     var body: some View {
-        JackpotLabeledField(model.localized(field.labelKey), error: model.error(for: field)) {
-            JackpotDropdown(model.localized(field.placeholderKey),
+        JackpotLabeledField(error: model.error(for: field)) {
+            JackpotDropdown(model.localized(field.labelKey),
                             selection: model.selection(for: field),
                             options: model.options(for: field))
                 .disabled(field.isReadOnly)

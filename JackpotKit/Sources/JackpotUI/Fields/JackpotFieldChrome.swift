@@ -49,6 +49,20 @@ public extension View {
     }
 }
 
+struct JackpotFloatingLabel: View {
+    let title: String
+    let isFloating: Bool
+
+    var body: some View {
+        Text(title)
+            .jackpotTextStyle(isFloating ? \.label : \.fieldText, color: \.textSecondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Form row
 
 public struct JackpotLabeledField<Content: View>: View {

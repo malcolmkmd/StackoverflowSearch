@@ -488,10 +488,16 @@ text(
     "still maps `username` to `.phoneNumber`)."
 )
 text(
-    "Chrome the form actually uses: `JackpotLabeledField` / field chrome, `FormNavigationBar`\n"
-    "with `.jackpot` / `.jackpot(.secondary)` (Next / Sign Up / Previous — see below),\n"
-    "`.jackpotBar` progress, `JackpotErrorView` on load failure, and the locked colour /\n"
-    "spacing / size tokens below."
+    "Input and Dropdown keep the label **inside** the control: it sits in the field and floats\n"
+    "to the top edge on focus or when the field has a value. `dateOfBirth` keeps\n"
+    "`JackpotLabeledField` above `JackpotDateField`. Checkboxes keep the toggle label. Error\n"
+    "text stays below the control."
+)
+text(
+    "Chrome the form actually uses: `JackpotLabeledField` (above-field label on date; error\n"
+    "chrome on Input / Dropdown / Checkbox), `FormNavigationBar` with `.jackpot` /\n"
+    "`.jackpot(.secondary)` (Next / Sign Up / Previous — see below), `.jackpotBar` progress,\n"
+    "`JackpotErrorView` on load failure, and the locked colour / spacing / size tokens below."
 )
 text("### How to go to the next screen")
 text(
@@ -645,7 +651,8 @@ files(
         "JackpotKit/Sources/JackpotUI/Styles/JackpotProgressViewStyle.swift",
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotFieldChrome.swift",
-            "The shared background and the label/error row every registration field sits in.",
+            "The shared background, the in-field floating label, and `JackpotLabeledField` — date\n"
+            "keeps the above-field label; Input / Dropdown / Checkbox use it for the error row.",
             registration_field_chrome,
         ),
         (
@@ -654,11 +661,19 @@ files(
             "email, phone, number, and new-password.",
             registration_field_kind,
         ),
-        "JackpotKit/Sources/JackpotUI/Fields/JackpotTextField.swift",
-        "JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift",
+        (
+            "JackpotKit/Sources/JackpotUI/Fields/JackpotTextField.swift",
+            "In-field label floats on focus or when the field has a value. Prefix cell and\n"
+            "secure reveal stay as they were.",
+        ),
+        (
+            "JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift",
+            "In-field label floats when a value is selected.",
+        ),
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotDateField.swift",
-            "The `Calender` input type: a read-only field presenting a graphical picker in a sheet.",
+            "The `Calender` input type: a read-only field presenting a graphical picker in a sheet.\n"
+            "`DateFieldView` wraps it in `JackpotLabeledField` so the label stays above the control.",
         ),
         (
             "JackpotKit/Sources/JackpotUI/Components/JackpotChecklist.swift",

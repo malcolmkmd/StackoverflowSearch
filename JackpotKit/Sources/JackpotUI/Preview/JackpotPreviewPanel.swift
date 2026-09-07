@@ -40,17 +40,13 @@ struct JackpotUI_Previews: PreviewProvider {
         var body: some View {
             ScrollView {
                 JackpotPreviewPanel("Gallery") {
-                    JackpotLabeledField("Mobile") {
-                        JackpotTextField("Enter Mobile Number", text: $mobile)
-                            .onEditingEnded { touched = true }
-                            .jackpotField(.phoneNumber)
-                            .jackpotFieldPrefix("+27")
-                    }
+                    JackpotTextField("Mobile Number", text: $mobile)
+                        .onEditingEnded { touched = true }
+                        .jackpotField(.phoneNumber)
+                        .jackpotFieldPrefix("+27")
 
-                    JackpotLabeledField("Email") {
-                        JackpotTextField("Enter Email Address", text: $email)
-                            .jackpotField(.email)
-                    }
+                    JackpotTextField("Email", text: $email)
+                        .jackpotField(.email)
 
                     JackpotLabeledField(error: "Password must be 8–20 characters") {
                         JackpotTextField("Password", text: $secret)
@@ -62,8 +58,8 @@ struct JackpotUI_Previews: PreviewProvider {
                         .init(id: "max", text: "Maximum of 20 characters", isSatisfied: true),
                     ])
 
-                    JackpotLabeledField("Source Of Income", error: "Please choose one") {
-                        JackpotDropdown("Enter Source Of Income", selection: $income, options: [
+                    JackpotLabeledField(error: "Please choose one") {
+                        JackpotDropdown("Source Of Income", selection: $income, options: [
                             .init(id: "salary", label: "Salary or Wages"),
                             .init(id: "pension", label: "Pension or Grant"),
                         ])

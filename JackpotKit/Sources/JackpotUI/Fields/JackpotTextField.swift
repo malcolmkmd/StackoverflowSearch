@@ -53,15 +53,22 @@ public struct JackpotTextField: View {
                     .accessibilityHidden(true)
             }
 
-            input
-                .jackpotTextStyle(\.fieldText)
-                .focused($isFocused)
-                .submitLabel(submitLabel)
-                .padding(.horizontal, theme.sizes.contentPadding)
-                .frame(height: theme.sizes.controlHeight)
-                // The prefix cell is hidden above, so fold it in rather than leaving
-                // VoiceOver to stumble over a stray "+27".
-                .accessibilityLabel(prefix.isEmpty ? Text(placeholder) : Text("\(placeholder), \(prefix)"))
+            ZStack(alignment: .leading) {
+                input
+                    .jackpotTextStyle(\.fieldText)
+                    .focused($isFocused)
+                    .submitLabel(submitLabel)
+                    .padding(.top, isFloating ? theme.sizes.spacing : 0)
+                    // The prefix cell is hidden above, so fold it in rather than leaving
+                    // VoiceOver to stumble over a stray "+27".
+                    .accessibilityLabel(prefix.isEmpty ? Text(placeholder) : Text("\(placeholder), \(prefix)"))
+
+                JackpotFloatingLabel(title: placeholder, isFloating: isFloating)
+                    .offset(y: isFloating ? -16 : 0)
+            }
+            .padding(.horizontal, theme.sizes.contentPadding)
+            .frame(height: theme.sizes.controlHeight)
+            .animation(.easeOut(duration: 0.15), value: isFloating)
 
             if !suffix.isEmpty {
                 Text(suffix)
@@ -101,12 +108,16 @@ public struct JackpotTextField: View {
         }
     }
 
+    private var isFloating: Bool {
+        isFocused || !text.isEmpty
+    }
+
     @ViewBuilder
     private var input: some View {
         if isSecure, !isRevealed {
-            SecureField(placeholder, text: $text)
+            SecureField("", text: $text)
         } else {
-            TextField(placeholder, text: $text)
+            TextField("", text: $text)
         }
     }
 }
