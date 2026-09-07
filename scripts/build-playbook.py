@@ -2,9 +2,8 @@
 """Rebuild docs/BUILD-PLAYBOOK.md (and .pdf) from the files actually on disk.
 
 Documents the registration flow (`DynamicFormView(formName: .registration)` +
-`registration.json`) and the registration-only preview harness. Unused CRM types
-(Text Area, Radio Group, Toggle, Divider, Welcome Offer, SignaturePad, reCAPTCHA)
-are not reproduced — the Swift stays in the package.
+`registration.json`) and the registration-only preview harness. Shared sources
+are shown as the registration-used slice.
 
 Every code block in the playbook is read from source at build time, so the document cannot
 drift from the code it documents. Content is recorded once as a list of structured blocks and
@@ -62,13 +61,15 @@ def swift_literal(label, body, note=None, suffix=""):
     fence("swift", body)
 
 
-def file_step(rel, note=None):
+def file_step(rel, note=None, transform=None):
     global step
     full = os.path.join(ROOT, rel)
     if not os.path.exists(full):
         sys.exit(f"missing: {rel}")
     with open(full) as f:
         body = f.read()
+    if transform:
+        body = transform(body, rel)
     step += 1
     text(f"**{step}.** `{rel}`")
     if note:
@@ -79,9 +80,353 @@ def file_step(rel, note=None):
 def files(pairs):
     for item in pairs:
         if isinstance(item, tuple):
-            file_step(item[0], note=item[1])
+            file_step(*item)
         else:
             file_step(item)
+
+
+def require_replace(body, old, new, rel):
+    if old not in body:
+        sys.exit(f"playbook excerpt ({rel}): missing {old!r}")
+    return body.replace(old, new, 1)
+
+
+def drop_from_marker(body, marker, rel):
+    idx = body.find(marker)
+    if idx == -1:
+        sys.exit(f"playbook excerpt ({rel}): missing marker {marker!r}")
+    return body[:idx].rstrip() + "\n"
+
+
+def registration_button_style(body, rel):
+    body = require_replace(body, "        case primary\n        case secondary\n        case tertiary\n",
+                           "        case primary\n        case secondary\n", rel)
+    body = require_replace(body, "            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill\n"
+                                 "            case .secondary: return theme.colors.fieldBackground\n"
+                                 "            case .tertiary:  return .clear\n",
+                           "            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill\n"
+                           "            case .secondary: return theme.colors.fieldBackground\n", rel)
+    body = require_replace(body, "            case .primary:   return isDimmed ? theme.colors.textSecondary : theme.colors.textOnAccent\n"
+                                 "            case .secondary: return isDimmed ? theme.colors.textSecondary : theme.colors.textPrimary\n"
+                                 "            case .tertiary:  return isDimmed ? theme.colors.textSecondary : theme.colors.accent\n",
+                           "            case .primary:   return isDimmed ? theme.colors.textSecondary : theme.colors.textOnAccent\n"
+                           "            case .secondary: return isDimmed ? theme.colors.textSecondary : theme.colors.textPrimary\n", rel)
+    return drop_from_marker(body, "// MARK: - Selectable card", rel)
+
+
+def registration_toggle_style(body, rel):
+    body = require_replace(body, "        case checkbox\n        case `switch`\n",
+                           "        case checkbox\n", rel)
+    body = require_replace(body, "            switch appearance {\n            case .checkbox: checkbox\n            case .switch:   platformSwitch\n            }\n",
+                           "            checkbox\n", rel)
+    body = require_replace(body, "        private var platformSwitch: some View {\n"
+                                 "            Toggle(configuration)\n"
+                                 "                .toggleStyle(.switch)\n"
+                                 "                .jackpotTextStyle(\\.rowLabel)\n"
+                                 "        }\n\n",
+                           "", rel)
+    return require_replace(body, "    static var jackpotCheckbox: JackpotToggleStyle { JackpotToggleStyle(.checkbox) }\n"
+                                 "    static var jackpotSwitch: JackpotToggleStyle { JackpotToggleStyle(.switch) }\n",
+                           "    static var jackpotCheckbox: JackpotToggleStyle { JackpotToggleStyle(.checkbox) }\n", rel)
+
+
+def registration_field_chrome(body, rel):
+    return drop_from_marker(body, "// MARK: - Divider", rel)
+
+
+def registration_field_kind(body, rel):
+    return require_replace(body, "    public static let oneTimeCode = JackpotFieldKind(keyboard: .numberPad,\n"
+                                 "                                                     contentType: .oneTimeCode,\n"
+                                 "                                                     capitalization: .never,\n"
+                                 "                                                     disablesAutocorrection: true)\n\n",
+                           "", rel)
+
+
+def registration_theme(body, rel):
+    body = require_replace(body, "    /// Accent as *text* and tint — tertiary labels, selected chrome. This is the Android\n",
+                           "    /// Accent as *text* and tint — selected chrome. This is the Android\n", rel)
+    return require_replace(body, "    public var progressBarHeight: CGFloat = JackpotSpacing.xxs.rawValue\n"
+                                 "    public var textAreaMinHeight: CGFloat = 110\n"
+                                 "    public var cardMinHeight: CGFloat = 140\n",
+                           "    public var progressBarHeight: CGFloat = JackpotSpacing.xxs.rawValue\n", rel)
+
+
+def registration_form_field(body, rel):
+    body = require_replace(
+        body,
+        "public enum FieldType: Equatable, Hashable, Sendable {\n"
+        "    case input\n"
+        "    case button\n"
+        "    case checkbox\n"
+        "    case radio\n"
+        "    case radioGroup\n"
+        "    case dropdown\n"
+        "    case divider\n"
+        "    case textArea\n"
+        "    case recaptchaV2\n"
+        "    case recaptchaV3\n"
+        "    case toggle\n"
+        "    case welcomeOffer\n"
+        "    case unknown(String)\n"
+        "\n"
+        "    public init(raw: String) {\n"
+        "        switch raw.lowercased().replacingOccurrences(of: \" \", with: \"\") {\n"
+        "        case \"input\":                    self = .input\n"
+        "        case \"button\":                   self = .button\n"
+        "        case \"checkbox\":                 self = .checkbox\n"
+        "        case \"radio\":                    self = .radio\n"
+        "        case \"radiogroup\":               self = .radioGroup\n"
+        "        case \"dropdown\", \"select\":       self = .dropdown\n"
+        "        case \"divider\":                  self = .divider\n"
+        "        case \"textarea\":                 self = .textArea\n"
+        "        case \"recapchav2\", \"recaptchav2\": self = .recaptchaV2\n"
+        "        case \"recapchav3\", \"recaptchav3\": self = .recaptchaV3\n"
+        "        case \"toggle\":                   self = .toggle\n"
+        "        case \"welcomeoffer\":             self = .welcomeOffer\n"
+        "        default:                         self = .unknown(raw)\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    /// Layout-only types hold no value and are never validated or submitted.\n"
+        "    public var isDecorative: Bool {\n"
+        "        switch self {\n"
+        "        case .divider, .button: return true\n"
+        "        default:                return false\n"
+        "        }\n"
+        "    }\n"
+        "}\n",
+        "public enum FieldType: Equatable, Hashable, Sendable {\n"
+        "    case input\n"
+        "    case checkbox\n"
+        "    case dropdown\n"
+        "    case unknown(String)\n"
+        "\n"
+        "    public init(raw: String) {\n"
+        "        switch raw.lowercased().replacingOccurrences(of: \" \", with: \"\") {\n"
+        "        case \"input\":              self = .input\n"
+        "        case \"checkbox\":           self = .checkbox\n"
+        "        case \"dropdown\", \"select\": self = .dropdown\n"
+        "        default:                   self = .unknown(raw)\n"
+        "        }\n"
+        "    }\n"
+        "}\n",
+        rel,
+    )
+    body = require_replace(
+        body,
+        "\npublic struct RadioOption: Identifiable, Equatable, Hashable, Sendable {\n"
+        "    public let value: String\n"
+        "    public let textKey: String\n"
+        "\n"
+        "    public var id: String { value }\n"
+        "\n"
+        "    public init(value: String, textKey: String) {\n"
+        "        self.value = value\n"
+        "        self.textKey = textKey\n"
+        "    }\n"
+        "}\n",
+        "",
+        rel,
+    )
+    body = require_replace(body, "    public let dropdownOptions: [DropdownOption]\n"
+                                 "    public let radioOptions: [RadioOption]\n",
+                           "    public let dropdownOptions: [DropdownOption]\n", rel)
+    body = require_replace(body, "                dropdownOptions: [DropdownOption], radioOptions: [RadioOption]) {",
+                           "                dropdownOptions: [DropdownOption]) {", rel)
+    body = require_replace(body, "        self.dropdownOptions = dropdownOptions\n"
+                                 "        self.radioOptions = radioOptions\n",
+                           "        self.dropdownOptions = dropdownOptions\n", rel)
+    return require_replace(body, "        isVisible && !type.isDecorative && !(type == .recaptchaV2 || type == .recaptchaV3)\n",
+                           "        isVisible\n", rel)
+
+
+def registration_form_dto(body, rel):
+    body = require_replace(body, "    let fieldDropdowns: [FieldDropdownDTO]?\n"
+                                 "    let fieldRadioGroup: [FieldRadioDTO]?\n",
+                           "    let fieldDropdowns: [FieldDropdownDTO]?\n", rel)
+    return require_replace(
+        body,
+        "\npublic struct FieldRadioDTO: Decodable {\n"
+        "    let value: String\n"
+        "    let text: String?\n"
+        "}\n",
+        "",
+        rel,
+    )
+
+
+def registration_form_mapper(body, rel):
+    return require_replace(
+        body,
+        "            dropdownOptions: (dto.fieldDropdowns ?? []).map {\n"
+        "                DropdownOption(value: $0.value, textKey: $0.text ?? $0.value, regex: $0.regex)\n"
+        "            },\n"
+        "            radioOptions: (dto.fieldRadioGroup ?? []).map {\n"
+        "                RadioOption(value: $0.value, textKey: $0.text ?? $0.value)\n"
+        "            }\n",
+        "            dropdownOptions: (dto.fieldDropdowns ?? []).map {\n"
+        "                DropdownOption(value: $0.value, textKey: $0.text ?? $0.value, regex: $0.regex)\n"
+        "            }\n",
+        rel,
+    )
+
+
+def registration_environment(body, rel):
+    body = require_replace(body, "    @Entry public var jackpotIsLoading: Bool = false\n"
+                                 "    @Entry public var jackpotIsSelected: Bool = false\n",
+                           "    @Entry public var jackpotIsLoading: Bool = false\n", rel)
+    return require_replace(
+        body,
+        "\n    func jackpotSelected(_ isSelected: Bool = true) -> some View {\n"
+        "        environment(\\.jackpotIsSelected, isSelected)\n"
+        "    }\n",
+        "",
+        rel,
+    )
+
+
+def registration_validator_tests(body, rel):
+    return body.replace(", radioOptions: []", "")
+
+
+def registration_form_model(body, rel):
+    return require_replace(
+        body,
+        "        switch field.type {\n"
+        "        case .checkbox, .toggle: return .bool(false)\n"
+        "        case .dropdown, .radio, .radioGroup: return .option(\"\")\n"
+        "        default: return field.inputType == .calendar ? .empty : .text(\"\")\n"
+        "        }\n",
+        "        switch field.type {\n"
+        "        case .checkbox: return .bool(false)\n"
+        "        case .dropdown: return .option(\"\")\n"
+        "        default: return field.inputType == .calendar ? .empty : .text(\"\")\n"
+        "        }\n",
+        rel,
+    )
+
+
+def registration_field_renderer(body, rel):
+    body = require_replace(
+        body,
+        "        switch field.type {\n"
+        "        case .input:                    InputFieldView(field: field, model: model)\n"
+        "        case .textArea:                 TextAreaFieldView(field: field, model: model)\n"
+        "        case .dropdown:                 DropdownFieldView(field: field, model: model)\n"
+        "        case .checkbox:                 CheckboxFieldView(field: field, model: model)\n"
+        "        case .toggle:                   ToggleFieldView(field: field, model: model)\n"
+        "        case .radio, .radioGroup:       RadioGroupFieldView(field: field, model: model)\n"
+        "        case .divider:                  JackpotDivider()\n"
+        "        case .welcomeOffer:             WelcomeOfferFieldView(field: field, model: model)\n"
+        "        case .button:                   EmptyView()          // the form's footer owns navigation\n"
+        "        case .recaptchaV2, .recaptchaV3: RecaptchaPlaceholderView(field: field)\n"
+        "        case .unknown:                  EmptyView()          // reported via model.unsupportedFields\n"
+        "        }\n",
+        "        switch field.type {\n"
+        "        case .input:    InputFieldView(field: field, model: model)\n"
+        "        case .dropdown: DropdownFieldView(field: field, model: model)\n"
+        "        case .checkbox: CheckboxFieldView(field: field, model: model)\n"
+        "        default:        EmptyView()\n"
+        "        }\n",
+        rel,
+    )
+    body = require_replace(
+        body,
+        "\n/// reCAPTCHA needs a `WKWebView` bridge. The type is recognised without one so the form still\n"
+        "/// renders and validates around it.\n"
+        "struct RecaptchaPlaceholderView: View {\n"
+        "    let field: FormField\n"
+        "    @Environment(\\.jackpotTheme) private var theme\n"
+        "\n"
+        "    var body: some View {\n"
+        "        #if DEBUG\n"
+        "        Text(\"reCAPTCHA (\\(field.identifier)) — not implemented\")\n"
+        "            .jackpotTextStyle(\\.error, color: \\.textSecondary)\n"
+        "            .frame(maxWidth: .infinity, minHeight: 60)\n"
+        "            .jackpotFieldBackground()\n"
+        "        #else\n"
+        "        EmptyView()\n"
+        "        #endif\n"
+        "    }\n"
+        "}\n",
+        "",
+        rel,
+    )
+    body = require_replace(body, "    /// Only single-line text entry joins return-key navigation. A date opens a picker, and a\n"
+                                 "    /// text area needs the return key for newlines.\n",
+                           "    /// Only single-line text entry joins return-key navigation. A date opens a picker.\n", rel)
+    body = require_replace(body, "    /// Selection binding for dropdowns and radio groups. An empty selection is `.option(\"\")`.\n",
+                           "    /// Selection binding for dropdowns. An empty selection is `.option(\"\")`.\n", rel)
+    return require_replace(
+        body,
+        "\n    func radioOptions(for field: FormField) -> [JackpotOption] {\n"
+        "        field.radioOptions.map { JackpotOption(id: $0.value, label: localized($0.textKey)) }\n"
+        "    }\n",
+        "",
+        rel,
+    )
+
+
+def registration_checkbox_field(body, rel):
+    return require_replace(
+        body,
+        "\nstruct ToggleFieldView: View {\n"
+        "    let field: FormField\n"
+        "    @ObservedObject var model: DynamicFormModel\n"
+        "\n"
+        "    var body: some View {\n"
+        "        JackpotLabeledField(error: model.error(for: field)) {\n"
+        "            Toggle(model.localized(field.labelKey), isOn: model.bool(for: field))\n"
+        "                .toggleStyle(.jackpotSwitch)\n"
+        "                .disabled(field.isReadOnly)\n"
+        "        }\n"
+        "    }\n"
+        "}\n",
+        "",
+        rel,
+    )
+
+
+def registration_preview_fixtures(body, rel):
+    body = require_replace(body, "                             dropdowns: [DropdownOption] = [],\n"
+                                 "                             radios: [RadioOption] = []) -> FormField {\n",
+                           "                             dropdowns: [DropdownOption] = []) -> FormField {\n", rel)
+    body = require_replace(body, "            dropdownOptions: dropdowns,\n"
+                                 "            radioOptions: radios\n",
+                           "            dropdownOptions: dropdowns\n", rel)
+    body = require_replace(
+        body,
+        "    public static let notes = field(\"notes\", type: .textArea, label: \"Notes\",\n"
+        "                                    placeholder: \"Anything else?\", required: false)\n"
+        "\n"
+        "    public static let contactMethod = field(\n"
+        "        \"contactMethod\", type: .radioGroup, label: \"Preferred contact method\", required: true,\n"
+        "        regex: \"^.+$\",\n"
+        "        radios: [\n"
+        "            RadioOption(value: \"sms\", textKey: \"SMS\"),\n"
+        "            RadioOption(value: \"email\", textKey: \"Email\"),\n"
+        "            RadioOption(value: \"whatsapp\", textKey: \"WhatsApp\"),\n"
+        "        ]\n"
+        "    )\n"
+        "\n"
+        "    public static let welcomeOffer = field(\n"
+        "        \"welcomeOffer\", type: .welcomeOffer, label: \"Select your Welcome Offer:\", required: false,\n"
+        "        dropdowns: [\n"
+        "            DropdownOption(value: \"depositMatch\", textKey: \"100% Deposit Match\", regex: nil),\n"
+        "            DropdownOption(value: \"freeSpins\", textKey: \"50 Free Spins\", regex: nil),\n"
+        "        ]\n"
+        "    )\n\n",
+        "",
+        rel,
+    )
+    return require_replace(body, "    /// Values that make section one valid — useful for previewing the unlocked\n"
+                                 "    /// Welcome Offer and the enabled Next button.\n",
+                           "    /// Values that make section one valid — useful for previewing the enabled Next button.\n", rel)
+
+
+def registration_input_field(body, rel):
+    return require_replace(body, "        case \"otp\", \"pin\", \"code\":                 return .oneTimeCode\n",
+                           "", rel)
 
 
 def table(headers, rows):
@@ -97,7 +442,7 @@ def rule():
 text("# Build Playbook")
 text(
     "Create the files in the order given. Run the commands where they appear. Open a PR where\n"
-    "marked. Every file is reproduced in full, so a step is done when the file matches."
+    "marked. Shared sources are reproduced as registration uses them."
 )
 text(
     "This playbook documents the **registration** path and the **preview harness** that renders\n"
@@ -116,15 +461,9 @@ text("**153 tests** through PR 5.")
 text("### Registration catalog")
 text(
     "Twelve fields over two sections. Re-checked against the bundled fixture, the test fixture,\n"
-    "and the live CRM response. The only `fieldType` values on registration are **Input**,\n"
+    "and the live CRM response. The `fieldType` values on registration are **Input**,\n"
     "**Dropdown**, and **Checkbox**. Date of birth is `Input` + `inputType: Calender` (the schema\n"
     "spelling)."
-)
-text(
-    "`Divider` is **not** a registration field. `FormRowView` renders only the schema's visible\n"
-    "fields through `FieldRenderer` — it does not insert `JackpotDivider` (or any other type)\n"
-    "between rows. The SwiftUI `Divider()` on `FormSandboxView` is chrome between the form picker\n"
-    "and the form, not a CRM `fieldType`."
 )
 table(
     ["Step", "Identifier", "`fieldType`", "`inputType`", "Renders as"],
@@ -156,11 +495,11 @@ text(
 )
 text("### How to go to the next screen")
 text(
-    "The gold/blue button at the bottom of registration is **host UI chrome**, not a CRM\n"
-    "`fieldType: Button`. Neither the bundled `registration.json` nor the live CRM schema\n"
-    "(`GET …/cron/forms/jackpotcity/JZA/registration?api-version=2.0`) includes a Button\n"
-    "field. `RegistrationView` is a thin wrapper around `DynamicFormView`; the footer is\n"
-    "`FormNavigationBar` in `DynamicFormView.swift`."
+    "The gold/blue button at the bottom of registration is **host UI chrome** on\n"
+    "`FormNavigationBar` in `DynamicFormView.swift`. `RegistrationView` is a thin wrapper\n"
+    "around `DynamicFormView`. The bundled `registration.json` and the live CRM schema\n"
+    "(`GET …/cron/forms/jackpotcity/JZA/registration?api-version=2.0`) are the twelve fields\n"
+    "above — paging is not a field."
 )
 table(
     ["Visible control", "Style", "When", "Action"],
@@ -175,19 +514,12 @@ text(
     "validates (`isCurrentSectionValid`). Tapping it marks the section touched, revalidates,\n"
     "and if valid increments `sectionIndex` (step 1 → step 2). `Sign Up` stays disabled until\n"
     "`isFormValid`, then `RegistrationView`'s callback calls `RegistrationService.register`.\n"
-    "A progress bar sits above the scroll view when `sections.count > 1`."
-)
-text(
-    "A CRM `fieldType: Button` is a different thing. `FieldType.button` is decorative\n"
-    "(`isDecorative`), `FieldRenderer` maps it to `EmptyView()`, and the footer owns\n"
-    "navigation. Do not look for a schema Button to page the wizard — that control is\n"
-    "already on screen as `FormNavigationBar`."
+    "A progress bar (`.jackpotBar`) sits above the scroll view when `sections.count > 1`."
 )
 text("### Registration preview path")
 text(
     "`kitchenSink.json` is the bundled **registration-fields** schema — the same twelve\n"
-    "identifiers and three `fieldType`s as `registration.json`. It is not an all-types catalog.\n"
-    "Leave unused CRM Swift in the package."
+    "identifiers and three `fieldType`s as `registration.json`."
 )
 text(
     "1. **Schema.** `JackpotFormsUI/Resources/kitchenSink.json` — `formCodeName: kitchenSink`,\n"
@@ -207,39 +539,15 @@ text(
     "   (text field, checklist, dropdown, date, checkbox, progress, Next / Sign Up / Previous).\n"
     "8. **FormNavigationBar.** Host chrome on `DynamicFormView`: Previous (`.jackpot(.secondary)`)\n"
     "   on section 2, Next (`.jackpot`) while a later section exists, Sign Up (`.jackpot`) on\n"
-    "   the last section. Not a CRM `Button` field type."
-)
-text(
-    "`Divider` is **not** on this path. `FormRowView` renders only the schema's visible fields\n"
-    "through `FieldRenderer`. The SwiftUI `Divider()` on `FormSandboxView` is chrome between the\n"
-    "form picker and the form, not a CRM `fieldType`."
+    "   the last section."
 )
 table(
-    ["`fieldType`", "Where it renders in preview", "On registration?"],
+    ["`fieldType`", "Where it renders"],
     [
-        ["Input", "Registration JSON + Gallery + `FormPreview` field previews", "Yes"],
-        ["Dropdown", "Registration JSON + Gallery + `DropdownFieldView` previews", "Yes"],
-        ["Checkbox", "Registration JSON + Gallery + `CheckboxFieldView` previews", "Yes"],
+        ["Input", "Registration JSON + Gallery + `FormPreview` field previews"],
+        ["Dropdown", "Registration JSON + Gallery + `DropdownFieldView` previews"],
+        ["Checkbox", "Registration JSON + Gallery + `CheckboxFieldView` previews"],
     ],
-)
-text("### Out of scope")
-text(
-    "Not used by registration and not in the preview catalog. The playbook does not reproduce\n"
-    "them. **Do not delete the Swift.**"
-)
-text(
-    "- **CRM `fieldType: Button`:** recognised by `FieldType` and treated as decorative\n"
-    "  (`EmptyView` in `FieldRenderer`). It is **not** on registration (bundled or live) and\n"
-    "  **not** on the registration-fields preview. It is **not** the Next / Sign Up / Previous\n"
-    "  control — that is host chrome (`FormNavigationBar`), documented above, and **in scope**.\n"
-    "- **Field types:** `Text Area`, `Radio` / `Radio Group`, `Toggle`, `Divider`, `Welcome Offer`,\n"
-    "  `SignaturePad`, `reCAPTCHA` v2/v3, and any `unknown` CRM type\n"
-    "- **Components:** `JackpotTextArea`, `JackpotRadioGroup`, `JackpotDivider`, `JackpotLockedOverlay`,\n"
-    "  `JackpotCardButtonStyle`, `.jackpot(.tertiary)`, `.jackpotSwitch`\n"
-    "- **Form views:** `TextAreaFieldView`, `RadioGroupFieldView`, `ToggleFieldView`,\n"
-    "  `WelcomeOfferFieldView`, `RecaptchaPlaceholderView`\n"
-    "- **Follow-up infra:** `JackpotAppData`, `TranslationsStore` / `TranslationsRepository`,\n"
-    "  `ConditionalRequest` (ETag) — not on the registration or preview call path"
 )
 rule()
 
@@ -261,13 +569,13 @@ table(
     [
         ["`surface`", "#FFFFFF", "#131316", "Form / page background (Android `formBackground`)"],
         ["`fieldBackground`", "#F0F0F2", "#202126", "Field fill, secondary button, checklist (also Android dialog `background`)"],
-        ["`fieldBorder`", "#E1E2E6", "#3E3E48", "Hairline, progress track, divider"],
+        ["`fieldBorder`", "#E1E2E6", "#3E3E48", "Hairline, progress track"],
         ["`fieldBorderFocused`", "#E1E1E5", "#E1E1E5", "Focus ring. Shared `Palette.emphasis` hex"],
         ["`fieldBorderInvalid`", "#DF0000", "#FF6B6B", "Invalid ring — same value as `error`"],
         ["`textPrimary`", "#2F2F37", "#E1E1E5", "Titles and values (Android `titleText` / Text Priority)"],
         ["`textSecondary`", "#565A63", "#E1E1E5", "Labels and placeholders"],
         ["`textOnAccent`", "#FFFFFF", "#FFFFFF", "Label on `accentFill`"],
-        ["`accent`", "#0060EC", "#4D8FFF", "Tint, tertiary label, selected chrome (Android `link`)"],
+        ["`accent`", "#0060EC", "#4D8FFF", "Tint, selected chrome (Android `link`)"],
         ["`accentFill`", "#0060EC", "#0060EC", "Primary button fill"],
         ["`error`", "#DF0000", "#FF6B6B", "Validation and load errors"],
         ["`warning`", "#945C05", "#F59E21", "Checklist incomplete"],
@@ -315,32 +623,36 @@ files(
             "JackpotKit/Sources/JackpotUI/Theme/JackpotTheme.swift",
             "Adaptive light/dark palette. Hexes are the locked token table above; `Palette.emphasis`\n"
             "is the shared #E1E1E5 so focused border and dark text are one value, not aliases.",
+            registration_theme,
         ),
         (
             "JackpotKit/Sources/JackpotUI/Theme/JackpotEnvironment.swift",
             "`JackpotFieldConfiguration` is what keeps the field views parameter-free: a caller sets\n"
             "`jackpotFieldState`/`jackpotFieldError` once and every field below reads it.",
+            registration_environment,
         ),
         "JackpotKit/Sources/JackpotUI/Theme/JackpotStyling.swift",
         (
             "JackpotKit/Sources/JackpotUI/Styles/JackpotButtonStyle.swift",
-            "Registration uses `.jackpot` (Next / Sign Up) and `.jackpot(.secondary)` (Previous).\n"
-            "`.jackpot(.tertiary)` and `JackpotCardButtonStyle` are unused on this path.",
+            "`.jackpot` is Next / Sign Up. `.jackpot(.secondary)` is Previous.",
+            registration_button_style,
         ),
         (
             "JackpotKit/Sources/JackpotUI/Styles/JackpotToggleStyle.swift",
-            "Registration checkboxes use `.jackpotCheckbox`. `.jackpotSwitch` is the unused Toggle type.",
+            "Registration checkboxes use `.jackpotCheckbox`.",
+            registration_toggle_style,
         ),
         "JackpotKit/Sources/JackpotUI/Styles/JackpotProgressViewStyle.swift",
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotFieldChrome.swift",
-            "The shared background and the label/error row every registration field sits in.\n"
-            "`JackpotDivider` in this file is unused on this path.",
+            "The shared background and the label/error row every registration field sits in.",
+            registration_field_chrome,
         ),
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotFieldKind.swift",
             "Keyboard / autofill kinds applied with `jackpotField(_:)`. Registration uses text, name,\n"
-            "email, phone, number, and new-password. `.oneTimeCode` is not on this form.",
+            "email, phone, number, and new-password.",
+            registration_field_kind,
         ),
         "JackpotKit/Sources/JackpotUI/Fields/JackpotTextField.swift",
         "JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift",
@@ -384,8 +696,7 @@ text(
     "`JackpotFormsData` (wire shapes and the bundled stub), `JackpotFormsUI` (the engine and the\n"
     "renderer). Nothing here knows how a form is fetched — the engine only ever sees\n"
     "`FormRepository`, which is what lets PR 3 swap the stub for the network without touching it.\n"
-    "The catalog is the registration schema. Unused CRM types stay in the decoder for\n"
-    "forwards-compat; they are not in the preview catalog."
+    "The catalog is the registration schema: Input, Dropdown, and Checkbox."
 )
 
 bash(
@@ -427,8 +738,8 @@ files(
         "JackpotKit/Sources/JackpotFormsDomain/FormValue.swift",
         (
             "JackpotKit/Sources/JackpotFormsDomain/FormField.swift",
-            "The CRM type list is wider than registration. This flow constructs Input, Dropdown, and\n"
-            "Checkbox (plus `InputType.calendar` for DOB). Other cases are forwards-compat.",
+            "Registration constructs Input, Dropdown, and Checkbox (plus `InputType.calendar` for DOB).",
+            registration_form_field,
         ),
         "JackpotKit/Sources/JackpotFormsDomain/Form.swift",
         "JackpotKit/Sources/JackpotFormsDomain/FormSubmitResult.swift",
@@ -441,8 +752,16 @@ files(
         "JackpotKit/Sources/JackpotFormsDomain/FormLoadError.swift",
         "JackpotKit/Sources/JackpotFormsDomain/FormLocalizing.swift",
         "JackpotKit/Sources/JackpotFormsDomain/FormRepository.swift",
-        "JackpotKit/Sources/JackpotFormsData/FormDTO.swift",
-        "JackpotKit/Sources/JackpotFormsData/FormMapper.swift",
+        (
+            "JackpotKit/Sources/JackpotFormsData/FormDTO.swift",
+            None,
+            registration_form_dto,
+        ),
+        (
+            "JackpotKit/Sources/JackpotFormsData/FormMapper.swift",
+            None,
+            registration_form_mapper,
+        ),
         "JackpotKit/Sources/JackpotFormsData/StubFormRepository.swift",
     ]
 )
@@ -467,29 +786,36 @@ files(
             "call. `touched` is why an untouched field stays silent until Next, and\n"
             "`applyRegexDependencies` is how selecting Passport relaxes the SA-ID rule on a\n"
             "different field.",
+            registration_form_model,
         ),
         (
             "JackpotKit/Sources/JackpotFormsUI/Demo/PreviewFixtures.swift",
-            "Hand-built `FormPreview` fixtures. `registration` mirrors the CRM schema. Extra unused-type\n"
-            "helpers stay so leftover field-view canvases compile; they are not the catalog.",
+            "Hand-built `FormPreview` fixtures. `registration` mirrors the CRM schema — the twelve\n"
+            "registration fields.",
+            registration_preview_fixtures,
         ),
         (
             "JackpotKit/Sources/JackpotFormsUI/Fields/FieldRenderer.swift",
-            "The switch is the whole contract. Registration and the preview schema hit `.input`\n"
-            "(Calender → `DateFieldView`), `.dropdown`, and `.checkbox`. Other cases are forwards-compat.\n"
-            "`.button` is `EmptyView()` — a CRM field type, not the footer Next / Sign Up chrome.",
+            "The switch is the whole contract. Registration hits `.input` (Calender →\n"
+            "`DateFieldView`), `.dropdown`, and `.checkbox`.",
+            registration_field_renderer,
         ),
-        "JackpotKit/Sources/JackpotFormsUI/Fields/InputFieldView.swift",
+        (
+            "JackpotKit/Sources/JackpotFormsUI/Fields/InputFieldView.swift",
+            None,
+            registration_input_field,
+        ),
         "JackpotKit/Sources/JackpotFormsUI/Fields/DropdownFieldView.swift",
         "JackpotKit/Sources/JackpotFormsUI/Fields/DateFieldView.swift",
         (
             "JackpotKit/Sources/JackpotFormsUI/Fields/CheckboxFieldView.swift",
-            "`receivePromotionalInformation` and `terms`. `ToggleFieldView` in this file is unused.",
+            "`receivePromotionalInformation` and `terms`.",
+            registration_checkbox_field,
         ),
         (
             "JackpotKit/Sources/JackpotFormsUI/DynamicFormView.swift",
             "`FormNavigationBar` is the Next / Previous / Sign Up chrome. That is how step 1 becomes\n"
-            "step 2 — not a schema `Button` field. `RegistrationView` just hosts this view.",
+            "step 2. `RegistrationView` just hosts this view.",
         ),
         (
             "JackpotKit/Sources/JackpotFormsUI/Demo/PreviewSupport.swift",
@@ -501,7 +827,11 @@ files(
             "`RegistrationSandbox` in the app target wraps this.",
         ),
         "JackpotKit/Tests/JackpotFormsTests/FormDecodingTests.swift",
-        "JackpotKit/Tests/JackpotFormsTests/FieldValidatorTests.swift",
+        (
+            "JackpotKit/Tests/JackpotFormsTests/FieldValidatorTests.swift",
+            None,
+            registration_validator_tests,
+        ),
         (
             "JackpotKit/Tests/JackpotFormsTests/DynamicFormModelTests.swift",
             "The behaviour a user experiences: untouched fields stay silent, Next reveals every error at\n"
@@ -682,8 +1012,8 @@ files(
         "JackpotKit/Sources/JackpotRegistration/RegistrationService.swift",
         (
             "JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift",
-            "`RegistrationView` hosts `DynamicFormView(formName: .registration)`. It does not own\n"
-            "paging — Next / Previous / Sign Up live in `FormNavigationBar`.",
+            "`RegistrationView` hosts `DynamicFormView(formName: .registration)`. Next / Previous /\n"
+            "Sign Up live in `FormNavigationBar`.",
         ),
         (
             "JackpotKit/Sources/JackpotRegistration/RegistrationPanelController.swift",
@@ -1028,6 +1358,34 @@ nav li.l3 {{ padding-left: 5mm; font-weight: 400; color: #4a5058; }}
 # ---------------------------------------------------------------- emit
 
 markdown = render_markdown()
+
+FORBIDDEN = (
+    r"\.jackpot\(\.tertiary\)",
+    r"case tertiary",
+    r"Prominence\.tertiary",
+    r"case \.tertiary",
+    r"JackpotCardButtonStyle",
+    r"jackpotSwitch",
+    r"JackpotDivider",
+    r"ToggleFieldView",
+    r"RadioOption",
+    r"FieldRadioDTO",
+    r"fieldRadioGroup",
+    r"radioOptions",
+    r"WelcomeOffer",
+    r"TextAreaFieldView",
+    r"JackpotTextArea",
+    r"RecaptchaPlaceholderView",
+    r"SignaturePad",
+    r"jackpotIsSelected",
+    r"jackpotSelected",
+    r"### Out of scope",
+    r"tertiary",
+)
+for pattern in FORBIDDEN:
+    if re.search(pattern, markdown, re.IGNORECASE):
+        sys.exit(f"playbook still contains {pattern!r}")
+
 with open(OUT, "w") as f:
     f.write(markdown)
 print(f"wrote {OUT}: {markdown.count(chr(10))} lines, {step} steps")
