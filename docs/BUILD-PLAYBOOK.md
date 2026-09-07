@@ -117,9 +117,9 @@ at it. There is no `link` token; that Android role is `accent`.
 
 | Token | Light | Dark | Role |
 | --- | --- | --- | --- |
-| `surface` | #FFFFFF | #131316 | Form / page background (Android `formBackground`) |
-| `fieldBackground` | #F0F0F2 | #202126 | Field fill, secondary button, checklist (also Android dialog `background`) |
-| `fieldBorder` | #E1E2E6 | #3E3E48 | Hairline, progress track |
+| `surface` | #FFFFFF | #131316 | Form / page background, Previous button fill (Android `formBackground`) |
+| `fieldBackground` | #F0F0F2 | #202126 | Field fill, disabled Next / Sign Up, checklist (also Android dialog `background`) |
+| `fieldBorder` | #E1E2E6 | #3E3E48 | Hairline, progress track, Previous button |
 | `fieldBorderFocused` | #E1E1E5 | #E1E1E5 | Focus ring. Shared `Palette.emphasis` hex |
 | `fieldBorderInvalid` | #DF0000 | #FF6B6B | Invalid ring — same value as `error` |
 | `textPrimary` | #2F2F37 | #E1E1E5 | Titles and values (Android `titleText` / Text Priority) |
@@ -223,11 +223,11 @@ enum Palette {
     /// #FFFFFF / #131316. Android `formBackground` (BG Layer 2 / BG Base).
     static let surface = Color.adaptive(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x131316))
 
-    /// #F0F0F2 / #202126. Field fill, secondary button, checklist. Android `fieldBackground`
+    /// #F0F0F2 / #202126. Field fill, disabled primary, checklist. Android `fieldBackground`
     /// and dialog `background` are this pair, so they share this token.
     static let fieldBackground = Color.adaptive(light: Color(hex: 0xF0F0F2), dark: Color(hex: 0x202126))
 
-    /// #E1E2E6 / #3E3E48. Hairline, progress track, divider.
+    /// #E1E2E6 / #3E3E48. Hairline, progress track, divider, secondary button.
     static let fieldBorder = Color.adaptive(light: Color(hex: 0xE1E2E6), dark: Color(hex: 0x3E3E48))
 
     /// #E1E1E5. Android reused this for the focused border and every dark-mode text / icon.
@@ -524,7 +524,9 @@ private struct JackpotFontStyle: ViewModifier {
 
 **6.** `JackpotKit/Sources/JackpotUI/Styles/JackpotButtonStyle.swift`
 
-`.jackpot` is Next / Sign Up. `.jackpot(.secondary)` is Previous.
+`.jackpot` is Next / Sign Up: `accentFill` + `textOnAccent` when enabled, field fill when
+disabled. `.jackpot(.secondary)` is Previous: `surface` fill, `fieldBorder` hairline,
+`textPrimary` label.
 
 ```swift
 import SwiftUI
@@ -566,6 +568,12 @@ public struct JackpotButtonStyle: ButtonStyle {
                 .frame(maxWidth: .infinity, minHeight: theme.sizes.controlHeight)
                 .foregroundStyle(foreground)
                 .background(background, in: theme.sizes.fieldShape)
+                .overlay {
+                    if prominence == .secondary {
+                        theme.sizes.fieldShape
+                            .strokeBorder(theme.colors.fieldBorder, lineWidth: theme.sizes.borderWidth)
+                    }
+                }
                 .contentShape(theme.sizes.fieldShape)
                 .opacity(configuration.isPressed ? 0.85 : 1)
                 .scaleEffect(configuration.isPressed ? 0.98 : 1)
@@ -579,7 +587,7 @@ public struct JackpotButtonStyle: ButtonStyle {
         private var background: Color {
             switch prominence {
             case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill
-            case .secondary: return theme.colors.fieldBackground
+            case .secondary: return theme.colors.surface
             }
         }
 

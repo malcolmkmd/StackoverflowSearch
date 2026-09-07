@@ -49,11 +49,11 @@ enum Palette {
     /// #FFFFFF / #131316. Android `formBackground` (BG Layer 2 / BG Base).
     static let surface = Color.adaptive(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x131316))
 
-    /// #F0F0F2 / #202126. Field fill, secondary button, checklist. Android `fieldBackground`
+    /// #F0F0F2 / #202126. Field fill, disabled primary, checklist. Android `fieldBackground`
     /// and dialog `background` are this pair, so they share this token.
     static let fieldBackground = Color.adaptive(light: Color(hex: 0xF0F0F2), dark: Color(hex: 0x202126))
 
-    /// #E1E2E6 / #3E3E48. Hairline, progress track, divider.
+    /// #E1E2E6 / #3E3E48. Hairline, progress track, divider, secondary button.
     static let fieldBorder = Color.adaptive(light: Color(hex: 0xE1E2E6), dark: Color(hex: 0x3E3E48))
 
     /// #E1E1E5. Android reused this for the focused border and every dark-mode text / icon.

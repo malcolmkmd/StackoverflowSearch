@@ -102,10 +102,10 @@ def registration_button_style(body, rel):
     body = require_replace(body, "        case primary\n        case secondary\n        case tertiary\n",
                            "        case primary\n        case secondary\n", rel)
     body = require_replace(body, "            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill\n"
-                                 "            case .secondary: return theme.colors.fieldBackground\n"
+                                 "            case .secondary: return theme.colors.surface\n"
                                  "            case .tertiary:  return .clear\n",
                            "            case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill\n"
-                           "            case .secondary: return theme.colors.fieldBackground\n", rel)
+                           "            case .secondary: return theme.colors.surface\n", rel)
     body = require_replace(body, "            case .primary:   return isDimmed ? theme.colors.textSecondary : theme.colors.textOnAccent\n"
                                  "            case .secondary: return isDimmed ? theme.colors.textSecondary : theme.colors.textPrimary\n"
                                  "            case .tertiary:  return isDimmed ? theme.colors.textSecondary : theme.colors.accent\n",
@@ -520,7 +520,9 @@ text(
     "validates (`isCurrentSectionValid`). Tapping it marks the section touched, revalidates,\n"
     "and if valid increments `sectionIndex` (step 1 → step 2). `Sign Up` stays disabled until\n"
     "`isFormValid`, then `RegistrationView`'s callback calls `RegistrationService.register`.\n"
-    "A progress bar (`.jackpotBar`) sits above the scroll view when `sections.count > 1`."
+    "A progress bar (`.jackpotBar`) sits above the scroll view when `sections.count > 1`.\n"
+    "Previous is `surface` + `fieldBorder` + `textPrimary`. Next / Sign Up use `accentFill` +\n"
+    "`textOnAccent` when enabled, and the field-fill disabled treatment when not."
 )
 text("### Registration preview path")
 text(
@@ -573,9 +575,9 @@ text(
 table(
     ["Token", "Light", "Dark", "Role"],
     [
-        ["`surface`", "#FFFFFF", "#131316", "Form / page background (Android `formBackground`)"],
-        ["`fieldBackground`", "#F0F0F2", "#202126", "Field fill, secondary button, checklist (also Android dialog `background`)"],
-        ["`fieldBorder`", "#E1E2E6", "#3E3E48", "Hairline, progress track"],
+        ["`surface`", "#FFFFFF", "#131316", "Form / page background, Previous button fill (Android `formBackground`)"],
+        ["`fieldBackground`", "#F0F0F2", "#202126", "Field fill, disabled Next / Sign Up, checklist (also Android dialog `background`)"],
+        ["`fieldBorder`", "#E1E2E6", "#3E3E48", "Hairline, progress track, Previous button"],
         ["`fieldBorderFocused`", "#E1E1E5", "#E1E1E5", "Focus ring. Shared `Palette.emphasis` hex"],
         ["`fieldBorderInvalid`", "#DF0000", "#FF6B6B", "Invalid ring — same value as `error`"],
         ["`textPrimary`", "#2F2F37", "#E1E1E5", "Titles and values (Android `titleText` / Text Priority)"],
@@ -640,7 +642,9 @@ files(
         "JackpotKit/Sources/JackpotUI/Theme/JackpotStyling.swift",
         (
             "JackpotKit/Sources/JackpotUI/Styles/JackpotButtonStyle.swift",
-            "`.jackpot` is Next / Sign Up. `.jackpot(.secondary)` is Previous.",
+            "`.jackpot` is Next / Sign Up: `accentFill` + `textOnAccent` when enabled, field fill when\n"
+            "disabled. `.jackpot(.secondary)` is Previous: `surface` fill, `fieldBorder` hairline,\n"
+            "`textPrimary` label.",
             registration_button_style,
         ),
         (

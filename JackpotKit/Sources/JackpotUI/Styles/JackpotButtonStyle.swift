@@ -38,6 +38,12 @@ public struct JackpotButtonStyle: ButtonStyle {
                 .frame(maxWidth: .infinity, minHeight: theme.sizes.controlHeight)
                 .foregroundStyle(foreground)
                 .background(background, in: theme.sizes.fieldShape)
+                .overlay {
+                    if prominence == .secondary {
+                        theme.sizes.fieldShape
+                            .strokeBorder(theme.colors.fieldBorder, lineWidth: theme.sizes.borderWidth)
+                    }
+                }
                 .contentShape(theme.sizes.fieldShape)
                 .opacity(configuration.isPressed ? 0.85 : 1)
                 .scaleEffect(configuration.isPressed ? 0.98 : 1)
@@ -51,7 +57,7 @@ public struct JackpotButtonStyle: ButtonStyle {
         private var background: Color {
             switch prominence {
             case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill
-            case .secondary: return theme.colors.fieldBackground
+            case .secondary: return theme.colors.surface
             case .tertiary:  return .clear
             }
         }
