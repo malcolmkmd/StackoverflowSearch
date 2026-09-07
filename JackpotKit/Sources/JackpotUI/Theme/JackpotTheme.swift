@@ -3,7 +3,7 @@ import UIKit
 
 public struct JackpotTheme: Equatable, Sendable {
     public var colors: JackpotColors = .jackpotCity
-    public var metrics: JackpotMetrics = .standard
+    public var sizes: JackpotSizes = .standard
     public var typography: JackpotTypography = .standard
 
     public static let jackpotCity = JackpotTheme()
@@ -97,21 +97,38 @@ extension Color {
     }
 }
 
-// MARK: - Metrics
+// MARK: - Spacing
 
-public struct JackpotMetrics: Equatable, Sendable {
-    public var cornerRadius: CGFloat = 10
+/// Layout scale for gaps, insets, and corner radii. Component sizes that are not
+/// spacing (control height, hit targets) live on `JackpotSizes`.
+public enum JackpotSpacing {
+    public static let xxs: CGFloat = 4
+    public static let xs: CGFloat = 6
+    public static let s: CGFloat = 8
+    public static let sm: CGFloat = 12
+    public static let m: CGFloat = 16
+    public static let lm: CGFloat = 20
+    public static let l: CGFloat = 24
+    public static let xl: CGFloat = 32
+    public static let xxl: CGFloat = 40
+    public static let xxxl: CGFloat = 48
+}
+
+// MARK: - Sizes
+
+public struct JackpotSizes: Equatable, Sendable {
+    public var cornerRadius: CGFloat = JackpotSpacing.sm
     public var controlHeight: CGFloat = 52
-    public var spacing: CGFloat = 12
-    public var contentPadding: CGFloat = 14
+    public var spacing: CGFloat = JackpotSpacing.sm
+    public var contentPadding: CGFloat = JackpotSpacing.m
     public var borderWidth: CGFloat = 1
     public var emphasizedBorderWidth: CGFloat = 2
     public var minimumHitTarget: CGFloat = 44
-    public var progressBarHeight: CGFloat = 4
+    public var progressBarHeight: CGFloat = JackpotSpacing.xxs
     public var textAreaMinHeight: CGFloat = 110
     public var cardMinHeight: CGFloat = 140
 
-    public static let standard = JackpotMetrics()
+    public static let standard = JackpotSizes()
 
     public var fieldShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)

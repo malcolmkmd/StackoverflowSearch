@@ -44,8 +44,8 @@ public struct JackpotDropdown: View {
                 Image(systemName: "chevron.down").jackpotForegroundStyle(\.textPrimary)
             }
             .jackpotFont(\.fieldText)
-            .padding(.horizontal, theme.metrics.contentPadding)
-            .frame(height: theme.metrics.controlHeight)
+            .padding(.horizontal, theme.sizes.contentPadding)
+            .frame(height: theme.sizes.controlHeight)
             .jackpotFieldBackground()
         }
         .accessibilityLabel(placeholder)

@@ -12,11 +12,11 @@ struct WelcomeOfferFieldView: View {
     private var selected: String { model.value(for: field).stringValue }
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: JackpotSpacing.sm) {
             Text(model.localized(field.labelKey))
                 .jackpotTextStyle(\.sectionTitle)
 
-            HStack(spacing: 10) {
+            HStack(spacing: JackpotSpacing.sm) {
                 ForEach(model.options(for: field)) { option in
                     Button {
                         model.setValue(.option(option.id), for: field)

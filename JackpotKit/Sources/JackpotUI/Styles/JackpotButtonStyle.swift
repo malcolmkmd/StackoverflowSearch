@@ -35,10 +35,10 @@ public struct JackpotButtonStyle: ButtonStyle {
                         ProgressView().tint(foreground).accessibilityHidden(true)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: theme.metrics.controlHeight)
+                .frame(maxWidth: .infinity, minHeight: theme.sizes.controlHeight)
                 .foregroundStyle(foreground)
-                .background(background, in: theme.metrics.fieldShape)
-                .contentShape(theme.metrics.fieldShape)
+                .background(background, in: theme.sizes.fieldShape)
+                .contentShape(theme.sizes.fieldShape)
                 .opacity(configuration.isPressed ? 0.85 : 1)
                 .scaleEffect(configuration.isPressed ? 0.98 : 1)
                 .animation(.spring(response: 0.3, dampingFraction: 1), value: configuration.isPressed)
@@ -92,15 +92,15 @@ public struct JackpotCardButtonStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
-                .frame(maxWidth: .infinity, minHeight: theme.metrics.cardMinHeight)
-                .jackpotBackground(\.fieldBackground, in: theme.metrics.fieldShape)
+                .frame(maxWidth: .infinity, minHeight: theme.sizes.cardMinHeight)
+                .jackpotBackground(\.fieldBackground, in: theme.sizes.fieldShape)
                 .overlay {
-                    theme.metrics.fieldShape
+                    theme.sizes.fieldShape
                         .strokeBorder(isSelected ? theme.colors.accent : theme.colors.fieldBorder,
-                                      lineWidth: isSelected ? theme.metrics.emphasizedBorderWidth
-                                                            : theme.metrics.borderWidth)
+                                      lineWidth: isSelected ? theme.sizes.emphasizedBorderWidth
+                                                            : theme.sizes.borderWidth)
                 }
-                .contentShape(theme.metrics.fieldShape)
+                .contentShape(theme.sizes.fieldShape)
                 .opacity(isEnabled ? 1 : 0.6)
                 .scaleEffect(configuration.isPressed ? 0.98 : 1)
                 .animation(.spring(response: 0.3, dampingFraction: 1), value: configuration.isPressed)

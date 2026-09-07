@@ -11,13 +11,13 @@ public struct JackpotPreviewPanel<Content: View>: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: JackpotSpacing.sm) {
             if let title {
                 Text(title).font(.caption).jackpotForegroundStyle(\.textSecondary)
             }
             content
         }
-        .padding(16)
+        .padding(JackpotSpacing.m)
         .frame(width: 390)
         .jackpotTheme(.jackpotCity)
         .jackpotBackground(\.surface)
@@ -92,7 +92,7 @@ struct JackpotUI_Previews: PreviewProvider {
 
                     ProgressView(value: 0.45).progressViewStyle(.jackpotBar)
 
-                    HStack(spacing: 10) {
+                    HStack(spacing: JackpotSpacing.sm) {
                         offerCard("100% Deposit Match", id: "depositMatch")
                         offerCard("50 Free Spins", id: "freeSpins")
                     }

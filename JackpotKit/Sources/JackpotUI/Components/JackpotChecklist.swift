@@ -29,9 +29,9 @@ public struct JackpotChecklist: View {
     public var body: some View {
         if !items.isEmpty {
             DisclosureGroup(isExpanded: $isExpanded) {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: JackpotSpacing.sm) {
                     ProgressView(value: satisfiedFraction)
-                        .progressViewStyle(.jackpotBar(height: 6))
+                        .progressViewStyle(.jackpotBar(height: JackpotSpacing.xs))
                         .tint(satisfiedFraction < 1 ? theme.colors.warning : theme.colors.success)
                         .accessibilityLabel("Requirements met")
 
@@ -41,21 +41,21 @@ public struct JackpotChecklist: View {
                         row(for: item)
                     }
                 }
-                .padding(.top, 10)
+                .padding(.top, JackpotSpacing.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
             } label: {
                 Text(title).jackpotTextStyle(\.sectionTitle)
             }
             // The chevron follows the tint, which the theme points at the accent colour.
             .tint(theme.colors.textPrimary)
-            .padding(theme.metrics.contentPadding)
-            .jackpotBackground(\.fieldBackground, in: theme.metrics.fieldShape)
+            .padding(theme.sizes.contentPadding)
+            .jackpotBackground(\.fieldBackground, in: theme.sizes.fieldShape)
             .animation(.spring(response: 0.3, dampingFraction: 1), value: isExpanded)
         }
     }
 
     private func row(for item: JackpotChecklistItem) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: JackpotSpacing.sm) {
             Image(systemName: item.isSatisfied ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(item.isSatisfied ? theme.colors.accent : theme.colors.textSecondary)
                 .animation(.easeOut(duration: 0.15), value: item.isSatisfied)
