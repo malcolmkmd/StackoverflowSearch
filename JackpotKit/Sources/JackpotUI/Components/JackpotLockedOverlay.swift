@@ -22,8 +22,8 @@ public struct JackpotLockedOverlay: ViewModifier {
                 Text(message)
                     .jackpotTextStyle(\.sectionTitle)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .shadow(radius: 4)
+                    .padding(.horizontal, JackpotSpacing.l)
+                    .shadow(radius: JackpotSpacing.xxs)
             }
         }
         .animation(.easeOut(duration: 0.2), value: isLocked)

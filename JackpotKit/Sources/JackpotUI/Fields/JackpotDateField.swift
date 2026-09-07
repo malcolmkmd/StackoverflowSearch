@@ -28,8 +28,8 @@ public struct JackpotDateField: View {
                 Image(systemName: "calendar").jackpotForegroundStyle(\.textPrimary)
             }
             .jackpotFont(\.fieldText)
-            .padding(.horizontal, theme.metrics.contentPadding)
-            .frame(height: theme.metrics.controlHeight)
+            .padding(.horizontal, theme.sizes.contentPadding)
+            .frame(height: theme.sizes.controlHeight)
             .jackpotFieldBackground()
         }
         .buttonStyle(.plain)
@@ -56,10 +56,10 @@ public struct JackpotDateField: View {
         ZStack {
             theme.colors.surface.ignoresSafeArea()
 
-            VStack(spacing: theme.metrics.spacing) {
+            VStack(spacing: theme.sizes.spacing) {
                 Text(fieldLabel ?? placeholder)
                     .jackpotTextStyle(\.button)
-                    .padding(.top, 20)
+                    .padding(.top, JackpotSpacing.lm)
 
                 DatePicker("",
                            selection: Binding(get: { selection ?? range.upperBound },
@@ -80,7 +80,7 @@ public struct JackpotDateField: View {
                     isPresented = false
                 }
                 .buttonStyle(.jackpot)
-                .padding([.horizontal, .bottom], 16)
+                .padding([.horizontal, .bottom], JackpotSpacing.m)
             }
         }
     }

@@ -24,16 +24,16 @@ public struct JackpotTextArea: View {
         ZStack(alignment: .topLeading) {
             editor
                 .focused($isFocused)
-                .frame(minHeight: theme.metrics.textAreaMinHeight)
-                .padding(8)
+                .frame(minHeight: theme.sizes.textAreaMinHeight)
+                .padding(JackpotSpacing.s)
                 .jackpotTextStyle(\.fieldText)
                 .accessibilityLabel(placeholder)
 
             if text.isEmpty {
                 Text(placeholder)
                     .jackpotTextStyle(\.fieldText, color: \.textSecondary)
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 16)
+                    .padding(.horizontal, JackpotSpacing.sm)
+                    .padding(.vertical, JackpotSpacing.m)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }

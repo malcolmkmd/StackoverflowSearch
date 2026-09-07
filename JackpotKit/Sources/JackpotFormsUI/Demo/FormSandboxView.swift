@@ -1,5 +1,6 @@
 import SwiftUI
 import JackpotFormsDomain
+import JackpotUI
 
 /// The review harness: pick a form, watch it render from JSON alone, submit it, and read back
 /// exactly what the callback received. Nothing here is app-specific.
@@ -58,7 +59,7 @@ public struct FormSandboxView: View {
             }
         }
         .pickerStyle(.segmented)
-        .padding(12)
+        .padding(JackpotSpacing.sm)
     }
 }
 

@@ -34,11 +34,11 @@ public struct JackpotToggleStyle: ToggleStyle {
             Button {
                 configuration.isOn.toggle()
             } label: {
-                HStack(alignment: .top, spacing: theme.metrics.spacing) {
+                HStack(alignment: .top, spacing: theme.sizes.spacing) {
                     Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
                         .font(.title3)
                         .foregroundStyle(boxColor)
-                        .frame(width: 24, height: 24)
+                        .frame(width: JackpotSpacing.l, height: JackpotSpacing.l)
                         .animation(.easeOut(duration: 0.15), value: configuration.isOn)
                     configuration.label
                         .jackpotTextStyle(\.rowLabel)
@@ -46,7 +46,7 @@ public struct JackpotToggleStyle: ToggleStyle {
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                 }
-                .frame(minHeight: theme.metrics.minimumHitTarget)
+                .frame(minHeight: theme.sizes.minimumHitTarget)
             }
             .buttonStyle(.plain)
             .accessibilityRepresentation {

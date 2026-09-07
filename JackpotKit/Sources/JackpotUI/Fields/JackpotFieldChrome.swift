@@ -13,9 +13,9 @@ public struct JackpotFieldBackground: ViewModifier {
 
     public func body(content: Content) -> some View {
         content
-            .jackpotBackground(\.fieldBackground, in: theme.metrics.fieldShape)
+            .jackpotBackground(\.fieldBackground, in: theme.sizes.fieldShape)
             .overlay {
-                theme.metrics.fieldShape
+                theme.sizes.fieldShape
                     .strokeBorder(borderColor, lineWidth: borderWidth)
                     .animation(.easeOut(duration: 0.15), value: emphasis)
             }
@@ -39,7 +39,7 @@ public struct JackpotFieldBackground: ViewModifier {
 
     /// Width as well as colour, so focus and errors are not carried by colour alone.
     private var borderWidth: CGFloat {
-        emphasis == .none ? theme.metrics.borderWidth : theme.metrics.emphasizedBorderWidth
+        emphasis == .none ? theme.sizes.borderWidth : theme.sizes.emphasizedBorderWidth
     }
 }
 
@@ -63,7 +63,7 @@ public struct JackpotLabeledField<Content: View>: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: JackpotSpacing.xs) {
             if let label, !label.isEmpty {
                 Text(label).jackpotTextStyle(\.label, color: \.textSecondary)
             }
@@ -94,7 +94,7 @@ public struct JackpotDivider: View {
         Rectangle()
             .fill(theme.colors.fieldBorder)
             .frame(height: 1)
-            .padding(.vertical, 4)
+            .padding(.vertical, JackpotSpacing.xxs)
             .accessibilityHidden(true)
     }
 }

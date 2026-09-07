@@ -79,12 +79,12 @@ struct DynamicFormBody: View {
                 if model.sections.count > 1 {
                     ProgressView(value: model.progress)
                         .progressViewStyle(.jackpotBar)
-                        .padding(.horizontal, 16).padding(.top, 12)
+                        .padding(.horizontal, JackpotSpacing.m).padding(.top, JackpotSpacing.sm)
                         .accessibilityLabel("Form progress")
                 }
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: theme.metrics.spacing) {
+                    VStack(alignment: .leading, spacing: theme.sizes.spacing) {
                         if let section = model.currentSection {
                             ForEach(section.rows) { row in FormRowView(row: row, model: model) }
                         }
@@ -99,7 +99,7 @@ struct DynamicFormBody: View {
                         }
                         #endif
                     }
-                    .padding(16)
+                    .padding(JackpotSpacing.m)
                     // New identity per section is what lets the transition run at all; the
                     // nav bar and progress bar sit outside it so they don't slide too.
                     .id(model.sectionIndex)
@@ -110,7 +110,7 @@ struct DynamicFormBody: View {
                                   onSubmit: onSubmit,
                                   advance: advance,
                                   goBack: goBack)
-                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .padding(.horizontal, JackpotSpacing.m).padding(.vertical, JackpotSpacing.sm)
             }
             .jackpotBackground(\.surface)
             .jackpotFocusedField($focusedField)
@@ -169,7 +169,7 @@ struct FormRowView: View {
         if visible.count == 1 {
             FieldRenderer(field: visible[0], model: model)
         } else if !visible.isEmpty {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: JackpotSpacing.s) {
                 ForEach(visible) { FieldRenderer(field: $0, model: model) }
             }
         }
@@ -183,7 +183,7 @@ struct FormNavigationBar: View {
     let goBack: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: JackpotSpacing.sm) {
             if !model.isFirstSection {
                 Button("Previous", action: goBack)
                     .buttonStyle(.jackpot(.secondary))

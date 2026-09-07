@@ -26,7 +26,7 @@ public struct JackpotBarProgressViewStyle: ProgressViewStyle {
                         .frame(width: proxy.size.width * fraction.clampedToUnitInterval)
                 }
             }
-            .frame(height: height ?? theme.metrics.progressBarHeight)
+            .frame(height: height ?? theme.sizes.progressBarHeight)
             .animation(.easeOut(duration: 0.25), value: fraction)
         }
     }

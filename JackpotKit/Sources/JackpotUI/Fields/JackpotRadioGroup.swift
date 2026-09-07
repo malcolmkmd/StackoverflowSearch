@@ -12,7 +12,7 @@ public struct JackpotRadioGroup: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: JackpotSpacing.s) {
             ForEach(options) { option in
                 row(for: option)
             }
@@ -24,14 +24,14 @@ public struct JackpotRadioGroup: View {
         return Button {
             selection = option.id
         } label: {
-            HStack(spacing: theme.metrics.spacing) {
+            HStack(spacing: theme.sizes.spacing) {
                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                     .foregroundStyle(isSelected ? theme.colors.accent : theme.colors.textSecondary)
                     .animation(.easeOut(duration: 0.15), value: isSelected)
                 Text(option.label).jackpotTextStyle(\.rowLabel)
                 Spacer(minLength: 0)
             }
-            .frame(minHeight: theme.metrics.minimumHitTarget)
+            .frame(minHeight: theme.sizes.minimumHitTarget)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)

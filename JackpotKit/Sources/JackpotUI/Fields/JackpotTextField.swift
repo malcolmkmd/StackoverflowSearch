@@ -43,8 +43,8 @@ public struct JackpotTextField: View {
             if !prefix.isEmpty {
                 Text(prefix)
                     .jackpotTextStyle(\.fieldText)
-                    .padding(.horizontal, theme.metrics.contentPadding)
-                    .frame(height: theme.metrics.controlHeight)
+                    .padding(.horizontal, theme.sizes.contentPadding)
+                    .frame(height: theme.sizes.controlHeight)
                     .overlay(alignment: .trailing) {
                         Rectangle().fill(theme.colors.fieldBorder).frame(width: 1)
                     }
@@ -57,8 +57,8 @@ public struct JackpotTextField: View {
                 .jackpotTextStyle(\.fieldText)
                 .focused($isFocused)
                 .submitLabel(submitLabel)
-                .padding(.horizontal, theme.metrics.contentPadding)
-                .frame(height: theme.metrics.controlHeight)
+                .padding(.horizontal, theme.sizes.contentPadding)
+                .frame(height: theme.sizes.controlHeight)
                 // The prefix cell is hidden above, so fold it in rather than leaving
                 // VoiceOver to stumble over a stray "+27".
                 .accessibilityLabel(prefix.isEmpty ? Text(placeholder) : Text("\(placeholder), \(prefix)"))
@@ -66,7 +66,7 @@ public struct JackpotTextField: View {
             if !suffix.isEmpty {
                 Text(suffix)
                     .jackpotTextStyle(\.fieldText, color: \.textSecondary)
-                    .padding(.trailing, theme.metrics.contentPadding)
+                    .padding(.trailing, theme.sizes.contentPadding)
                     .contentShape(Rectangle())
                     .onTapGesture { isFocused = true }
             }
@@ -78,8 +78,8 @@ public struct JackpotTextField: View {
                     Image(systemName: isRevealed ? "eye.slash" : "eye")
                         .jackpotForegroundStyle(\.textPrimary)
                 }
-                .frame(width: theme.metrics.minimumHitTarget, height: theme.metrics.minimumHitTarget)
-                .padding(.trailing, 6)
+                .frame(width: theme.sizes.minimumHitTarget, height: theme.sizes.minimumHitTarget)
+                .padding(.trailing, JackpotSpacing.xs)
                 .accessibilityLabel(isRevealed ? "Hide password" : "Show password")
             }
         }
