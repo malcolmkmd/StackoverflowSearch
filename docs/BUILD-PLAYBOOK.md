@@ -1,7 +1,7 @@
 # Build Playbook
 
 Create the files in the order given. Run the commands where they appear. Open a PR where
-marked. Every file is reproduced in full, so a step is done when the file matches.
+marked. Shared sources are reproduced as registration uses them.
 
 This playbook documents the **registration** path and the **preview harness** that renders
 those same twelve fields. Registration is `DynamicFormView(formName: .registration)` driven
@@ -19,14 +19,9 @@ imports `UIKit`.
 ### Registration catalog
 
 Twelve fields over two sections. Re-checked against the bundled fixture, the test fixture,
-and the live CRM response. The only `fieldType` values on registration are **Input**,
+and the live CRM response. The `fieldType` values on registration are **Input**,
 **Dropdown**, and **Checkbox**. Date of birth is `Input` + `inputType: Calender` (the schema
 spelling).
-
-`Divider` is **not** a registration field. `FormRowView` renders only the schema's visible
-fields through `FieldRenderer` — it does not insert `JackpotDivider` (or any other type)
-between rows. The SwiftUI `Divider()` on `FormSandboxView` is chrome between the form picker
-and the form, not a CRM `fieldType`.
 
 | Step | Identifier | `fieldType` | `inputType` | Renders as |
 | --- | --- | --- | --- | --- |
@@ -54,11 +49,11 @@ spacing / size tokens below.
 
 ### How to go to the next screen
 
-The gold/blue button at the bottom of registration is **host UI chrome**, not a CRM
-`fieldType: Button`. Neither the bundled `registration.json` nor the live CRM schema
-(`GET …/cron/forms/jackpotcity/JZA/registration?api-version=2.0`) includes a Button
-field. `RegistrationView` is a thin wrapper around `DynamicFormView`; the footer is
-`FormNavigationBar` in `DynamicFormView.swift`.
+The gold/blue button at the bottom of registration is **host UI chrome** on
+`FormNavigationBar` in `DynamicFormView.swift`. `RegistrationView` is a thin wrapper
+around `DynamicFormView`. The bundled `registration.json` and the live CRM schema
+(`GET …/cron/forms/jackpotcity/JZA/registration?api-version=2.0`) are the twelve fields
+above — paging is not a field.
 
 | Visible control | Style | When | Action |
 | --- | --- | --- | --- |
@@ -70,18 +65,12 @@ field. `RegistrationView` is a thin wrapper around `DynamicFormView`; the footer
 validates (`isCurrentSectionValid`). Tapping it marks the section touched, revalidates,
 and if valid increments `sectionIndex` (step 1 → step 2). `Sign Up` stays disabled until
 `isFormValid`, then `RegistrationView`'s callback calls `RegistrationService.register`.
-A progress bar sits above the scroll view when `sections.count > 1`.
-
-A CRM `fieldType: Button` is a different thing. `FieldType.button` is decorative
-(`isDecorative`), `FieldRenderer` maps it to `EmptyView()`, and the footer owns
-navigation. Do not look for a schema Button to page the wizard — that control is
-already on screen as `FormNavigationBar`.
+A progress bar (`.jackpotBar`) sits above the scroll view when `sections.count > 1`.
 
 ### Registration preview path
 
 `kitchenSink.json` is the bundled **registration-fields** schema — the same twelve
-identifiers and three `fieldType`s as `registration.json`. It is not an all-types catalog.
-Leave unused CRM Swift in the package.
+identifiers and three `fieldType`s as `registration.json`.
 
 1. **Schema.** `JackpotFormsUI/Resources/kitchenSink.json` — `formCodeName: kitchenSink`,
    `formTitle: Registration fields`. Types: `Input` (Text / Number / Password / Email /
@@ -100,35 +89,13 @@ Leave unused CRM Swift in the package.
    (text field, checklist, dropdown, date, checkbox, progress, Next / Sign Up / Previous).
 8. **FormNavigationBar.** Host chrome on `DynamicFormView`: Previous (`.jackpot(.secondary)`)
    on section 2, Next (`.jackpot`) while a later section exists, Sign Up (`.jackpot`) on
-   the last section. Not a CRM `Button` field type.
-
-`Divider` is **not** on this path. `FormRowView` renders only the schema's visible fields
-through `FieldRenderer`. The SwiftUI `Divider()` on `FormSandboxView` is chrome between the
-form picker and the form, not a CRM `fieldType`.
+   the last section.
 
 | `fieldType` | Where it renders in preview | On registration? |
 | --- | --- | --- |
 | Input | Registration JSON + Gallery + `FormPreview` field previews | Yes |
 | Dropdown | Registration JSON + Gallery + `DropdownFieldView` previews | Yes |
 | Checkbox | Registration JSON + Gallery + `CheckboxFieldView` previews | Yes |
-
-### Out of scope
-
-Not used by registration and not in the preview catalog. The playbook does not reproduce
-them. **Do not delete the Swift.**
-
-- **CRM `fieldType: Button`:** recognised by `FieldType` and treated as decorative
-  (`EmptyView` in `FieldRenderer`). It is **not** on registration (bundled or live) and
-  **not** on the registration-fields preview. It is **not** the Next / Sign Up / Previous
-  control — that is host chrome (`FormNavigationBar`), documented above, and **in scope**.
-- **Field types:** `Text Area`, `Radio` / `Radio Group`, `Toggle`, `Divider`, `Welcome Offer`,
-  `SignaturePad`, `reCAPTCHA` v2/v3, and any `unknown` CRM type
-- **Components:** `JackpotTextArea`, `JackpotRadioGroup`, `JackpotDivider`, `JackpotLockedOverlay`,
-  `JackpotCardButtonStyle`, `.jackpot(.tertiary)`, `.jackpotSwitch`
-- **Form views:** `TextAreaFieldView`, `RadioGroupFieldView`, `ToggleFieldView`,
-  `WelcomeOfferFieldView`, `RecaptchaPlaceholderView`
-- **Follow-up infra:** `JackpotAppData`, `TranslationsStore` / `TranslationsRepository`,
-  `ConditionalRequest` (ETag) — not on the registration or preview call path
 
 ---
 
@@ -147,13 +114,13 @@ at it. There is no `link` token; that Android role is `accent`.
 | --- | --- | --- | --- |
 | `surface` | #FFFFFF | #131316 | Form / page background (Android `formBackground`) |
 | `fieldBackground` | #F0F0F2 | #202126 | Field fill, secondary button, checklist (also Android dialog `background`) |
-| `fieldBorder` | #E1E2E6 | #3E3E48 | Hairline, progress track, divider |
+| `fieldBorder` | #E1E2E6 | #3E3E48 | Hairline, progress track |
 | `fieldBorderFocused` | #E1E1E5 | #E1E1E5 | Focus ring. Shared `Palette.emphasis` hex |
 | `fieldBorderInvalid` | #DF0000 | #FF6B6B | Invalid ring — same value as `error` |
 | `textPrimary` | #2F2F37 | #E1E1E5 | Titles and values (Android `titleText` / Text Priority) |
 | `textSecondary` | #565A63 | #E1E1E5 | Labels and placeholders |
 | `textOnAccent` | #FFFFFF | #FFFFFF | Label on `accentFill` |
-| `accent` | #0060EC | #4D8FFF | Tint, tertiary label, selected chrome (Android `link`) |
+| `accent` | #0060EC | #4D8FFF | Tint, selected chrome (Android `link`) |
 | `accentFill` | #0060EC | #0060EC | Primary button fill |
 | `error` | #DF0000 | #FF6B6B | Validation and load errors |
 | `warning` | #945C05 | #F59E21 | Checklist incomplete |
@@ -274,7 +241,7 @@ enum Palette {
     /// was #E1E1E5 on a #E1E1E5 fill — an unfinished placeholder.
     static let textOnAccent = Color.white
 
-    /// Accent as *text* and tint — tertiary labels, selected chrome. This is the Android
+    /// Accent as *text* and tint — selected chrome. This is the Android
     /// `link` role; the token is not named `link`. Light #E1E1E5 is unreadable, so the
     /// isolated brand blue stays. Dark stays the lighter blue so selected state does not
     /// collapse into `textSecondary` (both would otherwise be #E1E1E5).
@@ -342,8 +309,6 @@ public struct JackpotSizes: Equatable, Sendable {
     public var emphasizedBorderWidth: CGFloat = 2
     public var minimumHitTarget: CGFloat = 44
     public var progressBarHeight: CGFloat = JackpotSpacing.xxs.rawValue
-    public var textAreaMinHeight: CGFloat = 110
-    public var cardMinHeight: CGFloat = 140
 
     public static let standard = JackpotSizes()
 
@@ -559,8 +524,7 @@ private struct JackpotFontStyle: ViewModifier {
 
 **6.** `JackpotKit/Sources/JackpotUI/Styles/JackpotButtonStyle.swift`
 
-Registration uses `.jackpot` (Next / Sign Up) and `.jackpot(.secondary)` (Previous).
-`.jackpot(.tertiary)` and `JackpotCardButtonStyle` are unused on this path.
+`.jackpot` is Next / Sign Up. `.jackpot(.secondary)` is Previous.
 
 ```swift
 import SwiftUI
@@ -569,7 +533,6 @@ public struct JackpotButtonStyle: ButtonStyle {
     public enum Prominence: Hashable, Sendable {
         case primary
         case secondary
-        case tertiary
     }
 
     private let prominence: Prominence
@@ -617,7 +580,6 @@ public struct JackpotButtonStyle: ButtonStyle {
             switch prominence {
             case .primary:   return isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill
             case .secondary: return theme.colors.fieldBackground
-            case .tertiary:  return .clear
             }
         }
 
@@ -625,7 +587,6 @@ public struct JackpotButtonStyle: ButtonStyle {
             switch prominence {
             case .primary:   return isDimmed ? theme.colors.textSecondary : theme.colors.textOnAccent
             case .secondary: return isDimmed ? theme.colors.textSecondary : theme.colors.textPrimary
-            case .tertiary:  return isDimmed ? theme.colors.textSecondary : theme.colors.accent
             }
         }
     }
@@ -638,51 +599,11 @@ public extension ButtonStyle where Self == JackpotButtonStyle {
         JackpotButtonStyle(prominence)
     }
 }
-
-// MARK: - Selectable card
-
-public struct JackpotCardButtonStyle: ButtonStyle {
-    public init() {}
-
-    public func makeBody(configuration: Configuration) -> some View {
-        CardBody(configuration: configuration)
-    }
-
-    private struct CardBody: View {
-        let configuration: ButtonStyleConfiguration
-
-        @Environment(\.jackpotTheme) private var theme
-        @Environment(\.isEnabled) private var isEnabled
-        @Environment(\.jackpotIsSelected) private var isSelected
-
-        var body: some View {
-            configuration.label
-                .frame(maxWidth: .infinity, minHeight: theme.sizes.cardMinHeight)
-                .jackpotBackground(\.fieldBackground, in: theme.sizes.fieldShape)
-                .overlay {
-                    theme.sizes.fieldShape
-                        .strokeBorder(isSelected ? theme.colors.accent : theme.colors.fieldBorder,
-                                      lineWidth: isSelected ? theme.sizes.emphasizedBorderWidth
-                                                            : theme.sizes.borderWidth)
-                }
-                .contentShape(theme.sizes.fieldShape)
-                .opacity(isEnabled ? 1 : 0.6)
-                .scaleEffect(configuration.isPressed ? 0.98 : 1)
-                .animation(.spring(response: 0.3, dampingFraction: 1), value: configuration.isPressed)
-                .animation(.easeOut(duration: 0.2), value: isSelected)
-                .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-        }
-    }
-}
-
-public extension ButtonStyle where Self == JackpotCardButtonStyle {
-    static var jackpotCard: JackpotCardButtonStyle { JackpotCardButtonStyle() }
-}
 ```
 
 **7.** `JackpotKit/Sources/JackpotUI/Styles/JackpotToggleStyle.swift`
 
-Registration checkboxes use `.jackpotCheckbox`. `.jackpotSwitch` is the unused Toggle type.
+Registration checkboxes use `.jackpotCheckbox`.
 
 ```swift
 import SwiftUI
@@ -690,7 +611,6 @@ import SwiftUI
 public struct JackpotToggleStyle: ToggleStyle {
     public enum Appearance: Hashable, Sendable {
         case checkbox
-        case `switch`
     }
 
     private let appearance: Appearance
@@ -711,10 +631,7 @@ public struct JackpotToggleStyle: ToggleStyle {
         @Environment(\.jackpotValidationMessage) private var validationMessage
 
         var body: some View {
-            switch appearance {
-            case .checkbox: checkbox
-            case .switch:   platformSwitch
-            }
+            checkbox
         }
 
         private var checkbox: some View {
@@ -743,12 +660,6 @@ public struct JackpotToggleStyle: ToggleStyle {
             }
         }
 
-        private var platformSwitch: some View {
-            Toggle(configuration)
-                .toggleStyle(.switch)
-                .jackpotTextStyle(\.rowLabel)
-        }
-
         private var boxColor: Color {
             if configuration.isOn { return theme.colors.accent }
             return validationMessage == nil ? theme.colors.textSecondary : theme.colors.fieldBorderInvalid
@@ -758,7 +669,6 @@ public struct JackpotToggleStyle: ToggleStyle {
 
 public extension ToggleStyle where Self == JackpotToggleStyle {
     static var jackpotCheckbox: JackpotToggleStyle { JackpotToggleStyle(.checkbox) }
-    static var jackpotSwitch: JackpotToggleStyle { JackpotToggleStyle(.switch) }
 }
 ```
 
@@ -819,7 +729,6 @@ private extension Double {
 **9.** `JackpotKit/Sources/JackpotUI/Fields/JackpotFieldChrome.swift`
 
 The shared background and the label/error row every registration field sits in.
-`JackpotDivider` in this file is unused on this path.
 
 ```swift
 import SwiftUI
@@ -906,28 +815,12 @@ public struct JackpotLabeledField<Content: View>: View {
         .animation(.easeOut(duration: 0.2), value: error)
     }
 }
-
-// MARK: - Divider
-
-public struct JackpotDivider: View {
-    @Environment(\.jackpotTheme) private var theme
-
-    public init() {}
-
-    public var body: some View {
-        Rectangle()
-            .fill(theme.colors.fieldBorder)
-            .frame(height: 1)
-            .padding(.vertical, .xxs)
-            .accessibilityHidden(true)
-    }
-}
 ```
 
 **10.** `JackpotKit/Sources/JackpotUI/Fields/JackpotFieldKind.swift`
 
 Keyboard / autofill kinds applied with `jackpotField(_:)`. Registration uses text, name,
-email, phone, number, and new-password. `.oneTimeCode` is not on this form.
+email, phone, number, and new-password.
 
 ```swift
 import SwiftUI
@@ -982,11 +875,6 @@ public struct JackpotFieldKind: Equatable, Sendable {
                                                      capitalization: .never,
                                                      disablesAutocorrection: true,
                                                      isSecure: true)
-
-    public static let oneTimeCode = JackpotFieldKind(keyboard: .numberPad,
-                                                     contentType: .oneTimeCode,
-                                                     capitalization: .never,
-                                                     disablesAutocorrection: true)
 
     public static let number = JackpotFieldKind(keyboard: .numberPad,
                                                 capitalization: .never,
@@ -1837,8 +1725,7 @@ Three modules pointing one way: `JackpotFormsDomain` (types and rules, no I/O),
 `JackpotFormsData` (wire shapes and the bundled stub), `JackpotFormsUI` (the engine and the
 renderer). Nothing here knows how a form is fetched — the engine only ever sees
 `FormRepository`, which is what lets PR 3 swap the stub for the network without touching it.
-The catalog is the registration schema. Unused CRM types stay in the decoder for
-forwards-compat; they are not in the preview catalog.
+The catalog is the registration schema: Input, Dropdown, and Checkbox.
 
 **19.**
 
@@ -2021,8 +1908,7 @@ public struct FormSubmission: Equatable, Sendable {
 
 **23.** `JackpotKit/Sources/JackpotFormsDomain/FormField.swift`
 
-The CRM type list is wider than registration. This flow constructs Input, Dropdown, and
-Checkbox (plus `InputType.calendar` for DOB). Other cases are forwards-compat.
+Registration constructs Input, Dropdown, and Checkbox (plus `InputType.calendar` for DOB).
 
 ```swift
 import Foundation
@@ -2035,44 +1921,20 @@ import Foundation
 /// `DynamicFormModel.unsupportedFields` instead.
 public enum FieldType: Equatable, Hashable, Sendable {
     case input
-    case button
     case checkbox
-    case radio
-    case radioGroup
     case dropdown
-    case divider
-    case textArea
-    case recaptchaV2
-    case recaptchaV3
-    case toggle
-    case welcomeOffer
     case unknown(String)
 
     public init(raw: String) {
         switch raw.lowercased().replacingOccurrences(of: " ", with: "") {
-        case "input":                    self = .input
-        case "button":                   self = .button
-        case "checkbox":                 self = .checkbox
-        case "radio":                    self = .radio
-        case "radiogroup":               self = .radioGroup
-        case "dropdown", "select":       self = .dropdown
-        case "divider":                  self = .divider
-        case "textarea":                 self = .textArea
-        case "recapchav2", "recaptchav2": self = .recaptchaV2
-        case "recapchav3", "recaptchav3": self = .recaptchaV3
-        case "toggle":                   self = .toggle
-        case "welcomeoffer":             self = .welcomeOffer
-        default:                         self = .unknown(raw)
+        case "input":              self = .input
+        case "checkbox":           self = .checkbox
+        case "dropdown", "select": self = .dropdown
+        default:                   self = .unknown(raw)
         }
     }
 
-    /// Layout-only types hold no value and are never validated or submitted.
-    public var isDecorative: Bool {
-        switch self {
-        case .divider, .button: return true
-        default:                return false
-        }
-    }
+    public var isDecorative: Bool { false }
 }
 
 /// Keyboard and formatting hint for `.input`.
@@ -2179,7 +2041,7 @@ public struct FormField: Identifiable, Equatable, Hashable, Sendable {
 
     /// Fields that hold a value: rendered, validated and submitted.
     public var carriesValue: Bool {
-        isVisible && !type.isDecorative && !(type == .recaptchaV2 || type == .recaptchaV3)
+        isVisible && !type.isDecorative
     }
 
     public var isSecure: Bool { inputType == .password }
@@ -3106,8 +2968,8 @@ public final class DynamicFormModel: ObservableObject {
 
     private func defaultValue(for field: FormField) -> FormValue {
         switch field.type {
-        case .checkbox, .toggle: return .bool(false)
-        case .dropdown, .radio, .radioGroup: return .option("")
+        case .checkbox: return .bool(false)
+        case .dropdown: return .option("")
         default: return field.inputType == .calendar ? .empty : .text("")
         }
     }
@@ -3295,8 +3157,8 @@ public extension DynamicFormModel {
 
 **38.** `JackpotKit/Sources/JackpotFormsUI/Demo/PreviewFixtures.swift`
 
-Hand-built `FormPreview` fixtures. `registration` mirrors the CRM schema. Extra unused-type
-helpers stay so leftover field-view canvases compile; they are not the catalog.
+Hand-built `FormPreview` fixtures. `registration` mirrors the CRM schema — the twelve
+registration fields.
 
 ```swift
 #if DEBUG
@@ -3394,27 +3256,6 @@ public enum FormPreview {
 
     public static let terms = field("terms", type: .checkbox, required: true, regex: "^true$")
 
-    public static let notes = field("notes", type: .textArea, label: "Notes",
-                                    placeholder: "Anything else?", required: false)
-
-    public static let contactMethod = field(
-        "contactMethod", type: .radioGroup, label: "Preferred contact method", required: true,
-        regex: "^.+$",
-        radios: [
-            RadioOption(value: "sms", textKey: "SMS"),
-            RadioOption(value: "email", textKey: "Email"),
-            RadioOption(value: "whatsapp", textKey: "WhatsApp"),
-        ]
-    )
-
-    public static let welcomeOffer = field(
-        "welcomeOffer", type: .welcomeOffer, label: "Select your Welcome Offer:", required: false,
-        dropdowns: [
-            DropdownOption(value: "depositMatch", textKey: "100% Deposit Match", regex: nil),
-            DropdownOption(value: "freeSpins", textKey: "50 Free Spins", regex: nil),
-        ]
-    )
-
     // MARK: Whole schemas
 
     /// The two-section registration form, structured exactly as the CRM sends it.
@@ -3457,8 +3298,7 @@ public enum FormPreview {
         .preview(schema: schema(fields), values: values, touched: touched)
     }
 
-    /// Values that make section one valid — useful for previewing the unlocked
-    /// Welcome Offer and the enabled Next button.
+    /// Values that make section one valid — useful for previewing the enabled Next button.
     public static let validSectionOne: [String: FormValue] = [
         "username": .text("849134302"),
         "password": .text("Password1"),
@@ -3472,9 +3312,8 @@ public enum FormPreview {
 
 **39.** `JackpotKit/Sources/JackpotFormsUI/Fields/FieldRenderer.swift`
 
-The switch is the whole contract. Registration and the preview schema hit `.input`
-(Calender → `DateFieldView`), `.dropdown`, and `.checkbox`. Other cases are forwards-compat.
-`.button` is `EmptyView()` — a CRM field type, not the footer Next / Sign Up chrome.
+The switch is the whole contract. Registration hits `.input` (Calender →
+`DateFieldView`), `.dropdown`, and `.checkbox`.
 
 ```swift
 import SwiftUI
@@ -3493,44 +3332,18 @@ struct FieldRenderer: View {
 
     var body: some View {
         switch field.type {
-        case .input:                    InputFieldView(field: field, model: model)
-        case .textArea:                 TextAreaFieldView(field: field, model: model)
-        case .dropdown:                 DropdownFieldView(field: field, model: model)
-        case .checkbox:                 CheckboxFieldView(field: field, model: model)
-        case .toggle:                   ToggleFieldView(field: field, model: model)
-        case .radio, .radioGroup:       RadioGroupFieldView(field: field, model: model)
-        case .divider:                  JackpotDivider()
-        case .welcomeOffer:             WelcomeOfferFieldView(field: field, model: model)
-        case .button:                   EmptyView()          // the form's footer owns navigation
-        case .recaptchaV2, .recaptchaV3: RecaptchaPlaceholderView(field: field)
-        case .unknown:                  EmptyView()          // reported via model.unsupportedFields
+        case .input:    InputFieldView(field: field, model: model)
+        case .dropdown: DropdownFieldView(field: field, model: model)
+        case .checkbox: CheckboxFieldView(field: field, model: model)
+        default:        EmptyView()
         }
-    }
-}
-
-/// reCAPTCHA needs a `WKWebView` bridge. The type is recognised without one so the form still
-/// renders and validates around it.
-struct RecaptchaPlaceholderView: View {
-    let field: FormField
-    @Environment(\.jackpotTheme) private var theme
-
-    var body: some View {
-        #if DEBUG
-        Text("reCAPTCHA (\(field.identifier)) — not implemented")
-            .jackpotTextStyle(\.error, color: \.textSecondary)
-            .frame(maxWidth: .infinity, minHeight: 60)
-            .jackpotFieldBackground()
-        #else
-        EmptyView()
-        #endif
     }
 }
 
 // MARK: - Keyboard focus order
 
 extension FormField {
-    /// Only single-line text entry joins return-key navigation. A date opens a picker, and a
-    /// text area needs the return key for newlines.
+    /// Only single-line text entry joins return-key navigation. A date opens a picker.
     var acceptsKeyboardFocus: Bool {
         type == .input && inputType != .calendar
     }
@@ -3567,7 +3380,7 @@ extension DynamicFormModel {
     // answer, so validating it immediately is right — unlike typing, where `text(for:)` stays
     // silent and the field reports blur through `onEditingEnded`.
 
-    /// Selection binding for dropdowns and radio groups. An empty selection is `.option("")`.
+    /// Selection binding for dropdowns. An empty selection is `.option("")`.
     func selection(for field: FormField) -> Binding<String?> {
         Binding(get: { let v = self.value(for: field).stringValue; return v.isEmpty ? nil : v },
                 set: { self.setValue(.option($0 ?? ""), for: field); self.markTouched(field) })
@@ -3585,10 +3398,6 @@ extension DynamicFormModel {
 
     func options(for field: FormField) -> [JackpotOption] {
         field.dropdownOptions.map { JackpotOption(id: $0.value, label: localized($0.textKey)) }
-    }
-
-    func radioOptions(for field: FormField) -> [JackpotOption] {
-        field.radioOptions.map { JackpotOption(id: $0.value, label: localized($0.textKey)) }
     }
 }
 ```
@@ -3662,7 +3471,6 @@ struct InputFieldView: View {
         case "firstname":                          return .givenName
         case "lastname", "surname":                return .familyName
         case "email":                              return .email
-        case "otp", "pin", "code":                 return .oneTimeCode
         default:                                   return .text.with { $0.capitalization = .words }
         }
     }
@@ -3789,7 +3597,7 @@ struct DateFieldView_Previews: PreviewProvider {
 
 **43.** `JackpotKit/Sources/JackpotFormsUI/Fields/CheckboxFieldView.swift`
 
-`receivePromotionalInformation` and `terms`. `ToggleFieldView` in this file is unused.
+`receivePromotionalInformation` and `terms`.
 
 ```swift
 import SwiftUI
@@ -3806,19 +3614,6 @@ struct CheckboxFieldView: View {
         JackpotLabeledField(error: model.error(for: field)) {
             Toggle(model.localized(field.labelKey), isOn: model.bool(for: field))
                 .toggleStyle(.jackpotCheckbox)
-                .disabled(field.isReadOnly)
-        }
-    }
-}
-
-struct ToggleFieldView: View {
-    let field: FormField
-    @ObservedObject var model: DynamicFormModel
-
-    var body: some View {
-        JackpotLabeledField(error: model.error(for: field)) {
-            Toggle(model.localized(field.labelKey), isOn: model.bool(for: field))
-                .toggleStyle(.jackpotSwitch)
                 .disabled(field.isReadOnly)
         }
     }
@@ -3848,7 +3643,7 @@ struct CheckboxFieldView_Previews: PreviewProvider {
 **44.** `JackpotKit/Sources/JackpotFormsUI/DynamicFormView.swift`
 
 `FormNavigationBar` is the Next / Previous / Sign Up chrome. That is how step 1 becomes
-step 2 — not a schema `Button` field. `RegistrationView` just hosts this view.
+step 2. `RegistrationView` just hosts this view.
 
 ```swift
 import SwiftUI
@@ -7127,8 +6922,8 @@ public enum RegistrationError: LocalizedError, Equatable {
 
 **80.** `JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift`
 
-`RegistrationView` hosts `DynamicFormView(formName: .registration)`. It does not own
-paging — Next / Previous / Sign Up live in `FormNavigationBar`.
+`RegistrationView` hosts `DynamicFormView(formName: .registration)`. Next / Previous /
+Sign Up live in `FormNavigationBar`.
 
 ```swift
 import SwiftUI
