@@ -1,12 +1,7 @@
 import Foundation
 
-// Wire shapes, exactly as the CRM form-builder sends them. Nothing outside this folder knows
-// about "formSectionCodeName" or the "Calender" spelling. Keys the app has no use for
-// (`fieldName`, `textStyle`, `fieldPlaceholder`, `fieldRadioGroup`) are simply not decoded.
-//
-// Everything is optional except the identifiers we cannot render without: the schema is edited
-// by product in a CMS, so a missing `prefix` must not fail the whole decode.
-
+// Wire shapes, exactly as the CRM sends them. Everything is optional but the identifiers: product
+// edits the schema in a CMS, so a missing `prefix` must not fail the decode.
 struct FormDTO: Decodable {
     let formId: Int
     let formCodeName: String

@@ -6,7 +6,6 @@ import XCTest
 /// actually experiences, rather than the regexes in isolation.
 @MainActor
 final class DynamicFormModelTests: XCTestCase {
-
     private func loaded(regexDependencies: [String: String] = ["idNumberType": "idNumber"]) async -> DynamicFormModel {
         let model = DynamicFormModel(
             formName: .registration,
@@ -273,14 +272,10 @@ private final class FailOnceRepository: FormRepository, @unchecked Sendable {
     func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult { FormSubmitResult() }
 }
 
-/// Confirmed behaviour: the ID Number Type dropdown selects whether the user is entering a
-/// South African ID or a passport, and the ID Number field validates accordingly.
-///
-/// The link is declared in `FormDependencies.regexDependencies` rather than inferred from
-/// field order, so a CRM reorder can't silently disable it on a regulated field.
+/// Confirmed behaviour: the ID Number Type dropdown selects whether the user is entering a South
+/// African ID or a passport, and the ID Number field validates accordingly.
 @MainActor
 final class IDTypeRegexDependencyTests: XCTestCase {
-
     private func loadedSectionTwo(regexDependencies: [String: String] = ["idNumberType": "idNumber"]) async -> DynamicFormModel {
         let model = DynamicFormModel(
             formName: .registration,

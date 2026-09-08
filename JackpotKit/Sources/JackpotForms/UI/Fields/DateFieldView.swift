@@ -1,8 +1,7 @@
 import SwiftUI
 import JackpotUI
 
-/// `inputType: "Calender"`. The schema validates against an ISO-8601 date-time, so the
-/// picker's `Date` is serialised through `FormValue.iso8601` rather than a display format.
+/// `inputType: "Calender"`; the picker's date is serialised through `FormValue.iso8601`.
 struct DateFieldView: View {
     let field: FormField
     @ObservedObject var model: DynamicFormModel

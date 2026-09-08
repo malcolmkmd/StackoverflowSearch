@@ -39,8 +39,7 @@ enum FormMapper {
             type: FieldType(raw: dto.fieldType),
             inputType: InputType(raw: dto.inputType ?? "Text"),
             validationMessageKey: dto.validationMessage ?? "regex",
-            // Defaults chosen to fail safe: an unspecified field is optional and
-            // visible rather than silently blocking submission.
+            // Fail safe: an unspecified field is optional and visible rather than blocking submission.
             isRequired: dto.isRequired ?? false,
             isVisible: dto.isVisible ?? true,
             isReadOnly: dto.isReadOnly ?? false,

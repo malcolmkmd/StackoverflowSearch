@@ -1,6 +1,6 @@
 import Foundation
 
-/// One rule shown in the "Password Validity" panel.
+/// One rule in the "Password Validity" panel.
 public struct PasswordRule: Identifiable, Equatable, Sendable {
     public let id: String
     public let description: String
@@ -17,11 +17,8 @@ public struct PasswordRule: Identifiable, Equatable, Sendable {
     public static func == (lhs: PasswordRule, rhs: PasswordRule) -> Bool { lhs.id == rhs.id }
 }
 
-/// Supplies the checklist behind the password field.
-///
-/// The schema gives password a single regex, `^(.){8,20}$`, but the design shows two
-/// independently ticking rules, which one regex match cannot produce. Parsing the `{min,max}`
-/// quantifier reproduces the design for this form; see OPEN-QUESTIONS.
+/// The schema gives password one regex, `^(.){8,20}$`, and the design shows two rules, so the
+/// `{min,max}` quantifier is parsed. Registration only.
 public protocol PasswordPolicyProviding: Sendable {
     func rules(for field: FormField) -> [PasswordRule]
 }
@@ -46,7 +43,6 @@ public struct PasswordPolicy: PasswordPolicyProviding {
         return rules
     }
 
-    /// Pulls `{8,20}` out of `^(.){8,20}$`.
     static func lengthBounds(in pattern: String?) -> (min: Int?, max: Int?) {
         guard let pattern,
               let expression = try? NSRegularExpression(pattern: #"\{(\d+),(\d+)\}"#),

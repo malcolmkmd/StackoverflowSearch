@@ -1,21 +1,16 @@
 import Foundation
 import JackpotNetworking
 
-// The translation boundary. The form engine never sees `APIError`, so this is where transport
-// concerns become something a person can read.
+// Where transport errors become something a person can read; the engine never sees `APIError`.
 enum FormErrorMapper {
-
-    /// - Parameter localizer: resolves an error `code` to localised copy when the session's
-    ///   table carries one. That beats `problem.message`, which arrives in whatever language
-    ///   the API defaulted to.
     static func map(_ error: any Error,
                     formName: FormName,
                     localizer: (any FormLocalizing)? = nil) -> any Error {
         guard let apiError = error as? APIError else { return error }
 
         switch apiError {
+        // A cancelled load is a navigation event, not a failure.
         case .cancelled:
-            // Never user-facing: a cancelled load is a navigation event, not a failure.
             return CancellationError()
 
         case .transport where apiError.isOffline:
@@ -25,8 +20,7 @@ enum FormErrorMapper {
             return FormLoadError.notFound(formName)
 
         case .badRequest, .unauthorized, .server, .unexpectedStatus:
-            // Localised copy for the code first, then whatever the server wrote, then ours —
-            // the server is the only party that knows *why*.
+            // Localised copy for the code, then the server's wording, then ours.
             if let code = apiError.problem?.code,
                let localized = localizer?.message(forErrorCode: code) {
                 return FormLoadError.server(message: localized)

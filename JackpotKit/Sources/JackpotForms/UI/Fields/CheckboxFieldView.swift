@@ -1,8 +1,7 @@
 import SwiftUI
 import JackpotUI
 
-/// Checkbox values validate as the strings "true"/"false" — the schema's `terms` field
-/// literally uses the pattern `^true$` to mean "must be ticked".
+/// Checkboxes validate as "true" / "false"; `terms` uses `^true$` to mean "must be ticked".
 struct CheckboxFieldView: View {
     let field: FormField
     @ObservedObject var model: DynamicFormModel

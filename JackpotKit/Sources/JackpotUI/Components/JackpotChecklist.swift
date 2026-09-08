@@ -46,7 +46,7 @@ public struct JackpotChecklist: View {
             } label: {
                 Text(title).jackpotTextStyle(\.sectionTitle)
             }
-            // The chevron follows the tint, which the theme points at the accent colour.
+            // The chevron follows the tint, which the theme points at the accent.
             .tint(theme.colors.textPrimary)
             .padding(theme.sizes.contentPadding)
             .jackpotBackground(\.fieldBackground, in: theme.sizes.fieldShape)

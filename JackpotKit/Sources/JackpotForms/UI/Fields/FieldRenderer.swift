@@ -1,13 +1,8 @@
 import SwiftUI
 import JackpotUI
 
-/// Maps a schema `fieldType` to a component. This switch is the entire contract between the
-/// form builder and the app: a new type on the server means a new `FieldType` case, a new
-/// `XxxFieldView` here binding the model to a `JackpotUI` component, and until then the
-/// unknown case keeps the form usable.
-///
-/// The `JackpotUI` components know nothing about forms; the views in this folder are the only
-/// place the two meet.
+/// The contract between the form builder and the app: a new server type means a new case here and a
+/// new field view binding the model to a `JackpotUI` component; until then `unknown` keeps the form usable.
 struct FieldRenderer: View {
     let field: FormField
     @ObservedObject var model: DynamicFormModel
@@ -17,7 +12,7 @@ struct FieldRenderer: View {
         case .input:    InputFieldView(field: field, model: model)
         case .dropdown: DropdownFieldView(field: field, model: model)
         case .checkbox: CheckboxFieldView(field: field, model: model)
-        case .unknown:  EmptyView()          // reported via model.unsupportedFields
+        case .unknown:  EmptyView()
         }
     }
 }
@@ -25,14 +20,13 @@ struct FieldRenderer: View {
 // MARK: - Keyboard focus order
 
 extension FormField {
-    /// Only single-line text entry joins return-key navigation. A date opens a picker.
+    /// Only single-line text entry joins return-key navigation.
     var acceptsKeyboardFocus: Bool {
         type == .input && inputType != .calendar
     }
 }
 
 extension DynamicFormModel {
-    /// The current section's text fields, in the order the return key walks them.
     var focusableIdentifiers: [String] {
         (currentSection?.rows ?? [])
             .flatMap(\.fields)
@@ -40,7 +34,6 @@ extension DynamicFormModel {
             .map(\.identifier)
     }
 
-    /// Returns the field after `identifier`, or nil at the end so the keyboard dismisses.
     func fieldAfter(_ identifier: String?) -> String? {
         let ids = focusableIdentifiers
         guard let identifier, let index = ids.firstIndex(of: identifier) else { return nil }
@@ -52,17 +45,12 @@ extension DynamicFormModel {
 // MARK: - Shared bindings
 
 extension DynamicFormModel {
-    /// Text binding for a field, writing back as `.text`.
     func text(for field: FormField) -> Binding<String> {
         Binding(get: { self.value(for: field).stringValue },
                 set: { self.setValue(.text($0), for: field) })
     }
 
-    // The three below mark the field touched as they write. A discrete choice is a complete
-    // answer, so validating it immediately is right — unlike typing, where `text(for:)` stays
-    // silent and the field reports blur through `onEditingEnded`.
-
-    /// Selection binding for dropdowns. An empty selection is `.option("")`.
+    // Discrete choices mark the field touched as they write; typing reports blur through `onEditingEnded`.
     func selection(for field: FormField) -> Binding<String?> {
         Binding(get: { let v = self.value(for: field).stringValue; return v.isEmpty ? nil : v },
                 set: { self.setValue(.option($0 ?? ""), for: field); self.markTouched(field) })

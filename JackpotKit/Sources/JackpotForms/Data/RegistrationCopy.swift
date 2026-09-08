@@ -1,12 +1,8 @@
 import Foundation
 
 public extension ComposedKeyLocalizer {
-    /// Placeholder copy for the registration schema's keys, matching the designs. In
-    /// production the same table arrives in the app-data response's `locales` section; this
-    /// one keeps the form legible until it does, and stands in for it in previews and the
-    /// sandbox.
+    /// Placeholder copy for the registration keys, until the app's own strings are wired in.
     static let jpcRegistration = ComposedKeyLocalizer(table: [
-        // Field labels
         "username": "Enter Mobile Number",
         "password": "Password",
         "firstname": "First Name (As it appears on your ID)",
@@ -20,7 +16,6 @@ public extension ComposedKeyLocalizer {
         "receivePromotionalInformation-jza": "Send Jackpot City Promotions to me",
         "terms": "I am over 18 years of age & I accept Jackpotcity's Terms & Conditions & Privacy Policy",
 
-        // Dropdown options
         "jpc-reg-idnumber": "South African ID",
         "jpc-reg-passport": "Passport",
         "jpc-reg-SalaryOrWages": "Salary or Wages",
@@ -29,7 +24,6 @@ public extension ComposedKeyLocalizer {
         "jpc-reg-SavingsOrRentalOrOther": "Savings, Rental or Other",
         "jpc-reg-SelfEmployed": "Self Employed",
 
-        // Composed validation messages: jpc-reg-{fieldIdentifier}-{validationMessage}
         "jpc-reg-username-regex": "Enter a valid mobile number",
         "jpc-reg-password-regex": "Password must be 8–20 characters",
         "jpc-reg-firstname-regex": "Enter your first name as it appears on your ID",

@@ -5,8 +5,7 @@ public struct RemoteFormRepository: FormRepository {
     private let apiClient: any ApiClient
     private let brand: String
     private let region: String
-    /// Resolves error codes to localised copy. Optional: without it, errors fall back to the
-    /// server's own message.
+    /// Resolves error codes to localised copy; without it, the server's message.
     private let localizer: (any FormLocalizing)?
 
     public init(apiClient: any ApiClient,

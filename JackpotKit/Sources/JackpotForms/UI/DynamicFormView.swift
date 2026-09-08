@@ -1,18 +1,9 @@
 import SwiftUI
 import JackpotUI
 
-/// A whole form, from one name, one set of dependencies and one callback: the pages with the
-/// navigation bar beneath them.
-///
-///     DynamicFormView(formName: .registration, dependencies: .mock()) { submission in
-///         try await api.register(submission.stringValues)
-///     }
-///
-/// A host that wants the navigation somewhere else — registration puts Next in its panel's
-/// footer beside the login row — owns a `DynamicFormModel` itself and places
-/// `DynamicFormContent` and `FormNavigationBar` where the design says.
+/// Pages with the navigation bar beneath them. A host that wants the bar elsewhere owns a `DynamicFormModel`
+/// and places `DynamicFormContent` and `FormNavigationBar` itself.
 public struct DynamicFormView: View {
-
     public typealias SubmitHandler = @MainActor (FormSubmission) async throws -> Void
 
     private let onSubmit: SubmitHandler
@@ -29,8 +20,7 @@ public struct DynamicFormView: View {
     }
 }
 
-/// Pages and navigation stacked, for a given model: what `DynamicFormView` renders, and what
-/// the previews drive from a seeded model without a fetch.
+/// Pages and navigation stacked, for a seeded model.
 struct DynamicFormBody: View {
     @ObservedObject var model: DynamicFormModel
     let onSubmit: DynamicFormView.SubmitHandler
@@ -45,8 +35,7 @@ struct DynamicFormBody: View {
     }
 }
 
-/// The form's pages: the progress bar, the current section's rows and any submit error, with
-/// the loading and failure states in their place. Moving between pages is `FormNavigationBar`.
+/// The pages: progress, the current section's rows, the submit error, and the loading and failure states.
 public struct DynamicFormContent: View {
     @ObservedObject private var model: DynamicFormModel
 
@@ -95,28 +84,23 @@ public struct DynamicFormContent: View {
                         #endif
                     }
                     .padding(.m)
-                    // New identity per section is what lets the transition run at all; the
-                    // progress bar sits outside it so it doesn't slide too.
+                    // A new identity per section is what lets the transition run.
                     .id(model.sectionIndex)
                     .transition(sectionTransition)
                 }
             }
             .jackpotFocusedField($focusedField)
-            // Validate before moving focus, so the error and the new focus land in one update
-            // rather than the error arriving a render after the keyboard has moved on.
+            // Validate before moving focus, so the error and the new focus land in one update.
             .onSubmit {
                 guard let current = focusedField else { return }
                 model.markTouched(identifiedBy: current)
                 focusedField = model.fieldAfter(current)
             }
-            // A page move dismisses the keyboard, wherever the move came from.
             .onChange(of: model.sectionIndex) { _ in focusedField = nil }
         }
     }
 
-    /// Offset rather than a full `.move`, so the outgoing and incoming sections don't drag
-    /// the scroll view's content width around mid-flight. The direction comes from the model,
-    /// which sets it in the same update that moves the section.
+    /// Offset rather than `.move`, so the sections don't drag the scroll width around mid-flight.
     private var sectionTransition: AnyTransition {
         guard !reduceMotion else { return .opacity }
         let travel: CGFloat = model.pagingDirection == .forward ? 60 : -60
@@ -125,7 +109,7 @@ public struct DynamicFormContent: View {
     }
 }
 
-/// Fields sharing a `rowNumber` render side by side; a single field fills the row.
+/// Fields sharing a `rowNumber` render side by side.
 struct FormRowView: View {
     let row: FormRow
     @ObservedObject var model: DynamicFormModel
@@ -142,10 +126,7 @@ struct FormRowView: View {
     }
 }
 
-/// Previous / Next / Sign Up. Paging is not a field: the schema describes sections, and this
-/// bar is how the user moves between them. Nothing renders until the form has loaded. Place it
-/// under `DynamicFormContent`, or wherever the design puts it — registration puts it in the
-/// panel's footer beside the login row.
+/// Previous / Next / Sign Up. Renders nothing until the form has loaded; place it wherever the design wants it.
 public struct FormNavigationBar: View {
     @ObservedObject private var model: DynamicFormModel
     private let onSubmit: DynamicFormView.SubmitHandler
@@ -221,7 +202,6 @@ struct DynamicFormView_Previews: PreviewProvider {
                 .environment(\.sizeCategory, .accessibilityLarge)
                 .previewDisplayName("Accessibility — XL text")
 
-            // Through the real loader, so a schema change in the JSON shows up here.
             DynamicFormView(formName: .registration, dependencies: .mock(delay: 0)) { _ in }
                 .frame(height: 620)
                 .background(JackpotTheme.jackpotCity.colors.background)

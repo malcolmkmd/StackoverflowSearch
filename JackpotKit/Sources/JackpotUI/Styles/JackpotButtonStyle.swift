@@ -2,10 +2,7 @@ import SwiftUI
 
 public struct JackpotButtonStyle: ButtonStyle {
     public enum Prominence: Hashable, Sendable {
-        /// Filled with the accent: Next, Sign Up, Retry, Done. Disabled, the fill dims to
-        /// `accentFillDisabled` under `textPrimary`, so the button still reads as the way forward.
         case primary
-        /// Background fill with a hairline: Previous.
         case secondary
     }
 

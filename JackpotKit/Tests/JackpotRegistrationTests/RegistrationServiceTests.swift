@@ -3,7 +3,6 @@ import XCTest
 import JackpotForms
 
 final class RegistrationServiceTests: XCTestCase {
-
     private func submission(mobile: String) -> FormSubmission {
         FormSubmission(formCodeName: .registration, values: ["username": .text(mobile), "terms": .bool(true)])
     }
@@ -67,9 +66,9 @@ final class RegistrationServiceTests: XCTestCase {
         }
     }
 
-    /// The migration seam: the app's `getTranslation` returns the key on a miss, and that must
-    /// become nil so the engine can fall back to humanised copy.
-    func testClosureLocalizerMapsKeyOnMissToNil() {
+    /// The contract the app's `LegacyTranslationLocalizer` relies on: `getTranslation` returns the key
+    /// on a miss, and mapping that to nil is what lets the engine fall back to humanised copy.
+    func testKeyOnMissMappedToNilFallsBackToHumanisedCopy() {
         let legacyGetTranslation: @Sendable (String) -> String = {
             $0 == "username" ? "Enter Mobile Number" : $0
         }
@@ -86,7 +85,6 @@ final class RegistrationServiceTests: XCTestCase {
 /// The engine ships with no cross-field links and no date cap; registration adds both, whatever
 /// repository the host passes in.
 final class RegistrationRulesTests: XCTestCase {
-
     func testRegistrationLinksIDTypeToIDNumber() {
         let dependencies = RegistrationDependencies.mock()
         XCTAssertEqual(dependencies.forms.regexDependencies, ["idNumberType": "idNumber"])

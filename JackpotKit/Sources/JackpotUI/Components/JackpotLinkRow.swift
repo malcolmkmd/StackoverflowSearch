@@ -1,8 +1,6 @@
 import SwiftUI
 
-/// A prompt with a link at its trailing edge, filled with `background` so it rests on a
-/// `surface` band: "Already have an account? Login ›" under the Sign Up sheet, and its mirror
-/// under Login.
+/// A prompt with a link at its trailing edge, on `background` so it rests on a `surface` band.
 public struct JackpotLinkRow: View {
     private let prompt: String
     private let link: String

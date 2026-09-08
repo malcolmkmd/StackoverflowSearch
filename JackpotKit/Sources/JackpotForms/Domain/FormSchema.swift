@@ -1,7 +1,6 @@
 import Foundation
 
-/// A whole form as the CRM form-builder describes it. A section is one page of the wizard;
-/// fields sharing a row sit side by side.
+/// A form as the CRM describes it: a section is one page, and fields sharing a row sit side by side.
 public struct FormSchema: Identifiable, Equatable, Sendable {
     public let id: Int
     public let codeName: FormName
@@ -20,7 +19,6 @@ public struct FormSchema: Identifiable, Equatable, Sendable {
         self.sections = sections
     }
 
-    /// Every visible field, in render order, across all sections.
     public var allFields: [FormField] {
         sections.flatMap(\.fields)
     }

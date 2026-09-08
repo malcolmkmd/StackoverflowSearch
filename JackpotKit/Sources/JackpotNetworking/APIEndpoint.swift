@@ -5,16 +5,14 @@ public enum RequestBody: Sendable {
     case form([String: String])
 }
 
-/// One endpoint = one request shape. Knows its own path, method and body;
-/// knows nothing about hosts, auth or versioning.
+/// One request shape: path, method, body. Knows nothing about hosts, auth or versioning.
 public protocol APIEndpoint: Sendable {
     var path: String { get }
     var method: HTTPMethod { get }
     var queryItems: [URLQueryItem] { get }
     var headers: [String: String] { get }
     var body: RequestBody? { get }
-    /// False for login and token-refresh endpoints, so auth interceptors skip them —
-    /// a refresh request must never carry the token it is replacing.
+    /// False for login and refresh, so an auth interceptor skips them.
     var requiresAuth: Bool { get }
     /// Safe to retry on 5xx / timeout.
     var isIdempotent: Bool { get }

@@ -2,11 +2,9 @@ import Foundation
 
 public protocol ApiClient: Sendable {
     func request<Response: Decodable & Sendable>(_ endpoint: some APIEndpoint) async throws -> Response
-    /// For 204 / empty-body responses.
     func request(_ endpoint: some APIEndpoint) async throws
-    /// The raw bytes, for responses decoded section-by-section rather than into one type.
     func requestData(_ endpoint: some APIEndpoint) async throws -> Data
-    /// Revalidates against what the caller already holds. Returns `.notModified` on a 304.
+    /// Returns `.notModified` on a 304.
     func requestConditional(_ endpoint: some APIEndpoint,
                             validators: HTTPValidators?) async throws -> ConditionalResponse
 }
@@ -35,8 +33,7 @@ public struct RemoteApiClient: ApiClient {
         do {
             return try decoder.decode(Response.self, from: data)
         } catch {
-            // The full error description names the key path that failed;
-            // `localizedDescription` would only say "The data couldn't be read".
+            // The full description names the failing key path.
             throw APIError.decoding("\(Response.self): \(error)")
         }
     }
@@ -81,13 +78,10 @@ public struct RemoteApiClient: ApiClient {
             return (data, response)
 
         case 304:
-            // Only reachable when the caller sent conditional headers; `requestConditional`
-            // turns this into `.notModified`.
             return (data, response)
 
+        // `didRetryAuth` is a parameter, not state, so a second 401 cannot loop.
         case 401:
-            // `didRetryAuth` is a parameter rather than stored state, so a second 401
-            // can never loop.
             if !didRetryAuth {
                 for interceptor in interceptors {
                     if let retry = await interceptor.retry(request, for: endpoint, response: response, data: data) {
@@ -100,9 +94,8 @@ public struct RemoteApiClient: ApiClient {
         case 400:
             throw APIError.badRequest(problem(from: data))
 
+        // A POST may already have taken effect, so only idempotent requests are retried.
         case 500, 502...504:
-            // A POST may already have taken effect server-side, so only idempotent requests
-            // are retried.
             if endpoint.isIdempotent, transientRetries < maxTransientRetries {
                 try await Task.sleep(nanoseconds: 1_000_000_000)
                 return try await send(request, for: endpoint, didRetryAuth: didRetryAuth,
@@ -122,8 +115,8 @@ public struct RemoteApiClient: ApiClient {
             return try await httpClient.send(request)
         } catch is CancellationError {
             throw APIError.cancelled
+        // What URLSession throws when a Task is cancelled mid-flight.
         } catch let error as URLError where error.code == .cancelled {
-            // What URLSession actually throws when a Task is cancelled mid-flight.
             throw APIError.cancelled
         } catch let error as URLError {
             throw APIError.transport(error.code)

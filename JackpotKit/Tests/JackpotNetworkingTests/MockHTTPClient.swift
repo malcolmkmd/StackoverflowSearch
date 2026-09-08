@@ -3,10 +3,8 @@ import XCTest
 @testable import JackpotNetworking
 
 /// Stubs the *transport*, not the client, so these tests exercise real URL building, real status
-/// handling and real decoding with only the socket replaced. An actor because the client calls
-/// it from concurrent tasks.
+/// handling and real decoding with only the socket replaced.
 actor MockHTTPClient: HTTPClient {
-
     struct Stub {
         var data: Data
         var statusCode: Int

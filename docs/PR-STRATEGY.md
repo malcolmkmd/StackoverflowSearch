@@ -1,49 +1,49 @@
-# Delivery Plan — PR Sequence
+# Delivery Plan — Six Steps
 
-Five PRs. The feature is built **entirely in packages**, demoable at every step, and the app
-changes once — in the last PR, which swaps the current flow for the package and deletes the old
-one. No feature flags; the app has none and this plan doesn't introduce any.
+The feature is built **entirely in packages** and demoable at every step. The app changes once,
+at step 4, which swaps the current flow for the package and deletes the old one. Steps 5 and 6
+are the localisation and app-data migrations from
+[ADR-0001](adr/0001-app-data-decoding-and-configuration-decomposition.md); registration does
+not wait for them. No feature flags; the app has none and this plan doesn't introduce any.
 
 **Principles**
 
-- **UI first, to show progress.** PR 1 is visible components. PR 3 renders the real captured
-  schema and, in the same module, fetches the live one. PR 4 is the complete registration
-  feature running on a device from the sandbox.
-- **Mock before live.** The forms engine ships with a `FormRepository` protocol and a
-  bundled-JSON implementation. The live one is the same module's `Remote/` folder and replaces
-  the stub at one line in composition.
-- **The app is touched once.** Everything up to PR 5 is additive package code nobody calls.
-  PR 5 is a swap plus a delete.
+- **UI first, to show progress.** Step 1 is visible components. Step 2 is the whole Sign Up
+  sheet on the captured schema, with no backend.
+- **Mock before live.** The engine ships with a `FormRepository` protocol and a bundled-JSON
+  implementation. The live one arrives at step 4 and replaces the stub at one line in
+  composition.
+- **The app is touched once.** Steps 1 to 3 are additive package code nobody calls. Step 4 is
+  a swap plus a delete.
 - **Localisation last.** The feature ships on the existing `getTranslation`, wrapped. The
-  migration off it is a separate follow-up — see [ADR-0001](adr/0001-app-data-decoding-and-configuration-decomposition.md).
+  migration off it is step 5, and it changes nothing about registration but the localizer.
+
+The build order, file by file, is [BUILD-PLAYBOOK.md](BUILD-PLAYBOOK.md).
 
 ---
 
 ## Overview
 
-| # | PR | Modules | Demoable as | Tests |
+| # | Step | Modules | Demoable as | Tests |
 |---|---|---|---|---|
 | 1 | **`JackpotUI`** — design system | JackpotUI | the gallery preview: every component, every state | 20 |
-| 2 | **`JackpotNetworking`** + `Translations` | JackpotNetworking, JackpotLocalization | `RemoteApiClient` against a stubbed transport | 50 |
-| 3 | **`JackpotForms`** — the engine, stub and live | JackpotForms | the sandbox rendering the captured registration schema; `.live()` fetching the real one | 83 |
-| 4 | **`JackpotRegistration`** — the feature, complete | JackpotRegistration | the full registration flow, mock service, on a device | 11 |
-| 5 | **Replace the current flow** | app | registration live in the app; old sign-up gone | — |
-| — | App-data follow-up | JackpotAppData, JackpotLocalization (store) + app | | 29 |
+| 2 | **`JackpotForms` on the bundled schema** + **`JackpotRegistration`** | JackpotForms, JackpotRegistration | the Sign Up sheet, both pages, mock service | 64 |
+| 3 | **`JackpotNetworking`** | JackpotNetworking | `RemoteApiClient` against a stubbed transport | 34 |
+| 4 | **Connect forms to the network; replace the flow in the app** | JackpotForms/Remote + app | registration live in the app, copy from `getTranslation` | 26 |
+| 5 | **Fix translations** | JackpotLocalization, JackpotRegistration | error codes in the player's language; `getTranslation` becomes a shim | 26 |
+| 6 | **Fix app data** | JackpotAppData | config served from disk on launch, revalidated behind it | 23 |
 
 ```
-JackpotUI ──► JackpotNetworking + Translations ──► JackpotForms (stub + live) ──► JackpotRegistration ──► app swap
+JackpotUI ──► JackpotForms + JackpotRegistration (stub) ──► JackpotNetworking ──► live + app swap ──► translations ──► app data
 ```
 
-164 tests through PR 5, 193 with the follow-up. Everything lives in one local package,
-`JackpotKit`; each row above is a module inside it, not a package of its own. The build order,
-file by file, is [BUILD-PLAYBOOK.md](BUILD-PLAYBOOK.md).
-
-Every PR up to 4 is package-only. Reviewers can pull the branch and see the result without the
-app building at all.
+193 tests through step 6. Everything lives in one local package, `JackpotKit`; each row above
+is a module inside it, not a package of its own. The manifest is built up step by step in the
+playbook, and the generator checks its final step against `Package.swift`.
 
 ---
 
-## PR 1 · `JackpotUI` — the design system
+## Step 1 · `JackpotUI` — the design system
 
 Components only. No data, no networking, no notion of a form. Everything is driven by
 `Binding`s and plain values, so any feature can use it and every component previews alone.
@@ -69,39 +69,18 @@ the extension points; the next component is designed against the next real schem
 
 **Review:** open the gallery preview in `JackpotPreviewPanel.swift`. 20 tests.
 
-## PR 2 · `JackpotNetworking` + `Translations`
+## Step 2 · `JackpotForms` on the bundled schema, and `JackpotRegistration`
 
-- **`JackpotNetworking`** — `HTTPClient`, `APIEndpoint`, `APIError`, interceptors,
-  `RemoteApiClient`. 200 / 400 / 401 / 500 with `unexpectedStatus` for anything infrastructure
-  returns. 34 tests.
-- **`JackpotLocalization`** — `Translations` only for now: the table, region-suffixed lookup, and
-  error codes as keys. 16 tests. `TranslationsStore` and `TranslationsRepository` in the same
-  module are the follow-up.
-
-**Review:** `RemoteApiClientTests` (the retry policy) and the `APIProblem.code`-is-an-`Int` fix.
-
-## PR 3 · `JackpotForms` — the engine
-
-One module, four folders pointing one way.
+The engine, with no network: one module, three folders pointing one way.
 
 | Folder | Holds |
 |---|---|
 | `Domain` | `FormSchema`, `FormField`, `FormName`, `FieldValidator`, `PasswordPolicy`, `FormLoadError`, `ClosureLocalizer`, the `FormRepository` / `FormLocalizing` protocols |
 | `Data` | wire DTOs and the mapper (internal), `StubFormRepository`, `BundledForms` (the captured `registration.json`), the placeholder copy table |
 | `UI` | `DynamicFormModel`, `DynamicFormContent`, `FormNavigationBar`, `DynamicFormView` (the two stacked), `FormDependencies` (+ `.mock()`), one thin field view per type binding the model to a `JackpotUI` component |
-| `Remote` | `RemoteFormRepository`, endpoints, `FormErrorMapper`, `TranslationsLocalizer`, `.live()` |
 
 The engine's defaults are generic — no cross-field regex links, no date cap. Registration's
-rules are added by PR 4.
-
-**Review:** `FieldRenderer.swift` (the CRM↔app contract), `FieldValidator.swift` (untrusted
-regexes), `DynamicFormModel.swift` (touched state, section gating, ID-type → ID-number),
-`FormEndpoints.swift` (HTTP 200 is not success). 83 tests.
-
-## PR 4 · `JackpotRegistration` — the complete feature
-
-The registration flow as a module. The app's entire integration surface is one view controller
-and one dependencies struct.
+rules come with the feature, in the same step:
 
 | File | Holds |
 |---|---|
@@ -109,35 +88,49 @@ and one dependencies struct.
 | `RegistrationPanelController.swift` | a `UIHostingController` sized for the legacy popup container |
 | `RegistrationService.swift` | the protocol, `MockRegistrationService`, `RemoteRegistrationService`, `RegistrationError` |
 
-The feature reads **nothing** from the app. The one thing it needs from the legacy world — the
-current `getTranslation` — arrives as a `FormLocalizing` the app constructs in PR 5.
+**Review:** `FieldRenderer.swift` (the CRM↔app contract), `FieldValidator.swift` (untrusted
+regexes), `DynamicFormModel.swift` (touched state, section gating, ID-type → ID-number), then
+the previews in `JackpotRegistration/Previews.swift`: the full flow, both pages, success and
+the duplicate-mobile failure path, with no app and no backend. 64 tests.
 
-**Review:** run the previews. The full flow, both pages, success and the duplicate-mobile
-failure path, with no app and no backend. 11 tests.
+## Step 3 · `JackpotNetworking`
 
-## PR 5 · Replace the current flow
+`HTTPClient`, `APIEndpoint`, `APIError`, interceptors, `RemoteApiClient`. 200 / 400 / 401 / 500
+with `unexpectedStatus` for anything infrastructure returns. Nothing here needs translations:
+the app keeps `getTranslation`.
 
-The only PR that touches the app. Three parts:
+**Review:** `RemoteApiClientTests` (the retry policy) and the `APIProblem.code`-is-an-`Int` fix.
+34 tests.
 
-**1. Wrap the existing translation function** (~8 lines):
+## Step 4 · Connect the forms to the network, and replace the flow in the app
+
+`JackpotForms/Remote` — `RemoteFormRepository`, endpoints, `FormErrorMapper`, `.live()`. The
+engine and the sheet are untouched; `.mock()` becomes `.live(baseURL:localizer:)` at one call
+site. Then the only change to the app, in three parts:
+
+**1. Put the existing translation function behind one named type** (~10 lines, its own file):
 
 ```swift
-// TRANSITIONAL. Deleted by the localisation follow-up.
-let legacyLocalizer = ClosureLocalizer { key in
-    let value = getTranslation(Key: key)
-    return value == key ? nil : value      // getTranslation returns the key on a miss
+// Sources/Features/Registration/LegacyTranslationLocalizer.swift
+// Deleted at step 5, when TranslationsLocalizer takes its place.
+struct LegacyTranslationLocalizer: FormLocalizing {
+    func string(forKey key: String) -> String? {
+        let value = getTranslation(Key: key)
+        return value == key ? nil : value      // getTranslation returns the key on a miss
+    }
 }
 ```
 
 That last line matters: the engine uses `nil` to mean "unresolved" so it can fall back to
-humanised copy. Without it a missing string renders as `username`.
+humanised copy. Without it a missing string renders as `username`. This file is the only place
+the feature touches `getTranslation`, which is what makes step 5 a one-file change.
 
-**2. Present the package where the old popup was** (~10 lines):
+**2. Present the package where the old popup was** (~14 lines):
 
 ```swift
 let controller = RegistrationPanelController(
     dependencies: RegistrationDependencies(
-        forms: .live(baseURL: configURL, localizer: legacyLocalizer),
+        forms: .live(baseURL: configURL, localizer: LegacyTranslationLocalizer()),
         service: MockRegistrationService()        // → RemoteRegistrationService once the endpoint is confirmed
     ),
     onClose: { popupContainer.dismiss() },
@@ -155,30 +148,36 @@ their nibs, their `GlobalData` handles.
 
 Net negative. The diff is small enough to review in one sitting and revert in one commit.
 
----
+**Review:** `FormEndpoints.swift` (HTTP 200 is not success) and the app diff. 26 tests.
 
-## Localisation follow-up — sequenced last
+## Step 5 · Fix translations
 
-Everything from ADR-0001 that touches copy. After PR 5, deliberately: it changes the mechanism
-behind every string in the app and has no dependency on registration shipping.
+ADR-0001 phase 2. `JackpotLocalization` — `Translations` (the table, normalised once;
+region-suffixed lookup; error codes as keys), `TranslationsRepository`, `TranslationsStore` —
+and `TranslationsLocalizer` in `JackpotRegistration`, the adapter that feeds the table to the
+form engine. In the app: `getTranslation` becomes a shim over the store (app-wide performance
+fix, zero call-site changes, deprecation warnings as the burn-down list), and
+`LegacyTranslationLocalizer.swift` is deleted in favour of `TranslationsLocalizer`, at which
+point error codes start resolving to localised copy. 26 tests.
 
-Adds `JackpotAppData` (section-wise bootstrap ingestion — the `ConfigData` decode fix — and
-`RemoteTranslationsRepository`) and the rest of `JackpotLocalization` (`TranslationsStore`),
-then: `getTranslation` becomes a shim (app-wide performance fix, zero call-site changes,
-deprecation warnings as the burn-down list); the registration `ClosureLocalizer` is replaced
-with `TranslationsLocalizer` and error codes start resolving to localised copy; call sites burn
-down by count. 29 tests.
+## Step 6 · Fix app data
+
+ADR-0001 phase 1 and [LAUNCH-PERFORMANCE](LAUNCH-PERFORMANCE.md). `JackpotAppData` —
+`AppDataResponse` (section-wise ingestion, the `ConfigData` decode fix), `FileAppDataCache`,
+`AppDataLoader` (stale-while-revalidate), `RemoteTranslationsRepository` feeding the store from
+the same payload. In the app: bootstrap from the loader, cache first. 23 tests.
 
 ---
 
 ## Sequencing notes
 
-**What's demoable when.** After PR 1, components. After PR 3, the real schema rendering. After
-PR 4, the entire feature on a device from the sandbox. The app hasn't changed yet.
+**What's demoable when.** After step 1, components. After step 2, the entire sheet on a device
+from this repository's sandbox. After step 4, registration live in the app. Steps 5 and 6
+change nothing visible to a registering user.
 
-**Useful stopping point.** After PR 4 the app is untouched and nothing is lost. After PR 5 the
-old flow is gone and there is no going back without a revert — which is fine, because PR 5 is
-one commit.
+**Useful stopping point.** After step 3 the app is untouched and nothing is lost. After step 4
+the old flow is gone and there is no going back without a revert — which is fine, because step
+4 is one commit.
 
-**What must not be dropped.** The delete in PR 5. Landing the swap without the delete leaves two
-sign-up flows in the tree.
+**What must not be dropped.** The delete in step 4. Landing the swap without the delete leaves
+two sign-up flows in the tree.

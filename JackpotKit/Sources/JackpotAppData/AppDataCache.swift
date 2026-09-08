@@ -1,7 +1,6 @@
 import Foundation
 import JackpotNetworking
 
-/// A bootstrap payload that was persisted, and when.
 public struct CachedAppData: Sendable, Equatable {
     public let data: Data
     public let validators: HTTPValidators?
@@ -24,12 +23,8 @@ public protocol AppDataCaching: Sendable {
     func clear(key: String)
 }
 
-/// Persists the last good payload to Application Support.
-///
-/// Not `URLCache`. The response advertises `cache-control: public, max-age=300`, which is a
-/// CDN tuning knob — five minutes is right for the edge and useless for app launches, which
-/// are usually hours apart. This store keeps the last good payload indefinitely and lets the
-/// caller decide how stale is too stale.
+/// The last good payload, kept indefinitely in Application Support. Not `URLCache`: its five-minute
+/// `max-age` is a CDN knob, useless for launches hours apart; the caller decides how stale is too stale.
 public struct FileAppDataCache: AppDataCaching {
     private let directory: URL
 
@@ -59,7 +54,7 @@ public struct FileAppDataCache: AppDataCaching {
     }
 
     public func store(_ data: Data, validators: HTTPValidators?, key: String) {
-        // Atomic: a half-written payload on next launch is worse than no payload.
+        // Atomic: a half-written payload on next launch is worse than none.
         try? data.write(to: payloadURL(key), options: .atomic)
         if let validators, let encoded = try? JSONEncoder().encode(validators) {
             try? encoded.write(to: metaURL(key), options: .atomic)
@@ -74,7 +69,7 @@ public struct FileAppDataCache: AppDataCaching {
     }
 }
 
-/// In-memory, for tests and previews.
+/// For tests and previews.
 public final class InMemoryAppDataCache: AppDataCaching, @unchecked Sendable {
     private var entries: [String: CachedAppData] = [:]
     private let lock = NSLock()

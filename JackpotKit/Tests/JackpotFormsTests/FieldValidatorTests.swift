@@ -2,7 +2,6 @@ import XCTest
 @testable import JackpotForms
 
 final class FieldValidatorTests: XCTestCase {
-
     private let validator = FieldValidator()
 
     private func field(_ identifier: String,

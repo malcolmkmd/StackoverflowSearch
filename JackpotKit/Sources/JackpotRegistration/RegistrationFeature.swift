@@ -2,12 +2,10 @@ import SwiftUI
 import JackpotUI
 import JackpotForms
 
-/// Everything the feature needs, supplied by the app at the one place it's presented.
+/// Everything the feature needs, supplied by the app where it's presented.
 public struct RegistrationDependencies {
-    /// How the schema is fetched and localised — `.mock(localizer:)` until networking lands,
-    /// `.live(baseURL:localizer:)` after — with registration's own rules applied on top.
+    /// `.mock(localizer:)` until networking lands, `.live(baseURL:localizer:)` after; registration's rules are applied on top.
     public let forms: FormDependencies
-    /// What to do with the values once they validate.
     public let service: any RegistrationService
     public let theme: JackpotTheme
 
@@ -19,20 +17,14 @@ public struct RegistrationDependencies {
         self.theme = theme
     }
 
-    /// Bundled schema, mock service — works with no backend and no app.
-    ///
-    /// - Parameter localizer: the app's existing translation function, wrapped:
-    ///   `ClosureLocalizer { key in … getTranslation(Key: key) … }`. Nil → bundled placeholder copy.
+    /// Bundled schema and mock service: no backend, no app.
     public static func mock(localizer: (any FormLocalizing)? = nil) -> RegistrationDependencies {
         RegistrationDependencies(forms: .mock(localizer: localizer), service: MockRegistrationService())
     }
 }
 
 extension FormDependencies {
-    /// What registration adds to the generic engine: the ID-type dropdown decides which regex
-    /// the ID-number field validates against, and the date-of-birth picker cannot select an
-    /// under-18 date. The form's only other age gate is the terms checkbox, so the cap is a
-    /// cheap second line of defence.
+    /// The ID-type dropdown decides the ID-number regex, and the date-of-birth picker cannot select an under-18 date.
     func applyingRegistrationRules(now: Date = Date()) -> FormDependencies {
         var rules = self
         rules.regexDependencies = ["idNumberType": "idNumber"]
@@ -41,12 +33,8 @@ extension FormDependencies {
     }
 }
 
-/// The Sign Up sheet as the app presents it: the two-page schema-driven form inside a
-/// `JackpotPanel`, with the close button in the header and, in the footer, the login row with
-/// Previous / Next / Sign Up beneath it.
-///
-/// The shell's copy ("Sign Up", "Already have an account?", "Login") is not in the CRM schema,
-/// so it is fixed here like the Next / Previous labels are, until the app-data keys are known.
+/// The Sign Up sheet: the two-page form inside `JackpotPanel`, the login row and navigation in the footer.
+/// The shell's copy is fixed here, like the Next / Previous labels, until the app-data keys are known.
 public struct RegistrationView: View {
     private let dependencies: RegistrationDependencies
     private let onClose: () -> Void
@@ -54,10 +42,6 @@ public struct RegistrationView: View {
     private let onComplete: (RegistrationResult) -> Void
     @StateObject private var model: DynamicFormModel
 
-    /// - Parameters:
-    ///   - onClose: the header's close button.
-    ///   - onLogin: the footer's "Already have an account? Login" row.
-    ///   - onComplete: the account was created; route to OTP, login or home.
     public init(dependencies: RegistrationDependencies,
                 onClose: @escaping () -> Void,
                 onLogin: @escaping () -> Void,
@@ -76,7 +60,6 @@ public struct RegistrationView: View {
             VStack(spacing: .sm) {
                 JackpotLinkRow("Already have an account?", link: "Login", action: onLogin)
                 FormNavigationBar(model: model) { submission in
-                    // Thrown errors render under the fields; the form stays filled in.
                     onComplete(try await dependencies.service.register(submission))
                 }
             }

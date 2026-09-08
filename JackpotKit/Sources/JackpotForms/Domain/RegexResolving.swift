@@ -1,14 +1,8 @@
 import Foundation
 
-/// Dropdown options in the schema carry a `regex` that is sometimes a pattern (`"[a-zA-Z]"` on
-/// sourceOfFunds) and sometimes the *name* of one (`"idNumberRegex"` on idNumberType). A name
-/// has to resolve to a pattern somewhere; this protocol is that somewhere.
-///
-/// Named regexes *replace* the dependent field's rule: choosing "South African ID" vs
-/// "Passport" changes what a valid ID Number is. `DynamicFormModel` applies that, gated on
-/// `FormDependencies.appliesOptionRegexToDependentField`.
+/// A dropdown option's `regex` is sometimes a pattern and sometimes the name of one; names resolve here
+/// and replace the dependent field's rule.
 public protocol RegexResolving: Sendable {
-    /// Pattern for a named regex, or nil if the name is unknown.
     func pattern(named name: String) -> String?
 }
 
@@ -23,8 +17,7 @@ public struct RegexCatalog: RegexResolving {
         patterns[name]
     }
 
-    /// Named option regexes that redirect onto a dependent field. `passportNumberRegex` is a
-    /// **length** rule, not a character class: any 5–20 characters.
+    /// `passportNumberRegex` is a length rule, not a character class.
     public static let jpcDefaults = RegexCatalog(patterns: [
         "idNumberRegex": "^[0-9]{13}$",
         "passportNumberRegex": "^.{5,20}$",
@@ -32,8 +25,7 @@ public struct RegexCatalog: RegexResolving {
 }
 
 public extension String {
-    /// Tells a regex *pattern* from a regex *name*. A bare identifier has no metacharacters;
-    /// a real pattern almost always does.
+    /// A bare identifier has no metacharacters; a real pattern almost always does.
     var looksLikeRegexPattern: Bool {
         let metacharacters = CharacterSet(charactersIn: "^$[]{}()|*+?\\.")
         return rangeOfCharacter(from: metacharacters) != nil

@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// `TextInputAutocapitalization` is neither `Equatable` nor inspectable, so the kind stores its
-/// own case and converts when applying.
+/// `TextInputAutocapitalization` is not `Equatable`, so the kind stores its own case.
 public enum JackpotCapitalization: Equatable, Sendable {
     case never, words, sentences, characters
 
@@ -15,9 +14,7 @@ public enum JackpotCapitalization: Equatable, Sendable {
     }
 }
 
-/// Keyboard, autofill, autocorrection and secure-entry settings as one value, so a field's
-/// semantics are declared once — `JackpotTextField("Email", text: $email, kind: .email)` —
-/// instead of as four loose modifiers per call site.
+/// Keyboard, autofill, autocorrection and secure entry as one value, passed as `kind:`.
 public struct JackpotFieldKind: Equatable, Sendable {
     public var keyboard: UIKeyboardType = .default
     public var contentType: UITextContentType?
@@ -45,8 +42,7 @@ public struct JackpotFieldKind: Equatable, Sendable {
                                                     capitalization: .never,
                                                     disablesAutocorrection: true)
 
-    /// `.newPassword`, not `.password`: it opts the field into iOS's strong-password suggestion,
-    /// which is what a registration form wants.
+    /// `.newPassword` opts into iOS's strong-password suggestion.
     public static let newPassword = JackpotFieldKind(contentType: .newPassword,
                                                      capitalization: .never,
                                                      disablesAutocorrection: true,
@@ -64,8 +60,6 @@ public struct JackpotFieldKind: Equatable, Sendable {
 }
 
 extension View {
-    /// Applies the kind's keyboard and autofill settings. Secure entry is the field's own
-    /// business, because it decides between `SecureField` and `TextField`.
     func textInput(_ kind: JackpotFieldKind) -> some View {
         keyboardType(kind.keyboard)
             .textContentType(kind.contentType)

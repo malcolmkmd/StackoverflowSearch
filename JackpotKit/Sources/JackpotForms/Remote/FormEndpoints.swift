@@ -1,18 +1,13 @@
 import Foundation
 import JackpotNetworking
 
-// Fetch, submit and app-data all live under `https://config.jpc.africa/cron`. Fetch carries
-// `api-version=2.0` and submit carries none, so the version belongs on the request rather than
-// on the environment.
-
+// Fetch carries `api-version=2.0` and submit carries none, so the version lives on the request.
 extension APIEnvironment {
-    /// The cron config service — `https://config.jpc.africa/cron`.
     static func cron(baseURL: URL) -> APIEnvironment {
         APIEnvironment(baseURL: baseURL)
     }
 
-    /// `https://config.jpc.africa/crm` → `https://config.jpc.africa/cron`, because call sites
-    /// historically passed a CRM base and production fetch is on cron.
+    /// `…/crm` → `…/cron`: call sites historically passed a CRM base; production fetch is on cron.
     static func cronBaseURL(fromCRM url: URL) -> URL {
         switch url.lastPathComponent {
         case "crm":
@@ -25,7 +20,7 @@ extension APIEnvironment {
     }
 }
 
-/// `GET {cron}/forms/{brand}/{region}/{name}?api-version=2.0`, matching production `buildFormURL`.
+/// `GET {cron}/forms/{brand}/{region}/{name}?api-version=2.0`.
 struct FormRequest: APIEndpoint {
     let brand: String
     let region: String
@@ -36,8 +31,7 @@ struct FormRequest: APIEndpoint {
     var queryItems: [URLQueryItem] { [URLQueryItem(name: "api-version", value: "2.0")] }
 }
 
-/// `POST {cron}/forms/submit` — no `api-version` query item. Auth is not required, because
-/// registration happens before login.
+/// `POST {cron}/forms/submit`. No auth: registration happens before login.
 struct FormSubmitRequest: APIEndpoint {
     let bodyData: Data
 
@@ -51,7 +45,7 @@ struct FormSubmitRequest: APIEndpoint {
     var requiresAuth: Bool { false }
 }
 
-/// Wire shape of `FormSubmission`, so the domain type stays free of JSON key names.
+/// Wire shape of `FormSubmission`.
 struct FormSubmitBody: Encodable {
     let formId: String
     let formName: String
@@ -74,7 +68,7 @@ struct FormSubmitBody: Encodable {
         metadata = submission.metadata
     }
 
-    /// ISO-8601 is an assumption — the production encoder wasn't visible.
+    /// ISO-8601 is an assumption; the production encoder wasn't visible.
     static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -82,10 +76,7 @@ struct FormSubmitBody: Encodable {
     }()
 }
 
-/// Untagged JSON value for a form field.
-///
-/// The custom `encode` is required: synthesized `Codable` would emit a tagged object
-/// (`{"bool":true}`) instead of a bare JSON value.
+/// Untagged JSON value; synthesized `Codable` would emit `{"bool":true}`.
 enum FieldValue: Equatable, Sendable, Encodable {
     case string(String)
     case bool(Bool)
@@ -113,8 +104,7 @@ extension FormValue {
     }
 }
 
-/// HTTP 200 is not success: the body carries `isSuccessful` / `error`, so a client that only
-/// looked for `"success"` would swallow a failed create.
+/// HTTP 200 is not success: `isSuccessful` is.
 struct FormSubmitEnvelope: Decodable {
     let data: FormSubmitDataDTO?
     let isSuccessful: Bool?
@@ -150,10 +140,8 @@ enum FormSubmitParser {
         case rejected(FormSubmitErrorDTO?)
     }
 
+    /// An empty 2xx is taken as accepted (an assumption); anything else must be the envelope.
     static func parse(_ data: Data) -> Outcome {
-        // An empty 2xx is taken as accepted (an assumption; see OPEN-QUESTIONS). Anything else
-        // has to be the envelope: a gateway page served with status 200, or JSON that is not
-        // this shape, is not a registered account.
         if data.isEmpty { return .accepted(FormSubmitResult()) }
         guard let envelope = try? JSONDecoder().decode(FormSubmitEnvelope.self, from: data),
               envelope.isEnvelope else {
@@ -165,8 +153,7 @@ enum FormSubmitParser {
 }
 
 private extension FormSubmitEnvelope {
-    /// Every field is optional so a partial body still decodes; a body with none of them is
-    /// some other document that happened to parse.
+    /// Every field is optional, so a body with none of them is some other document.
     var isEnvelope: Bool {
         data != nil || isSuccessful != nil || success != nil || error != nil
     }

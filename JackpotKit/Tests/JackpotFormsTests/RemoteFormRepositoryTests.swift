@@ -3,7 +3,6 @@ import XCTest
 import JackpotNetworking
 
 final class FormSubmitEndpointTests: XCTestCase {
-
     private let cron = URL(string: "https://config.jpc.africa/cron")!
 
     func testSubmitURLMatchesProduction() throws {
@@ -107,31 +106,7 @@ final class FormSubmitEndpointTests: XCTestCase {
     )
 }
 
-final class FormRepositoryOperationTests: XCTestCase {
-
-    func testStubServesTheBundledForm() async throws {
-        let repo = StubFormRepository(forms: BundledForms.all, delay: 0)
-        let form = try await repo.form(named: .registration)
-        XCTAssertEqual(form.id, 1052)
-    }
-
-    func testStubReportsAnUnknownFormAsNotFound() async {
-        let repo = StubFormRepository(forms: BundledForms.all, delay: 0)
-        do {
-            _ = try await repo.form(named: FormName("deposit"))
-            XCTFail("expected a throw")
-        } catch {
-            XCTAssertEqual(error as? FormLoadError, .notFound(FormName("deposit")))
-        }
-    }
-
-    func testStubSubmitSucceeds() async throws {
-        let repo = StubFormRepository(forms: [:], delay: 0)
-        let submission = FormSubmission(formCodeName: .registration, values: [:], formId: "1052")
-        let submitted = try await repo.submitForm(submission)
-        XCTAssertNil(submitted.accountId)
-    }
-
+final class RemoteFormRepositoryTests: XCTestCase {
     func testRemoteSubmitPostsToCronAndReadsTheEnvelope() async throws {
         let client = ScriptedApiClient(data: Data(#"{"isSuccessful":true,"data":{"accountId":"abc"}}"#.utf8))
         let repo = RemoteFormRepository(apiClient: client)

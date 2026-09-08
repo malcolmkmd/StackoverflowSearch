@@ -1,10 +1,9 @@
 import Foundation
 
-/// Where auth headers, token refresh, logging and correlation IDs belong — once,
-/// instead of in every API type.
+/// Auth headers, token refresh, logging: once, instead of in every endpoint.
 public protocol RequestInterceptor: Sendable {
     func adapt(_ request: URLRequest, for endpoint: any APIEndpoint) async throws -> URLRequest
-    /// Return an adapted request to retry with, or nil to give up. Called at most once.
+    /// An adapted request to retry with, or nil. Called at most once.
     func retry(_ request: URLRequest,
                for endpoint: any APIEndpoint,
                response: HTTPURLResponse,
@@ -19,8 +18,7 @@ public extension RequestInterceptor {
                data: Data) async -> URLRequest? { nil }
 }
 
-/// Adds a bearer token. The token arrives through a closure so this module never
-/// imports a session type.
+/// The token arrives through a closure, so this module never imports a session type.
 public struct BearerTokenInterceptor: RequestInterceptor {
     private let token: @Sendable () async -> String?
 

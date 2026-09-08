@@ -17,7 +17,6 @@ public struct JackpotDropdown: View {
 
     @Environment(\.jackpotTheme) private var theme
 
-    /// - Parameter title: the in-field label. It floats to the top edge once an option is chosen.
     public init(_ title: String, selection: Binding<String?>, options: [JackpotOption]) {
         self.title = title
         self._selection = selection

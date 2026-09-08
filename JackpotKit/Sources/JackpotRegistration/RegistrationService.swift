@@ -1,14 +1,12 @@
 import Foundation
 import JackpotForms
 
-/// What happens to the collected form values. The engine hands us a `FormSubmission`; this
-/// turns it into an account.
+/// Turns a `FormSubmission` into an account.
 public protocol RegistrationService: Sendable {
     func register(_ submission: FormSubmission) async throws -> RegistrationResult
 }
 
-/// What the app needs afterwards: an account, an optional session token, and whether FICA still
-/// needs a manual upload.
+/// An account, an optional session token, and whether FICA still needs a manual upload.
 public struct RegistrationResult: Equatable, Sendable {
     public let accountId: String?
     public let accessToken: String?
@@ -42,12 +40,11 @@ public struct RegistrationResult: Equatable, Sendable {
         )
     }
 
-    /// Account exists but auto-FICA didn't finish — `jpc-partially-complete-profile`.
+    /// Account exists but auto-FICA didn't finish (`jpc-partially-complete-profile`).
     public var isPartial: Bool { (partialRegistrationStatus ?? 0) != 0 }
 }
 
-/// Succeeds after a short delay, and fails if the mobile is `"0000000000"` — enough to demo
-/// both paths and to drive previews and tests.
+/// Succeeds after a short delay; fails for mobile `"0000000000"`.
 public struct MockRegistrationService: RegistrationService {
     private let delay: TimeInterval
 
@@ -66,7 +63,7 @@ public struct MockRegistrationService: RegistrationService {
     }
 }
 
-/// Posts through `FormRepository.submitForm` and maps the envelope into a result.
+/// Posts through `FormRepository.submitForm`.
 public struct RemoteRegistrationService: RegistrationService {
     private let repository: any FormRepository
 
@@ -81,7 +78,7 @@ public struct RemoteRegistrationService: RegistrationService {
     }
 }
 
-/// User-facing failures. `LocalizedError` because that's what the form engine displays.
+/// User-facing failures; `LocalizedError` because that's what the engine displays.
 public enum RegistrationError: LocalizedError, Equatable {
     case mobileAlreadyRegistered
     case offline

@@ -1,10 +1,6 @@
 import Foundation
 
-/// A field's current value.
-///
-/// Every case renders as a string because the schema validates with regexes — including the
-/// checkboxes, whose patterns are literally `^true$`. `stringValue` is therefore both what
-/// gets validated and what gets submitted.
+/// Every case renders as a string because the schema validates with regexes, `^true$` for checkboxes included.
 public enum FormValue: Equatable, Hashable, Sendable {
     case empty
     case text(String)
@@ -46,14 +42,11 @@ public enum FormValue: Equatable, Hashable, Sendable {
         }
     }
 
-    /// The `dateOfBirth` regex in the schema expects an ISO-8601 date-time with
-    /// optional fractional seconds and offset, so that is what we emit: `1990-01-01T00:00:00Z`.
-    /// A format style rather than `ISO8601DateFormatter`, which is a class and not `Sendable`.
+    /// The `dateOfBirth` regex expects an ISO-8601 date-time: `1990-01-01T00:00:00Z`.
     public static let iso8601 = Date.ISO8601FormatStyle()
 }
 
-/// What the host receives in the submit callback, and what the cron submit endpoint expects.
-/// Encoding lives in `Remote/FormEndpoints.swift` so this type stays free of JSON key names.
+/// What the host receives on submit and what the submit endpoint expects; encoding lives in `Remote`.
 public struct FormSubmission: Equatable, Sendable {
     public let formId: String
     public let formCodeName: FormName
@@ -77,8 +70,6 @@ public struct FormSubmission: Equatable, Sendable {
         values[identifier] ?? .empty
     }
 
-    /// Flat string payload, for hosts that want one. The real submit body uses `values`,
-    /// because fields are typed on the wire (bool stays bool, empty becomes null).
     public var stringValues: [String: String] {
         values.mapValues(\.stringValue)
     }

@@ -1,16 +1,10 @@
 import Foundation
 import Combine
 
-/// Owns the session's translation table.
-///
-/// `Translations` is a value type with no home; something has to hold it for the life of the
-/// session. Not a singleton: it is created by the composition root and injected, so tests and
-/// previews can have their own.
-///
-/// `ObservableObject` rather than `@Observable` because this package targets iOS 15.
 @MainActor
+/// Owns the session's table. Created at the composition root and injected, never a singleton.
+/// `ObservableObject` rather than `@Observable` because the floor is iOS 15.
 public final class TranslationsStore: ObservableObject {
-
     @Published public private(set) var translations = Translations()
     @Published public private(set) var isLoading = false
     @Published public private(set) var lastError: (any Error)?
@@ -22,10 +16,9 @@ public final class TranslationsStore: ObservableObject {
         self.repository = repository
     }
 
-    /// Whether the table has arrived. Screens can render placeholder copy until it has.
     public var isLoaded: Bool { !translations.isEmpty }
 
-    /// Fetches once per session. A call made while one is already in flight is a no-op.
+    /// Once per session; a call made while one is in flight is a no-op.
     public func load(region: String, tenant: String, locale: String) {
         guard loadTask == nil else { return }
         isLoading = true
@@ -40,15 +33,13 @@ public final class TranslationsStore: ObservableObject {
                 lastError = nil
             } catch is CancellationError {
             } catch {
-                // A missing table is degraded, not fatal: every lookup falls back to its key,
-                // so the app stays usable and QA can see which strings are missing.
+                // Degraded, not fatal: lookups fall back to their keys.
                 lastError = error
             }
         }
     }
 
-    /// Adopts a table someone else fetched — the seam for hosts that already pull app-data
-    /// themselves and shouldn't fetch it twice.
+    /// For hosts that already fetched app-data and shouldn't fetch it twice.
     public func adopt(_ translations: Translations) {
         loadTask?.cancel()
         loadTask = nil

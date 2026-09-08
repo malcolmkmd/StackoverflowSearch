@@ -17,11 +17,6 @@ public struct JackpotTextField: View {
 
     private var requestedFocus: String? { focusedField?.wrappedValue }
 
-    /// - Parameters:
-    ///   - title: the in-field label. It floats to the top edge on focus or once there is text.
-    ///   - kind: keyboard, autofill and secure-entry semantics.
-    ///   - prefix: a fixed cell before the input, like `+27` on a mobile number.
-    ///   - suffix: trailing text inside the field.
     public init(_ title: String,
                 text: Binding<String>,
                 kind: JackpotFieldKind = .text,
@@ -34,15 +29,14 @@ public struct JackpotTextField: View {
         self.suffix = suffix
     }
 
-    /// Fires on blur. Chain it before any `View` modifier, like `Gesture.onEnded`.
+    /// Fires on blur. Chain it before any `View` modifier.
     public func onEditingEnded(_ action: @escaping () -> Void) -> Self {
         var copy = self
         copy.editingEndedAction = action
         return copy
     }
 
-    /// Fires on both focus and blur. The field owns its `FocusState`, so this is the only way
-    /// out for callers that reveal supporting content while the field is being edited.
+    /// Fires on focus and blur, for callers that show supporting content while editing.
     public func onFocusChange(_ action: @escaping (Bool) -> Void) -> Self {
         var copy = self
         copy.focusChangedAction = action
@@ -69,8 +63,7 @@ public struct JackpotTextField: View {
                     .jackpotTextStyle(\.fieldText)
                     .textInput(kind)
                     .focused($isFocused)
-                    // The prefix cell is hidden above, so fold it in rather than leaving
-                    // VoiceOver to stumble over a stray "+27".
+                    // The prefix cell is hidden from VoiceOver, so fold it into the label.
                     .accessibilityLabel(prefix.isEmpty ? Text(title) : Text("\(title), \(prefix)"))
             }
 
@@ -103,8 +96,7 @@ public struct JackpotTextField: View {
                 editingEndedAction?()
             }
         }
-        // The other half of the sync: the form moves the shared value, the field follows.
-        // Guarded both ways so the two `onChange`s cannot ping-pong.
+        // The form moves the shared value and the field follows; guarded both ways so the two cannot ping-pong.
         .onChange(of: requestedFocus) { requested in
             guard focusedField != nil, let identity else { return }
             let shouldFocus = requested == identity

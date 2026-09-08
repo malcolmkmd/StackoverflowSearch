@@ -3,7 +3,6 @@ import XCTest
 
 @MainActor
 final class TranslationsStoreTests: XCTestCase {
-
     private func store(_ table: Translations = Translations(["a": "A"], regionCode: "jza"),
                        delay: TimeInterval = 0) -> TranslationsStore {
         TranslationsStore(repository: SpyRepository(table, delay: delay))
@@ -39,7 +38,6 @@ final class TranslationsStoreTests: XCTestCase {
         XCTAssertTrue(store.isLoaded)
         XCTAssertEqual(store.translations("legacy-key"), "From GlobalData")
     }
-
 
     /// A failed fetch must degrade, not break: lookups fall back to their keys so the app
     /// stays usable and the gaps are visible.

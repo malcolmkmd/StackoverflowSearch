@@ -1,9 +1,6 @@
 import Foundation
 
-/// What `POST /cron/forms/submit` returns on a 2xx body.
-///
-/// HTTP 200 is not success — the envelope carries `isSuccessful` and an `error` object.
-/// A created account can still need manual FICA (`partialRegistrationStatus`, compliance).
+/// What `POST /cron/forms/submit` returns. HTTP 200 is not success, and a created account can still need manual FICA.
 public struct FormSubmitResult: Equatable, Sendable {
     public let accountId: String?
     public let message: String?

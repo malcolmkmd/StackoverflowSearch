@@ -23,8 +23,7 @@ struct InputFieldView: View {
                     .submitLabel(isLastFocusable ? .done : .next)
                     .disabled(field.isReadOnly)
 
-                // The rules are guidance while composing a password, not a permanent
-                // fixture — once the field is left the error line carries the verdict.
+                // The rules are guidance while composing; once the field is left, the error line carries the verdict.
                 if field.isSecure, isEditing {
                     JackpotChecklist("Password Validity", items: passwordItems)
                         .transition(.scale(scale: 0.97, anchor: .top).combined(with: .opacity))
@@ -55,8 +54,7 @@ struct InputFieldView: View {
         case .number: return .number
         default:      break
         }
-        // Falls back to the identifier, because the schema's `inputType` is coarser than the
-        // autofill hints iOS can use: `username` is a mobile number typed as `Number`.
+        // The schema's `inputType` is coarser than iOS autofill: `username` is a mobile number typed as Number.
         switch field.identifier.lowercased() {
         case "username", "mobile", "mobilenumber": return .phoneNumber
         case "firstname":                          return .givenName
@@ -78,8 +76,6 @@ struct InputFieldView_Previews: PreviewProvider {
                 InputFieldView(field: FormPreview.field("username"),
                                model: FormPreview.model([FormPreview.field("username")], values: ["username": .text("123")], touched: ["username"]))
             }.previewDisplayName("Mobile — invalid")
-            // The checklist is focus-gated, so it stays hidden here; focus the field in the
-            // live preview to see it.
             JackpotPreviewPanel("Password · 7 chars · unfocused") {
                 InputFieldView(field: FormPreview.field("password"),
                                model: FormPreview.model([FormPreview.field("password")], values: ["password": .text("Passwo1")], touched: ["password"]))

@@ -1,15 +1,6 @@
 import SwiftUI
 
-/// The shell a feature is presented in: a header band with a title and a close button, the
-/// content on `background`, and an optional footer band. Header and footer draw on `surface`,
-/// which is what separates them from the content between them; the close button rests on the
-/// band in `background`.
-///
-///     JackpotPanel("Sign Up", onClose: dismiss) {
-///         RegistrationView(dependencies: deps) { result in … }
-///     } footer: {
-///         Button("Already have an account? Login") { showLogin() }
-///     }
+/// A sheet shell: header band with title and close button, content on `background`, optional footer band.
 public struct JackpotPanel<Content: View, Footer: View>: View {
     private let title: String
     private let onClose: () -> Void

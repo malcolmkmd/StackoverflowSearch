@@ -1,8 +1,6 @@
 import Foundation
 
-/// The schemas shipped with the package as JSON, keyed by `formCodeName`. The stub repository,
-/// previews and tests all read them from here. `registration.json` is the CRM's response for
-/// `forms/jackpotcity/JZA/registration?api-version=2.0`, saved verbatim.
+/// The schemas shipped as JSON; `registration.json` is the CRM's response saved verbatim.
 enum BundledForms {
     static var all: [FormName: Data] {
         [.registration: json(named: "registration")]

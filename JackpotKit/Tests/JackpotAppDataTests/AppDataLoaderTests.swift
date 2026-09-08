@@ -3,7 +3,6 @@ import XCTest
 import JackpotNetworking
 
 final class AppDataLoaderTests: XCTestCase {
-
     private let payload = #"{"locales":{"new-site":"New Site"},"wmsconfig":{"regionCode":"JZA"}}"#
     private let updated = #"{"locales":{"new-site":"Newer Site"}}"#
 
@@ -103,9 +102,8 @@ final class AppDataLoaderTests: XCTestCase {
         XCTAssertNil(snapshot)
     }
 
-    /// A 304 re-stamps the entry: it ages from the last time we confirmed it, not from the last
-    /// time the content happened to change. Otherwise a config nobody edits for a fortnight
-    /// would fall out of the staleness budget while being perfectly current.
+    /// A 304 re-stamps the entry: it ages from the last time we confirmed it, not from the last time
+    /// the content happened to change.
     func testNotModifiedRestampsTheCache() async throws {
         let cache = InMemoryAppDataCache()
         cache.seed(Data(payload.utf8), key: "jza-synapse-en-us",

@@ -8,8 +8,6 @@ public struct JackpotDateField: View {
     @Environment(\.jackpotTheme) private var theme
     @State private var isPresented = false
 
-    /// - Parameter title: the in-field label. It floats once a date is chosen and names the
-    ///   picker sheet.
     public init(_ title: String,
                 selection: Binding<Date?>,
                 in range: PartialRangeThrough<Date> = ...Date()) {
@@ -48,15 +46,13 @@ public struct JackpotDateField: View {
         }
     }
 
-    /// Wheel plus title and button. Before iOS 16 there are no detents, so the sheet is full
-    /// height and the spacer pins the button to the bottom instead.
+    /// Before iOS 16 there are no detents, so the sheet is full height and the spacer pins the button down.
     private var sheetHeight: CGFloat { wheelHeight + 160 }
 
     private var wheelHeight: CGFloat { 216 }
 
     private var sheet: some View {
         ZStack {
-            // A presented sheet is a shell, so it draws on `surface` like a header band would.
             theme.colors.surface.ignoresSafeArea()
 
             VStack(spacing: theme.sizes.spacing) {
@@ -77,8 +73,7 @@ public struct JackpotDateField: View {
                 Spacer(minLength: 0)
 
                 Button("Done") {
-                    // Confirming without dragging still counts as a choice, otherwise the
-                    // field silently stays empty.
+                    // Confirming without dragging still counts as a choice.
                     if selection == nil { selection = range.upperBound }
                     isPresented = false
                 }

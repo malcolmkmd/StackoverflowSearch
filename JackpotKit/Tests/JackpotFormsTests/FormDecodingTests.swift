@@ -2,7 +2,6 @@ import XCTest
 @testable import JackpotForms
 
 final class FormDecodingTests: XCTestCase {
-
     private func loadRegistration() throws -> FormSchema {
         try StubFormRepository.decode(BundledForms.json(named: "registration"))
     }
@@ -90,7 +89,6 @@ final class FormDecodingTests: XCTestCase {
 }
 
 final class FormNameTests: XCTestCase {
-
     func testKnownNamesMapToTheirCodeNames() {
         XCTAssertEqual(FormName.registration.rawValue, "registration")
     }

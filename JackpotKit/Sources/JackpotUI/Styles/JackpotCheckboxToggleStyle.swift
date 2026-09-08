@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// A tappable box with a wrapping label, the way the registration consents are drawn.
-/// VoiceOver is handed a switch, so it reads as a toggle rather than a button.
+/// A tappable box with a wrapping label; VoiceOver is handed a switch.
 public struct JackpotCheckboxToggleStyle: ToggleStyle {
     public init() {}
 
@@ -34,8 +33,8 @@ public struct JackpotCheckboxToggleStyle: ToggleStyle {
                 .frame(minHeight: theme.sizes.minimumHitTarget)
             }
             .buttonStyle(.plain)
+            // The explicit style stops the stand-in resolving back to this one.
             .accessibilityRepresentation {
-                // The explicit style stops the stand-in resolving back to this one.
                 Toggle(isOn: configuration.$isOn) { configuration.label }
                     .toggleStyle(.switch)
             }

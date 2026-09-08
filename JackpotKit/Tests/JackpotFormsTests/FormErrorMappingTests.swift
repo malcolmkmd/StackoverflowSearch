@@ -1,10 +1,8 @@
 import XCTest
 @testable import JackpotForms
 import JackpotNetworking
-import JackpotLocalization
 
 final class CRMEnvironmentTests: XCTestCase {
-
     private let cron = URL(string: "https://config.jpc.africa/cron")!
 
     func testBuildsTheProductionFormURL() throws {
@@ -22,10 +20,8 @@ final class CRMEnvironmentTests: XCTestCase {
 }
 
 /// The server's own wording has to survive the trip from JSON to the screen, and every hop is a
-/// place it could be dropped. The engine cannot see `APIError`, so without `FormLoadError`
-/// carrying the message across that boundary everything becomes "Something went wrong".
+/// place it could be dropped.
 final class FormErrorMappingTests: XCTestCase {
-
     func testServerMessageSurvivesToTheUserFacingString() {
         let apiError = APIError.badRequest(APIProblem(code: 1042, message: "Mobile number already registered"))
         let mapped = FormErrorMapper.map(apiError, formName: .registration)
@@ -68,17 +64,19 @@ final class FormErrorMappingTests: XCTestCase {
 }
 
 /// The app-data response carries error copy keyed by code — `"6000328": "Maximum OTP tries…"` —
-/// so an API error envelope's `code` is a localisation key.
+/// so an API error envelope's `code` is a localisation key, whichever localizer resolves it.
 final class LocalizedErrorMappingTests: XCTestCase {
-
-    private let translations = Translations([
-        "6000328": "Maximum OTP tries reached, Please contact support on +233 30 825 5838",
-        "1042": "Hierdie selfoonnommer is reeds geregistreer",
-    ], regionCode: "JZA")
+    private let table = [
+        6000328: "Maximum OTP tries reached, Please contact support on +233 30 825 5838",
+        1042: "Hierdie selfoonnommer is reeds geregistreer",
+    ]
+    private var localizer: any FormLocalizing {
+        ClosureLocalizer({ _ in nil }, errorCode: { [table] in table[$0] })
+    }
 
     func testErrorCodeResolvesToLocalisedCopy() {
         let error = APIError.badRequest(APIProblem(code: 6000328, message: "Max OTP tries"))
-        let mapped = FormErrorMapper.map(error, formName: .registration, localizer: TranslationsLocalizer(translations))
+        let mapped = FormErrorMapper.map(error, formName: .registration, localizer: localizer)
         XCTAssertEqual((mapped as? LocalizedError)?.errorDescription,
                        "Maximum OTP tries reached, Please contact support on +233 30 825 5838")
     }
@@ -86,20 +84,20 @@ final class LocalizedErrorMappingTests: XCTestCase {
     /// The table wins over the envelope's own text — it's the localised one.
     func testLocalisedCopyBeatsTheServersMessage() {
         let error = APIError.badRequest(APIProblem(code: 1042, message: "Mobile number already registered"))
-        let mapped = FormErrorMapper.map(error, formName: .registration, localizer: TranslationsLocalizer(translations))
+        let mapped = FormErrorMapper.map(error, formName: .registration, localizer: localizer)
         XCTAssertEqual((mapped as? LocalizedError)?.errorDescription,
                        "Hierdie selfoonnommer is reeds geregistreer")
     }
 
     func testUnknownCodeFallsBackToTheServersMessage() {
         let error = APIError.badRequest(APIProblem(code: 999999, message: "Something specific"))
-        let mapped = FormErrorMapper.map(error, formName: .registration, localizer: TranslationsLocalizer(translations))
+        let mapped = FormErrorMapper.map(error, formName: .registration, localizer: localizer)
         XCTAssertEqual((mapped as? LocalizedError)?.errorDescription, "Something specific")
     }
 
     func testNoCodeAndNoMessageFallsBackToOurs() {
         let mapped = FormErrorMapper.map(APIError.badRequest(nil), formName: .registration,
-                                         localizer: TranslationsLocalizer(translations))
+                                         localizer: localizer)
         XCTAssertEqual(mapped as? FormLoadError, .unexpected)
     }
 
@@ -109,38 +107,5 @@ final class LocalizedErrorMappingTests: XCTestCase {
         let error = APIError.badRequest(APIProblem(code: 6000328, message: "Max OTP tries"))
         let mapped = FormErrorMapper.map(error, formName: .registration)
         XCTAssertEqual((mapped as? LocalizedError)?.errorDescription, "Max OTP tries")
-    }
-}
-
-/// The schema hands the renderer keys, not text. These assert the join works for the key shapes
-/// the registration schema actually uses.
-final class TranslationsAsFormLocalizerTests: XCTestCase {
-
-    private let translations = Translations([
-        "username": "Enter Mobile Number",
-        "jpc-reg-idnumber": "South African ID",
-        "receivePromotionalInformation-jza": "Send Jackpot City Promotions to me",
-        "terms": "I am over 18 years of age & I accept the Terms & Conditions",
-    ], regionCode: "JZA")
-
-    private var localizer: any FormLocalizing { TranslationsLocalizer(translations) }
-
-    func testFieldLabelKeyResolves() {
-        XCTAssertEqual(localizer.display("username"), "Enter Mobile Number")
-    }
-
-    func testDropdownOptionKeyResolves() {
-        XCTAssertEqual(localizer.display("jpc-reg-idnumber"), "South African ID")
-    }
-
-    /// The schema gives this one already region-suffixed.
-    func testPreSuffixedKeyResolves() {
-        XCTAssertEqual(localizer.display("receivePromotionalInformation-jza"),
-                       "Send Jackpot City Promotions to me")
-    }
-
-    /// A key with no entry renders humanised rather than blank, so QA sees the gap.
-    func testMissingKeyIsVisibleNotBlank() {
-        XCTAssertEqual(localizer.display("dateOfBirth"), "Date Of Birth")
     }
 }

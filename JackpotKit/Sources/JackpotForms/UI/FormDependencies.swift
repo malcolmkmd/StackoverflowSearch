@@ -1,20 +1,15 @@
 import Foundation
 
-/// Everything `DynamicFormView` needs besides the form name and the submit callback.
-///
-/// Defaults are the generic engine's: no cross-field regex links and no date cap. A feature
-/// adds its own rules on top — see `RegistrationDependencies`.
+/// Everything `DynamicFormView` needs besides the form name and the callback. Defaults are generic; a
+/// feature adds its rules on top.
 public struct FormDependencies {
     public var repository: any FormRepository
     public var validator: FieldValidator
     public var localizer: any FormLocalizing
     public var passwordPolicy: any PasswordPolicyProviding
-    /// "This dropdown drives this field's regex", keyed by the dropdown's identifier. When the
-    /// selected option carries a *named* regex it replaces the dependent field's rule. Declared
-    /// outright rather than inferred from row order, so a CRM reorder cannot silently relax
-    /// validation on a regulated field.
+    /// "This dropdown drives this field's regex", by identifier. Declared, never inferred from row order.
     public var regexDependencies: [String: String]
-    /// Latest date a calendar field may select. Nil means today.
+    /// Latest date a calendar field may select; nil means today.
     public var maximumDate: Date?
 
     public init(repository: any FormRepository,
@@ -33,17 +28,7 @@ public struct FormDependencies {
 }
 
 public extension FormDependencies {
-
-    /// Serves the bundled `registration` schema, captured from
-    /// `config.jpc.africa/cron/forms/jackpotcity/JZA/registration?api-version=2.0`, so the
-    /// feature is buildable and reviewable before the API is reachable from the app.
-    ///
-    ///     DynamicFormView(formName: .registration, dependencies: .mock()) { … }
-    ///
-    /// - Parameters:
-    ///   - delay: fake latency, so loading states are visible in the sandbox.
-    ///   - error: set to exercise the failure state.
-    ///   - localizer: where copy comes from; the bundled placeholder table by default.
+    /// The bundled registration schema behind fake latency, so loading states are visible.
     static func mock(delay: TimeInterval = 0.35,
                      error: (any Error)? = nil,
                      localizer: (any FormLocalizing)? = nil) -> FormDependencies {

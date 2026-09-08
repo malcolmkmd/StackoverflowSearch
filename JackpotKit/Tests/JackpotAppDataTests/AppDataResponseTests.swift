@@ -2,12 +2,8 @@ import XCTest
 @testable import JackpotAppData
 import JackpotNetworking
 
-/// The bootstrap payload carries six unrelated sections owned by six parts of the app. These
-/// assert that one section can never take down another — which is the failure the app's
-/// current `ConfigData` has, because it decodes `locales` with non-optional `decode` while
-/// every other section uses `decodeIfPresent`.
+/// The bootstrap payload carries six unrelated sections owned by six parts of the app.
 final class AppDataResponseTests: XCTestCase {
-
     private func response(_ json: String) throws -> AppDataResponse {
         try AppDataResponse(data: Data(json.utf8))
     }
@@ -54,9 +50,9 @@ final class AppDataResponseTests: XCTestCase {
         XCTAssertEqual(payload.locales, ["a": "A"], "a broken wmsconfig must not lose the strings")
     }
 
-    /// The mirror image, and the one that actually bites: today `locales` is decoded with
-    /// non-optional `decode`, so nulling it throws and takes appsettings, sitemaps, redirects
-    /// and registration down with it.
+    /// The mirror image, and the one that actually bites: today `locales` is decoded with non-optional
+    /// `decode`, so nulling it throws and takes appsettings, sitemaps, redirects and registration down
+    /// with it.
     func testMissingLocalesDoesNotCostYouTheOtherSections() throws {
         let payload = try response(#"""
         { "wmsconfig": { "regionCode": "JZA" }, "sitemaps": { "sitemap": [] }, "locales": null }

@@ -1,13 +1,10 @@
 import Foundation
 import Combine
 
-/// The engine. Owns the fetched schema, every field's value, touched state and errors, and
-/// which section (page) is showing.
-///
-/// `ObservableObject` rather than `@Observable` because this package targets iOS 15.
 @MainActor
+/// Owns the fetched schema, every value, touched state, errors and the visible section.
+/// `ObservableObject` rather than `@Observable` because the floor is iOS 15.
 public final class DynamicFormModel: ObservableObject {
-
     public enum ViewState: Equatable {
         case loading
         case loaded(FormSchema)
@@ -24,18 +21,15 @@ public final class DynamicFormModel: ObservableObject {
     @Published public private(set) var values: [String: FormValue] = [:]
     @Published public private(set) var errors: [String: String] = [:]
     @Published public private(set) var sectionIndex: Int = 0
-    /// Which way the last page move went. Set before `sectionIndex` changes, in the same
-    /// update, so the section transition slides the right way wherever the navigation bar is.
+    /// Set before `sectionIndex` changes, so the section transition slides the right way wherever the bar is.
     @Published public private(set) var pagingDirection: PagingDirection = .forward
     @Published public private(set) var isSubmitting = false
     @Published public private(set) var submitError: String?
 
-    /// Field types the schema asked for that this build cannot render. Non-fatal by design
-    /// (see `FieldType.unknown`); surfaced so QA and logs can see them.
+    /// Types the schema asked for that this build cannot render; non-fatal, surfaced for QA.
     @Published public private(set) var unsupportedFields: [String] = []
 
-    /// `@Published` because `objectWillChange` has to fire *before* the set changes, or the
-    /// error it reveals lands a render late.
+    /// `@Published` so the reveal renders in the same update, not one late.
     @Published private var touched: Set<String> = []
 
     private let formName: FormName
@@ -60,7 +54,7 @@ public final class DynamicFormModel: ObservableObject {
     public var isFirstSection: Bool { sectionIndex == 0 }
     public var isLastSection: Bool { sectionIndex >= sections.count - 1 }
 
-    /// Fraction of the form's required fields that currently validate. Drives the progress bar.
+    /// Fraction of required fields that validate; drives the progress bar.
     public var progress: Double {
         guard let form else { return 0 }
         let required = form.allFields.filter { $0.isVisible && $0.isRequired }
@@ -68,7 +62,6 @@ public final class DynamicFormModel: ObservableObject {
         return Double(required.filter(isValid).count) / Double(required.count)
     }
 
-    /// Whether the visible section can be advanced past / submitted.
     public var isCurrentSectionValid: Bool {
         guard let section = currentSection else { return false }
         return section.fields.filter(\.isVisible).allSatisfy(isValid)
@@ -83,7 +76,7 @@ public final class DynamicFormModel: ObservableObject {
         values[field.identifier] ?? defaultValue(for: field)
     }
 
-    /// Error text for a field, or nil while it is untouched.
+    /// Nil while the field is untouched.
     public func error(for field: FormField) -> String? {
         touched.contains(field.identifier) ? errors[field.identifier] : nil
     }
@@ -94,13 +87,11 @@ public final class DynamicFormModel: ObservableObject {
         dependencies.passwordPolicy.rules(for: field)
     }
 
-    /// Latest date a calendar field may select.
     public var maximumDate: Date { dependencies.maximumDate ?? Date() }
 
     // MARK: Loading
 
-    /// Fetches the schema. A no-op once loaded, so re-appearing on screen cannot reset a
-    /// half-filled form; after a failure it runs again, which is what Retry calls.
+    /// A no-op once loaded, so re-appearing cannot reset a half-filled form; a failed load runs again.
     public func load() async {
         if case .loaded = viewState { return }
         viewState = .loading
@@ -143,20 +134,16 @@ public final class DynamicFormModel: ObservableObject {
     public func setValue(_ value: FormValue, for field: FormField) {
         values[field.identifier] = value
         validate(field)
-        // A dropdown can change a dependent field's rule (ID type → ID number), so anything
-        // downstream of it has to be re-checked, not just this field.
+        // ID type → ID number: a dropdown can change another field's rule.
         if field.type == .dropdown { revalidateDependents(of: field) }
     }
 
-    /// Call on blur so errors don't appear before the user has typed. Re-touching is a no-op
-    /// rather than another render: the return key marks a field, then the blur that follows
-    /// marks it again.
+    /// Call on blur. Re-touching is a no-op rather than another render.
     public func markTouched(_ field: FormField) {
         guard !touched.contains(field.identifier) else { return }
         touched.insert(field.identifier)
     }
 
-    /// Focus navigation only carries identifiers.
     public func markTouched(identifiedBy identifier: String) {
         guard let field = form?.field(identifiedBy: identifier) else { return }
         markTouched(field)
@@ -197,8 +184,7 @@ public final class DynamicFormModel: ObservableObject {
         dependents.forEach { validate($0) }
     }
 
-    /// The dropdown that drives `field`'s regex, if any. Links come from
-    /// `FormDependencies.regexDependencies` and are never inferred from field order.
+    /// The dropdown that drives `field`'s regex, from `regexDependencies`.
     private func regexDriver(for field: FormField) -> FormField? {
         guard let form,
               let driverIdentifier = dependencies.regexDependencies.first(where: { $0.value == field.identifier })?.key,
@@ -208,11 +194,7 @@ public final class DynamicFormModel: ObservableObject {
         return driver
     }
 
-    /// The pattern a dropdown's current selection imposes on `field`, if any.
-    ///
-    /// Only *named* regexes redirect. `idNumberType`'s options carry `"idNumberRegex"` /
-    /// `"passportNumberRegex"` — names — while `sourceOfFunds`'s carry `"[a-zA-Z]"`, a literal
-    /// pattern that describes the selection itself and must not leak onto another field.
+    /// Only *named* option regexes redirect; a literal pattern describes the selection itself.
     private func overrideRegex(for field: FormField) -> String? {
         guard let driver = regexDriver(for: field),
               case .option(let selected) = value(for: driver),
@@ -227,8 +209,8 @@ public final class DynamicFormModel: ObservableObject {
 
     // MARK: Paging
 
-    /// Advances if the visible section validates; otherwise reveals its errors.
     @discardableResult
+    /// Advances if the section validates; otherwise reveals its errors.
     public func advance() -> Bool {
         guard let section = currentSection else { return false }
         touched.formUnion(section.fields.filter(\.isVisible).map(\.identifier))
@@ -278,12 +260,9 @@ public final class DynamicFormModel: ObservableObject {
 }
 
 #if DEBUG
-// Preview support lives in this file because `private` is file-scoped in Swift, so an
-// extension here can call `apply(_:)` without widening the type's real API.
+// Here because `private` is file-scoped, so previews can call `apply(_:)`.
 public extension DynamicFormModel {
-
-    /// A model already holding `schema`, with no async load, so previews render instantly and
-    /// deterministically instead of flashing a skeleton.
+    /// A model already holding `schema`, so previews render without a fetch.
     static func preview(schema: FormSchema,
                         dependencies: FormDependencies = .mock(delay: 0),
                         values: [String: FormValue] = [:],
@@ -303,12 +282,10 @@ public extension DynamicFormModel {
         return model
     }
 
-    /// Stuck on the loading state, for previewing the skeleton.
     static func previewLoading() -> DynamicFormModel {
         DynamicFormModel(formName: FormName("preview"), dependencies: .mock(delay: 3600))
     }
 
-    /// Parked on the failure state.
     static func previewFailed(_ message: String = "The network connection was lost.") -> DynamicFormModel {
         let model = DynamicFormModel(formName: FormName("preview"), dependencies: .mock(delay: 0))
         model.viewState = .failed(message)

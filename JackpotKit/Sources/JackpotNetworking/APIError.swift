@@ -1,10 +1,7 @@
 import Foundation
 
-/// The error envelope the API returns with a non-2xx response: `{ "code": 0, "message": "…" }`
-///
-/// `code` decodes from both number and string forms. Decoding is `try?` at the call site by
-/// design — a gateway may return HTML, and that must not throw — so a shape mismatch here
-/// would be invisible: no crash, no log, just permanently empty error messages.
+/// The error envelope on a non-2xx: `{ "code": 0, "message": "…" }`. `code` decodes from number or string;
+/// a body with neither field throws, so `try?` at the call site yields nil rather than an empty complaint.
 public struct APIProblem: Decodable, Sendable, Equatable {
     public let code: Int?
     public let message: String?
@@ -29,9 +26,6 @@ public struct APIProblem: Decodable, Sendable, Equatable {
             $0.isEmpty ? nil : $0
         }
 
-        // A body carrying neither field is not a problem envelope. Throwing here means the
-        // client's `try?` yields nil, so `.badRequest(nil)` reads "the server said nothing"
-        // rather than "the server sent an empty complaint".
         guard decodedCode != nil || decodedMessage != nil else {
             throw DecodingError.dataCorrupted(.init(
                 codingPath: decoder.codingPath,
@@ -44,25 +38,17 @@ public struct APIProblem: Decodable, Sendable, Equatable {
     }
 }
 
-/// What the client concluded happened.
-///
-/// The API contract is 200, 400, 401, 500. Anything else can still arrive from a proxy,
-/// gateway or WAF, so `unexpectedStatus` carries it rather than flattening it into `.server`.
+/// The contract is 200, 400, 401, 500; `unexpectedStatus` carries anything a proxy or WAF returns.
 public enum APIError: Error, Sendable, Equatable {
     case invalidURL(String)
     case transport(URLError.Code)
-    /// 400 — the request was rejected. `problem.message` is the text to show.
     case badRequest(APIProblem?)
-    /// 401 — after any interceptor has had its one chance to refresh and retry.
     case unauthorized(APIProblem?)
-    /// 500 — after one retry, if the endpoint was idempotent.
     case server(APIProblem?)
-    /// Outside the documented contract. Almost always infrastructure rather than the API.
     case unexpectedStatus(Int, APIProblem?)
     case decoding(String)
     case cancelled
 
-    /// The server's envelope, whichever case carries it.
     public var problem: APIProblem? {
         switch self {
         case .badRequest(let p), .unauthorized(let p), .server(let p), .unexpectedStatus(_, let p):
@@ -72,7 +58,7 @@ public enum APIError: Error, Sendable, Equatable {
         }
     }
 
-    /// The server's own wording, when it sent any. Prefer this over a generic string.
+    /// The server's own wording, when it sent any.
     public var serverMessage: String? {
         problem?.message.flatMap { $0.isEmpty ? nil : $0 }
     }

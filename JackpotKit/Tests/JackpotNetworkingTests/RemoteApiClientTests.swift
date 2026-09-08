@@ -2,7 +2,6 @@ import XCTest
 @testable import JackpotNetworking
 
 final class RemoteApiClientTests: XCTestCase {
-
     private func client(_ http: MockHTTPClient,
                         interceptors: [any RequestInterceptor] = []) -> RemoteApiClient {
         RemoteApiClient(environment: .test, httpClient: http, interceptors: interceptors)
@@ -36,9 +35,7 @@ final class RemoteApiClientTests: XCTestCase {
         }
     }
 
-    /// `{"code": 0, ...}` is the shape the API actually sends. An earlier `code: String?`
-    /// meant this decoded to nil and every error message came back empty — silently,
-    /// because problem decoding is `try?` by design.
+    /// `{"code": 0, ...}` is the shape the API actually sends.
     func testNumericZeroCodeDecodes() async {
         let http = MockHTTPClient(.status(400, json: #"{"code":0,"message":"Error message"}"#))
         await AssertThrows(try await client(http).request(WidgetRequest()) as Widget) { error in
@@ -176,7 +173,6 @@ final class RemoteApiClientTests: XCTestCase {
         XCTAssertEqual(widgetAuth, "Bearer abc")
         XCTAssertNil(loginAuth, "a login request must never carry a bearer token")
     }
-
 }
 
 // MARK: - Helpers

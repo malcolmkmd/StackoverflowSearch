@@ -1,30 +1,22 @@
 import Foundation
 
-/// The schema ships localization *keys*, not display text: `fieldLabel` is "username", dropdown
-/// text is "jpc-reg-idnumber", `validationMessage` is "regex". Something has to resolve them
-/// against a string catalogue.
+/// The schema ships localisation keys, not text; something has to resolve them.
 public protocol FormLocalizing: Sendable {
     func string(forKey key: String) -> String?
 
-    /// Copy for a server error code, when the localisation table carries one.
-    ///
-    /// The app-data response contains entries keyed by error code, so a numeric `code` in an
-    /// API error envelope is a localisation key. Defaulted to nil so an implementation with no
-    /// such table doesn't have to care.
+    /// Copy for a server error code, when the table carries one.
     func message(forErrorCode code: Int) -> String?
 }
 
 public extension FormLocalizing {
     func message(forErrorCode code: Int) -> String? { nil }
 
-    /// Resolve, or fall back to a humanised version of the key so nothing renders blank.
+    /// Resolves, or humanises the key so nothing renders blank.
     func display(_ key: String) -> String {
         string(forKey: key) ?? key.humanisedKey
     }
 
-    /// Every field carries the same `validationMessage` ("regex") while the UI shows per-field
-    /// copy, so the real key is composed: `jpc-reg-{fieldIdentifier}-{validationMessage}`. See
-    /// OPEN-QUESTIONS; confirming the format is a one-line change here.
+    /// Every field carries `validationMessage: "regex"`, so the real key is composed: `jpc-reg-{identifier}-{key}`.
     func validationMessage(for field: FormField) -> String {
         let composed = "jpc-reg-\(field.identifier)-\(field.validationMessageKey)"
         if let resolved = string(forKey: composed) { return resolved }
@@ -33,7 +25,7 @@ public extension FormLocalizing {
     }
 }
 
-/// Looks up an in-memory table, then a bundle's `.strings`.
+/// An in-memory table, then a bundle's `.strings`.
 public struct ComposedKeyLocalizer: FormLocalizing {
     private let table: [String: String]
     private let bundle: Bundle?
@@ -52,7 +44,7 @@ public struct ComposedKeyLocalizer: FormLocalizing {
 }
 
 public extension String {
-    /// "jpc-reg-idnumber" → "Idnumber";  "dateOfBirth" → "Date Of Birth"
+    /// "jpc-reg-idnumber" → "Idnumber"; "dateOfBirth" → "Date Of Birth".
     var humanisedKey: String {
         var working = self
         if let range = working.range(of: "jpc-reg-") { working.removeSubrange(range) }
@@ -67,12 +59,7 @@ public extension String {
     }
 }
 
-/// Wraps any `(key) -> String?` as a localizer, so a host can hand the form engine its
-/// existing translation function without either package knowing the other exists.
-///
-/// `FormLocalizing` uses nil to mean "unresolved" so the engine can fall back to humanised
-/// copy. A host function that returns the key on a miss must map that back to nil, or a
-/// missing string renders as the raw key.
+/// Wraps any `(key) -> String?`. Return nil on a miss, not the key, or the engine cannot fall back.
 public struct ClosureLocalizer: FormLocalizing {
     private let resolve: @Sendable (String) -> String?
     private let resolveCode: @Sendable (Int) -> String?

@@ -10,7 +10,7 @@ public struct JackpotErrorView: View {
         self.title = title
     }
 
-    /// Adds the retry button. Without it the view is message-only.
+    /// Adds the retry button.
     public func onRetry(_ action: @escaping () -> Void) -> Self {
         var copy = self
         copy.retryAction = action

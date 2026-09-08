@@ -2,13 +2,7 @@ import XCTest
 @testable import JackpotNetworking
 
 /// The API's envelope is `{ "code": 0, "message": "Error message" }`.
-///
-/// These matter more than they look: the client decodes problems with `try?` so a gateway's
-/// HTML body can't throw. That means a *shape* mismatch is completely silent — no crash, no
-/// log, just permanently empty error messages in the UI. These tests are the only thing
-/// standing between a backend field rename and that failure.
 final class APIProblemTests: XCTestCase {
-
     private func decode(_ json: String) -> APIProblem? {
         try? JSONDecoder().decode(APIProblem.self, from: Data(json.utf8))
     }

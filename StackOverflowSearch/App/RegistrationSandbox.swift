@@ -1,30 +1,18 @@
-//
-//  RegistrationSandbox.swift
-//  StackOverflowSearch
-//
 
 import SwiftUI
 import JackpotRegistration
 import JackpotUI
 
-/// On-device harness for the JackpotKit Sign Up panel; `SearchView` presents it with
-/// `.jackpotPopup`, the way the app presents its own.
-///
-/// The schema comes from the JSON bundled in `JackpotForms` and the service is the mock, so
-/// the whole panel runs and validates without any endpoint being reachable. Submitting shows
-/// what the callback received.
+/// On-device harness for the Sign Up panel: bundled schema, mock service, the result shown in an alert.
 struct RegistrationSandbox: View {
     let onClose: () -> Void
 
-    /// Built once: the stub repository holds the decoded JSON, and rebuilding it on every body
-    /// pass would re-read the bundle behind the loading delay.
+    /// Built once, so the stub isn't re-read on every body pass.
     private static let dependencies = RegistrationDependencies.mock()
 
     @State private var result: RegistrationResult?
 
     var body: some View {
-        // `RegistrationView` applies the Jackpot theme and tint itself, which is what keeps the
-        // form blue although this app's asset catalogue sets an orange `AccentColor`.
         RegistrationView(dependencies: Self.dependencies, onClose: onClose, onLogin: onClose) { result in
             self.result = result
         }

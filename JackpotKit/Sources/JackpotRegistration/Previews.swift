@@ -23,7 +23,6 @@ struct RegistrationView_Previews: PreviewProvider {
             Page().preferredColorScheme(.light)
                 .previewDisplayName("Sign Up — light")
 
-            // What the app does during the migration: its own translation function, wrapped.
             Page(dependencies: .mock(localizer: ClosureLocalizer { key in
                 ["username": "Enter Mobile Number", "password": "Password", "email": "Email"][key]
             }))

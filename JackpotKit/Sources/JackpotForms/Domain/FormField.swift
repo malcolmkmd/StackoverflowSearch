@@ -1,14 +1,7 @@
 import Foundation
 
-/// What component renders this field.
-///
-/// `unknown` is load-bearing: the schema is served from a CRM that product edits without
-/// shipping an app build, so an unrecognised `fieldType` that threw would brick registration
-/// for every installed version. Unknown fields are skipped and reported through
-/// `DynamicFormModel.unsupportedFields` instead.
-///
-/// When the CRM starts serving a type this build should draw, add a case here and a view for it
-/// in `FieldRenderer`; that switch is the whole contract.
+/// `unknown` is load-bearing: the CRM edits the schema without an app release, so an unknown type is
+/// skipped and reported through `unsupportedFields`, never fatal.
 public enum FieldType: Equatable, Hashable, Sendable {
     case input
     case dropdown
@@ -25,7 +18,6 @@ public enum FieldType: Equatable, Hashable, Sendable {
     }
 }
 
-/// Keyboard and formatting hint for `.input`.
 public enum InputType: Equatable, Hashable, Sendable {
     case text
     case number
@@ -41,8 +33,7 @@ public enum InputType: Equatable, Hashable, Sendable {
         case "number", "numeric":     self = .number
         case "password":              self = .password
         case "email":                 self = .email
-        // The schema spells this "Calender". Accept both so a server-side fix
-        // doesn't silently turn every date field into a plain text box.
+        // The schema spells it "Calender"; accept both.
         case "calender", "calendar", "date": self = .calendar
         case "phone", "tel":          self = .phone
         default:                      self = .unknown(raw)
@@ -51,11 +42,9 @@ public enum InputType: Equatable, Hashable, Sendable {
 }
 
 public struct DropdownOption: Identifiable, Equatable, Hashable, Sendable {
-    /// Submitted value, e.g. "SalaryOrWages".
     public let value: String
-    /// Localisation key for the visible text, e.g. "jpc-reg-SalaryOrWages".
     public let textKey: String
-    /// Either a regex pattern or the *name* of one — see `RegexResolving`.
+    /// A pattern, or the name of one; see `RegexResolving`.
     public let regex: String?
 
     public var id: String { value }
@@ -69,26 +58,22 @@ public struct DropdownOption: Identifiable, Equatable, Hashable, Sendable {
 
 public struct FormField: Identifiable, Equatable, Hashable, Sendable {
     public let id: Int
-    /// Key used for state, validation and the submitted payload, e.g. "idNumber".
     public let identifier: String
-    /// Localisation key for the in-field label.
     public let labelKey: String
     public let type: FieldType
     public let inputType: InputType
-    /// Localisation key for the validation failure message.
     public let validationMessageKey: String
     public let isRequired: Bool
     /// Hidden fields are neither rendered, validated nor submitted.
     public let isVisible: Bool
     public let isReadOnly: Bool
-    /// Regex the value must match. Server-supplied, so it may be invalid — see `FieldValidator`.
+    /// Server-supplied, so possibly invalid; see `FieldValidator`.
     public let regex: String?
     public let prefix: String
     public let suffix: String
     public let dropdownOptions: [DropdownOption]
 
-    /// Defaults are the schema's own: an unspecified field is an optional, visible, editable
-    /// text input labelled by its identifier.
+    /// Defaults are the schema's own: an unspecified field is an optional, visible text input labelled by its identifier.
     public init(id: Int,
                 identifier: String,
                 labelKey: String? = nil,

@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """Rebuild docs/BUILD-PLAYBOOK.md (and .pdf) from the files actually on disk.
 
-Documents the registration path: `RegistrationView` over `DynamicFormView(formName:
-.registration)`, fed by the bundled `registration.json` or the live CRM schema.
+Six steps: the design system, the form engine and the registration sheet on the bundled
+schema, the transport, the live wiring and the app swap, the localisation migration, and the
+app-data migration.
 
 Every code block is read from the repository at build time and emitted verbatim, so the
-document cannot drift from the code it documents. Content is recorded once as a list of
-structured blocks and rendered twice, so the Markdown and the PDF cannot drift from each
-other either.
+document cannot drift from the code. Every `Package.swift` block is the manifest as it stands
+after that step, rendered from one table below; the final step is checked against the real
+manifest on every run, so the steps cannot drift from it either. Test counts are counted from
+the test files each step creates.
 
-    python3 scripts/build-playbook.py          # Markdown — stdlib only
-    python3 scripts/build-playbook.py --pdf    # Markdown + PDF (not committed; see below)
+    python3 scripts/build-playbook.py             # Markdown — stdlib only
+    python3 scripts/build-playbook.py --pdf       # Markdown + PDF (not committed)
+    python3 scripts/build-playbook.py --manifest  # print the final Package.swift
 
 The PDF renderer needs a little setup:
 
@@ -18,9 +21,9 @@ The PDF renderer needs a little setup:
     python3 -m venv .venv && .venv/bin/pip install weasyprint pygments
     .venv/bin/python scripts/build-playbook.py --pdf
 
-Adding a file to a PR means adding it to that PR's `files([...])` list below; the step
-numbering and the contents page follow from the order of those lists. Update TESTS from the
-last suite run.
+Adding a file to a step means adding it to that step's `files([...])` list; adding a target
+or a dependency means adding it to TARGETS with the step it arrives at, then updating
+Package.swift to match (`--manifest` prints it).
 """
 
 import os, sys, html, re
@@ -28,21 +31,126 @@ import os, sys, html, re
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "docs/BUILD-PLAYBOOK.md")
 OUT_PDF = os.path.join(ROOT, "docs/BUILD-PLAYBOOK.pdf")
+MANIFEST = os.path.join(ROOT, "JackpotKit/Package.swift")
 
 SIM = "'platform=iOS Simulator,name=iPhone 17 Pro'"
 TEST_CMD = f"cd JackpotKit\nxcodebuild -scheme JackpotKit-Package -destination {SIM} test"
 
-# Executed-test counts per suite, from the last `xcodebuild … test` run.
-TESTS = {
-    "JackpotUITests": 20,
-    "JackpotNetworkingTests": 34,
-    "JackpotLocalizationTests": 16,   # TranslationsTests; the store's 6 are the follow-up
-    "JackpotFormsTests": 83,
-    "JackpotRegistrationTests": 11,
-}
+# ---------------------------------------------------------------- the manifest, as data
+
+FINAL_STEP = 6
+
+
+class Target:
+    def __init__(self, name, step, deps=(), resources=None, test=False):
+        self.name = name
+        self.step = step            # the step that creates the target
+        self.deps = list(deps)      # (dependency, the step that adds the edge)
+        self.resources = resources
+        self.test = test
+
+
+TARGETS = [
+    Target("JackpotUI", 1),
+    Target("JackpotUITests", 1, [("JackpotUI", 1)], test=True),
+
+    Target("JackpotForms", 2, [("JackpotUI", 2), ("JackpotNetworking", 4)], resources="Resources"),
+    Target("JackpotFormsTests", 2, [("JackpotForms", 2), ("JackpotNetworking", 4)], test=True),
+    Target("JackpotRegistration", 2, [("JackpotUI", 2), ("JackpotForms", 2), ("JackpotLocalization", 5)]),
+    Target("JackpotRegistrationTests", 2,
+           [("JackpotRegistration", 2), ("JackpotForms", 2), ("JackpotLocalization", 5)], test=True),
+
+    Target("JackpotNetworking", 3),
+    Target("JackpotNetworkingTests", 3, [("JackpotNetworking", 3)], test=True),
+
+    Target("JackpotLocalization", 5),
+    Target("JackpotLocalizationTests", 5, [("JackpotLocalization", 5)], test=True),
+
+    Target("JackpotAppData", 6, [("JackpotNetworking", 6), ("JackpotLocalization", 6)]),
+    Target("JackpotAppDataTests", 6, [("JackpotAppData", 6), ("JackpotNetworking", 6)], test=True),
+]
+
+MANIFEST_HEAD = """// swift-tools-version: 5.10
+import PackageDescription
+
+// One local package; each folder under Sources/ is a module. In Xcode: File → Add Package
+// Dependencies → Add Local… → JackpotKit, then add the product you need to the app target.
+// The floor is iOS 15, the host app's. docs/BUILD-PLAYBOOK.md builds this manifest one step at a
+// time, and scripts/build-playbook.py checks that its final step matches this file exactly.
+
+/// The app builds with `SWIFT_STRICT_CONCURRENCY = complete`; the package is held to the same bar.
+let strict: [SwiftSetting] = [.enableExperimentalFeature("StrictConcurrency")]
+
+let package = Package(
+    name: "JackpotKit",
+    defaultLocalization: "en",
+    platforms: [.iOS(.v15)],"""
+
+
+def quoted(names):
+    return ", ".join(f'"{n}"' for n in names)
+
+
+def manifest(step):
+    """Package.swift as it stands after `step`."""
+    present = [t for t in TARGETS if t.step <= step]
+    modules = [t.name for t in present if not t.test]
+    lines = [MANIFEST_HEAD, "    products: ["]
+
+    chunks = [modules[i:i + 3] for i in range(0, len(modules), 3)]
+    lines.append("        .library(")
+    lines.append('            name: "JackpotKit",')
+    for i, chunk in enumerate(chunks):
+        prefix = "            targets: [" if i == 0 else "                      "
+        suffix = "]" if i == len(chunks) - 1 else ","
+        lines.append(prefix + quoted(chunk) + suffix)
+    lines.append("        ),")
+    for m in modules:
+        lines.append(f'        .library(name: "{m}", targets: ["{m}"]),')
+    lines.append("    ],")
+
+    lines.append("    targets: [")
+    previous_step = None
+    for t in present:
+        if previous_step is not None and t.step != previous_step:
+            lines.append("")
+        previous_step = t.step
+        deps = [d for d, at in t.deps if at <= step]
+        kind = ".testTarget" if t.test else ".target"
+        parts = [f'name: "{t.name}"']
+        if deps:
+            parts.append(f"dependencies: [{quoted(deps)}]")
+        if t.resources:
+            parts.append(f'resources: [.process("{t.resources}")]')
+        if not t.test:
+            parts.append("swiftSettings: strict")
+        if t.resources:
+            lines.append(f"        {kind}(")
+            for i, part in enumerate(parts):
+                lines.append(f"            {part}" + ("," if i < len(parts) - 1 else ""))
+            lines.append("        ),")
+        else:
+            lines.append(f"        {kind}({', '.join(parts)}),")
+    lines.append("    ]")
+    lines.append(")")
+    return "\n".join(lines) + "\n"
+
+
+if "--manifest" in sys.argv:
+    sys.stdout.write(manifest(FINAL_STEP))
+    sys.exit(0)
+
+with open(MANIFEST) as f:
+    if f.read() != manifest(FINAL_STEP):
+        sys.exit("JackpotKit/Package.swift does not match TARGETS in scripts/build-playbook.py; "
+                 "update one of them (`--manifest` prints the rendered final manifest)")
+
+# ---------------------------------------------------------------- recording
 
 blocks = []
 step = 0
+test_counts = {}
+TOTAL_TOKEN = "{TOTAL_TESTS}"
 
 
 def text(s):
@@ -71,6 +179,14 @@ def swift_literal(label, body, note=None, suffix=""):
     fence("swift", body)
 
 
+def manifest_step(n, note):
+    global step
+    step += 1
+    text(f"**{step}.** `JackpotKit/Package.swift` — the whole file after this step")
+    text(note)
+    fence("swift", manifest(n))
+
+
 def file_step(rel, note=None):
     global step
     full = os.path.join(ROOT, rel)
@@ -78,6 +194,9 @@ def file_step(rel, note=None):
         sys.exit(f"missing: {rel}")
     with open(full) as f:
         body = f.read()
+    if "/Tests/" in rel:
+        target = rel.split("/Tests/")[1].split("/")[0]
+        test_counts[target] = test_counts.get(target, 0) + len(re.findall(r"\bfunc test", body))
     step += 1
     text(f"**{step}.** `{rel}`")
     if note:
@@ -102,7 +221,17 @@ def rule():
 
 
 def executed(*suites):
-    return "\n".join(f"`{s}: Executed {TESTS[s]} tests, with 0 failures`" for s in suites)
+    """What the suite reports after this step: the tests defined so far, all passing."""
+    return "\n".join(f"`{s}: Executed {test_counts[s]} tests, with 0 failures`" for s in suites)
+
+
+def create_pr(title, *suites, note=None):
+    rule()
+    text(f"### ▶ Create PR — {title}")
+    text(executed(*suites))
+    if note:
+        text(note)
+    rule()
 
 
 # ---------------------------------------------------------------- header
@@ -110,30 +239,33 @@ def executed(*suites):
 text("# Build Playbook")
 text(
     "Create the files in the order given. Run the commands where they appear. Open a PR where\n"
-    "marked. Every code block is the file exactly as it is in the repository."
+    "marked. Every code block is the file exactly as it is in the repository, and every\n"
+    "`Package.swift` block is the manifest as it stands after that step."
 )
 text(
-    "This playbook covers the **registration** path: `RegistrationView` hosts\n"
-    "`DynamicFormView(formName: .registration)`, which renders either the bundled\n"
-    "`JackpotKit/Sources/JackpotForms/Resources/registration.json` or the live CRM schema at\n"
-    "`config.jpc.africa/cron/forms/jackpotcity/JZA/registration` — the same twelve fields."
+    "Six steps. The registration sheet runs from step 2 with no backend. It goes live in the app\n"
+    "at step 4, on the app's existing translation function. Steps 5 and 6 are the localisation\n"
+    "and app-data migrations from\n"
+    "[ADR-0001](adr/0001-app-data-decoding-and-configuration-decomposition.md); registration\n"
+    "does not wait for them."
+)
+table(
+    ["Step", "Adds", "Demoable as"],
+    [
+        ["1", "`JackpotUI`", "the gallery: every component, every state"],
+        ["2", "`JackpotForms` on the bundled schema, `JackpotRegistration`", "the Sign Up sheet, both pages, mock service"],
+        ["3", "`JackpotNetworking`", "`RemoteApiClient` against a stubbed transport"],
+        ["4", "`JackpotForms/Remote`, `.live()`, the app swap", "registration live in the app, copy from `getTranslation`"],
+        ["5", "`JackpotLocalization`, `TranslationsLocalizer`", "error codes in the player's language; `getTranslation` becomes a shim"],
+        ["6", "`JackpotAppData`", "config served from disk on launch, revalidated behind it"],
+    ],
 )
 text(
-    "`JackpotKit` is one package; each folder under `Sources/` is a module. Registration is\n"
-    "carried by four of them — `JackpotUI` (design system), `JackpotNetworking` (transport),\n"
-    "`JackpotForms` (the schema-driven engine) and `JackpotRegistration` (the feature) — plus\n"
-    "the `Translations` value type from `JackpotLocalization`. `JackpotAppData` and the store half\n"
-    "of `JackpotLocalization` are the app-data follow-up\n"
-    "([ADR-0001](adr/0001-app-data-decoding-and-configuration-decomposition.md)); the manifest\n"
-    "lists them, so copy their files from the repository or drop those two targets until you\n"
-    "need them. They are not covered here."
+    "`JackpotKit` is one package; each folder under `Sources/` is a module. The floor is iOS 15,\n"
+    "the host app's. The whole suite runs in a simulator via `xcodebuild -scheme JackpotKit-Package`\n"
+    "— there is no macOS destination, because `JackpotUI` imports `UIKit`."
 )
-text(
-    "The floor is iOS 15, the host app's. The whole suite runs in a simulator via\n"
-    "`xcodebuild -scheme JackpotKit-Package` — there is no macOS destination, because `JackpotUI`\n"
-    "imports `UIKit`."
-)
-text(f"**{sum(TESTS.values())} tests** through PR 5.")
+text(f"**{TOTAL_TOKEN} tests** through step 6.")
 text("### Registration catalog")
 text(
     "Twelve fields over two sections, checked against the bundled capture and the live CRM\n"
@@ -200,29 +332,29 @@ text(
     "1. **Schema.** `JackpotForms/Resources/registration.json`, the CRM's response saved\n"
     "   verbatim. `BundledForms.all` reads it; `StubFormRepository` serves it.\n"
     "2. **Mock wiring.** `FormDependencies.mock()` is the stub repository plus the placeholder\n"
-    "   copy table `ComposedKeyLocalizer.jpcRegistration`. `.live(baseURL:)` swaps in\n"
-    "   `RemoteFormRepository`; nothing else changes.\n"
+    "   copy table `ComposedKeyLocalizer.jpcRegistration`. `.live(baseURL:localizer:)` swaps in\n"
+    "   `RemoteFormRepository` at step 4; nothing else changes.\n"
     "3. **Registration's rules.** The engine ships with no cross-field regex links and no date\n"
     "   cap. `RegistrationDependencies` adds `regexDependencies: [\"idNumberType\": \"idNumber\"]`\n"
     "   and an 18-years-ago `maximumDate` on top of whatever `forms` the host passes in.\n"
-    "4. **Sandbox.** The app's `SearchView` presents `RegistrationSandbox` with `.jackpotPopup`,\n"
-    "   the way the app presents its panels; the sandbox hosts `RegistrationView(dependencies:\n"
-    "   .mock())` and shows the `RegistrationResult` it gets back, so the whole panel runs on a\n"
-    "   device with no backend.\n"
+    "4. **Sandbox.** In this repository the app's `SearchView` presents `RegistrationSandbox` with\n"
+    "   `.jackpotPopup`, the way the app presents its panels; the sandbox hosts\n"
+    "   `RegistrationView(dependencies: .mock())` and shows the `RegistrationResult` it gets\n"
+    "   back, so the whole panel runs on a device with no backend.\n"
     "5. **Previews.** `FormPreview.registration` decodes the bundled JSON through the real mapper\n"
     "   for the seeded-model previews in `DynamicFormView.swift` and each field view.\n"
     "   `JackpotPreviewPanel.swift` is the component gallery.\n"
     "6. **The sheet.** `RegistrationView` is the form inside `JackpotPanel`: title and close\n"
     "   button on `surface`, the pages on `background`, and in the footer band `JackpotLinkRow`\n"
-    "   with `FormNavigationBar` beneath it.\n"
-    "   **Sign Up — dark / light** in `JackpotRegistration/Previews.swift` and **Sheet shell** in\n"
-    "   the gallery render it in both appearances."
+    "   with `FormNavigationBar` beneath it. **Sign Up — dark / light** in\n"
+    "   `JackpotRegistration/Previews.swift` and **Sheet shell** in the gallery render it in both\n"
+    "   appearances."
 )
 rule()
 
-# ---------------------------------------------------------------- PR 1
+# ---------------------------------------------------------------- step 1
 
-text("## PR 1 — JackpotUI")
+text("## Step 1 — JackpotUI")
 text(
     "The design system, with no knowledge of forms. Components take a title, a binding and their\n"
     "own configuration; the theme travels through the environment. Every component previews\n"
@@ -268,19 +400,14 @@ bash(
     "cd JackpotKit\n"
     "printf '.build/\\n.swiftpm/\\n*.xcuserdatad\\n' > .gitignore"
 )
-
+manifest_step(1, "One module and its tests. Every target opts into strict concurrency checking to match\n"
+                 "the app's `SWIFT_STRICT_CONCURRENCY = complete`.")
 files(
     [
         (
-            "JackpotKit/Package.swift",
-            "The whole manifest, once. Later PRs add files to targets it already declares, so it\n"
-            "never changes again in this playbook. Every target opts into strict concurrency\n"
-            "checking to match the app's `SWIFT_STRICT_CONCURRENCY = complete`.",
-        ),
-        (
             "JackpotKit/Sources/JackpotUI/Theme/JackpotTheme.swift",
             "Adaptive light/dark palette. Hexes are the locked token table above; `Palette.emphasis`\n"
-            "is the shared #E1E1E5 so focused border and dark text are one value, not aliases.",
+            "is the shared #E1E1E5 for dark text.",
         ),
         (
             "JackpotKit/Sources/JackpotUI/Theme/JackpotEnvironment.swift",
@@ -333,15 +460,16 @@ files(
             "its mirror under Login.",
         ),
         (
-            "JackpotKit/Sources/JackpotUI/Components/JackpotPopup.swift",
-            "`.jackpotPopup(isPresented:)` presents a panel the way the app does: over the page, which\n"
-            "dims behind a `background` scrim, inset and pinned to the top. Not a system sheet.",
-        ),
-        (
             "JackpotKit/Sources/JackpotUI/Components/JackpotPanel.swift",
             "The shell registration is presented in: the header and footer bands on `surface`, the\n"
             "close button and the content on `background`. Resume **Sheet shell** in the gallery to see\n"
             "the layers.",
+        ),
+        (
+            "JackpotKit/Sources/JackpotUI/Components/JackpotPopup.swift",
+            "`.jackpotPopup(isPresented:)` presents a panel the way the app does: over the page, which\n"
+            "dims behind a `background` scrim, inset and pinned below the host's header. Not a system\n"
+            "sheet.",
         ),
         (
             "JackpotKit/Sources/JackpotUI/Preview/JackpotPreviewPanel.swift",
@@ -351,86 +479,29 @@ files(
         "JackpotKit/Tests/JackpotUITests/JackpotThemeTests.swift",
     ]
 )
-
 bash(TEST_CMD)
-rule()
-text("### ▶ Create PR — JackpotUI")
-text(executed("JackpotUITests"))
+create_pr("JackpotUI", "JackpotUITests",
+          note="Open `JackpotPreviewPanel.swift` and resume the **Gallery** and **Sheet shell** previews in\n"
+               "both appearances.")
+
+# ---------------------------------------------------------------- step 2
+
+text("## Step 2 — JackpotForms on the bundled schema, and the registration sheet")
 text(
-    "Open `JackpotPreviewPanel.swift` and resume the **Gallery** preview in both appearances."
+    "The engine, with no network. One module, three folders pointing one way: `Domain` (types\n"
+    "and rules, no I/O), `Data` (wire shapes and the bundled stub) and `UI` (the model and the\n"
+    "renderer). The engine only ever sees `FormRepository`; `StubFormRepository` serves the\n"
+    "captured `registration.json`, which is what lets the whole sheet run before any endpoint\n"
+    "exists. `JackpotRegistration` is the feature on top: the sheet, registration's own rules, the\n"
+    "service protocol and its mock."
 )
-rule()
-
-# ---------------------------------------------------------------- PR 2
-
-text("## PR 2 — JackpotNetworking + Translations")
-text(
-    "The transport, and the localisation table the form engine adapts. Both are standalone\n"
-    "modules with nothing above them, so they land before the engine that uses them. 200 / 400 /\n"
-    "401 / 500 are the contract; `unexpectedStatus` carries anything infrastructure returns."
-)
-
 bash(
-    "mkdir -p JackpotKit/Sources/{JackpotNetworking,JackpotLocalization}\n"
-    "mkdir -p JackpotKit/Tests/{JackpotNetworkingTests,JackpotLocalizationTests}"
+    "mkdir -p JackpotKit/Sources/JackpotForms/{Domain,Data,UI/Fields,Resources}\n"
+    "mkdir -p JackpotKit/Sources/JackpotRegistration\n"
+    "mkdir -p JackpotKit/Tests/{JackpotFormsTests,JackpotRegistrationTests}"
 )
-
-files(
-    [
-        "JackpotKit/Sources/JackpotNetworking/HTTPMethod.swift",
-        "JackpotKit/Sources/JackpotNetworking/HTTPClient.swift",
-        "JackpotKit/Sources/JackpotNetworking/APIEnvironment.swift",
-        "JackpotKit/Sources/JackpotNetworking/APIEndpoint.swift",
-        "JackpotKit/Sources/JackpotNetworking/APIError.swift",
-        "JackpotKit/Sources/JackpotNetworking/RequestInterceptor.swift",
-        (
-            "JackpotKit/Sources/JackpotNetworking/ConditionalRequest.swift",
-            "Registration never sends a conditional request; `RemoteApiClient` still implements the\n"
-            "protocol method, so the types have to exist.",
-        ),
-        "JackpotKit/Sources/JackpotNetworking/RemoteApiClient.swift",
-        "JackpotKit/Tests/JackpotNetworkingTests/MockHTTPClient.swift",
-        "JackpotKit/Tests/JackpotNetworkingTests/APIEndpointTests.swift",
-        "JackpotKit/Tests/JackpotNetworkingTests/APIProblemTests.swift",
-        (
-            "JackpotKit/Tests/JackpotNetworkingTests/RemoteApiClientTests.swift",
-            "The retry policy is the part worth asserting: a 5xx or a dropped connection is retried, a\n"
-            "4xx never is, and a non-idempotent request is retried only when the transport failed before\n"
-            "the server could have seen it.",
-        ),
-        (
-            "JackpotKit/Sources/JackpotLocalization/Translations.swift",
-            "The session's localisation table. Two lookups matter: keys are tried region-suffixed first\n"
-            "(`terms-jza` before `terms`), and API error codes are keys too, which is what lets a server\n"
-            "error come back in the user's language. `TranslationsRepository.swift` and\n"
-            "`TranslationsStore.swift` in the same folder are the app-data follow-up.",
-        ),
-        "JackpotKit/Tests/JackpotLocalizationTests/TranslationsTests.swift",
-    ]
-)
-
-bash(TEST_CMD)
-rule()
-text("### ▶ Create PR — JackpotNetworking + Translations")
-text(executed("JackpotNetworkingTests", "JackpotLocalizationTests"))
-rule()
-
-# ---------------------------------------------------------------- PR 3
-
-text("## PR 3 — JackpotForms")
-text(
-    "One module, four folders pointing one way: `Domain` (types and rules, no I/O), `Data`\n"
-    "(wire shapes, the bundled stub), `UI` (the engine and the renderer) and `Remote` (the live\n"
-    "repository and `.live()`). The engine only ever sees `FormRepository`, which is what lets the\n"
-    "stub and the network be swapped at one line in composition. Wire types are `internal`;\n"
-    "nothing outside `Data/` and `Remote/` knows a JSON key name."
-)
-
-bash(
-    "mkdir -p JackpotKit/Sources/JackpotForms/{Domain,Data,Remote,UI/Fields,Resources}\n"
-    "mkdir -p JackpotKit/Tests/JackpotFormsTests"
-)
-
+manifest_step(2, "`JackpotForms` depends on `JackpotUI` alone at this step; the network joins it at step 4\n"
+                 "and localisation joins `JackpotRegistration` at step 5. Wire types are `internal`.")
 files(
     [
         (
@@ -452,7 +523,11 @@ files(
         ),
         "JackpotKit/Sources/JackpotForms/Domain/FieldValidator.swift",
         "JackpotKit/Sources/JackpotForms/Domain/FormLoadError.swift",
-        "JackpotKit/Sources/JackpotForms/Domain/FormLocalizing.swift",
+        (
+            "JackpotKit/Sources/JackpotForms/Domain/FormLocalizing.swift",
+            "The seam the app's translation function plugs into: `LegacyTranslationLocalizer` at\n"
+            "step 4, `TranslationsLocalizer` from step 5.",
+        ),
         "JackpotKit/Sources/JackpotForms/Domain/FormRepository.swift",
         "JackpotKit/Sources/JackpotForms/Data/FormDTO.swift",
         "JackpotKit/Sources/JackpotForms/Data/FormMapper.swift",
@@ -460,32 +535,31 @@ files(
         "JackpotKit/Sources/JackpotForms/Data/BundledForms.swift",
         (
             "JackpotKit/Sources/JackpotForms/Data/RegistrationCopy.swift",
-            "The placeholder copy table, until the app-data `locales` section is wired in.",
+            "The placeholder copy table, until the app's strings are wired in.",
         ),
     ]
 )
-
 bash(
     "cp registration.json JackpotKit/Sources/JackpotForms/Resources/registration.json",
     note="`registration.json` is the CRM's response saved verbatim — 12 fields over two sections.\n"
     "`JackpotForms` processes it as a resource; `BundledForms` reads it from `Bundle.module`\n"
     "for the stub repository, the previews and the tests alike.",
 )
-
 files(
     [
         (
             "JackpotKit/Sources/JackpotForms/UI/FormDependencies.swift",
             "The engine's dependencies and `.mock()`. Defaults are generic: no regex links, no date\n"
-            "cap. Registration adds its own in PR 4.",
+            "cap. Registration adds its own below.",
         ),
         (
             "JackpotKit/Sources/JackpotForms/UI/DynamicFormModel.swift",
             "The engine. `load()` is `async` and a no-op once loaded, so re-appearing on screen cannot\n"
             "reset a half-filled form. `advance()` / `goBack()` / `submit()` are what Next, Previous\n"
-            "and Sign Up call. `touched` is why an untouched field stays silent until Next, and\n"
-            "`overrideRegex(for:)` is how selecting Passport relaxes the SA-ID rule on a different\n"
-            "field.",
+            "and Sign Up call; `pagingDirection` is set before the section moves so the pages slide\n"
+            "the right way wherever the bar is. `touched` is why an untouched field stays silent until\n"
+            "Next, and `overrideRegex(for:)` is how selecting Passport relaxes the SA-ID rule on a\n"
+            "different field.",
         ),
         (
             "JackpotKit/Sources/JackpotForms/UI/Fields/FieldRenderer.swift",
@@ -511,32 +585,6 @@ files(
             "Decodes the bundled JSON for the seeded-model previews, so the previews and the stub\n"
             "cannot disagree about the schema.",
         ),
-    ]
-)
-
-text(
-    "At this point the engine renders the bundled schema end to end. Open `DynamicFormView.swift`\n"
-    "and resume **Registration — from JSON**, then wire the network:"
-)
-
-files(
-    [
-        (
-            "JackpotKit/Sources/JackpotForms/Remote/FormEndpoints.swift",
-            "The cron URLs, the submit body, and `FormSubmitParser` — HTTP 200 is not success, the\n"
-            "envelope's `isSuccessful` is, and a body that is not the envelope is a rejection.",
-        ),
-        (
-            "JackpotKit/Sources/JackpotForms/Remote/FormErrorMapper.swift",
-            "The boundary that decides what the user reads. The engine cannot see `APIError`, so\n"
-            "anything not translated here becomes a generic failure on screen.",
-        ),
-        "JackpotKit/Sources/JackpotForms/Remote/RemoteFormRepository.swift",
-        "JackpotKit/Sources/JackpotForms/Remote/TranslationsLocalizer.swift",
-        (
-            "JackpotKit/Sources/JackpotForms/Remote/FormDependencies+Live.swift",
-            "`.live(baseURL:)` — swap it for `.mock()` at the call site and nothing else changes.",
-        ),
         "JackpotKit/Tests/JackpotFormsTests/FormDecodingTests.swift",
         "JackpotKit/Tests/JackpotFormsTests/FieldValidatorTests.swift",
         (
@@ -545,42 +593,20 @@ files(
             "once, section gating, submit blocked while invalid, the payload keyed by\n"
             "`fieldIdentifier`, and the ID-type → ID-number rule.",
         ),
-        "JackpotKit/Tests/JackpotFormsTests/FormErrorMappingTests.swift",
-        (
-            "JackpotKit/Tests/JackpotFormsTests/FormRepositoryTests.swift",
-            "Both repositories are driven through the same protocol here, which is the check that the\n"
-            "stub and the live one are actually interchangeable.",
-        ),
+        "JackpotKit/Tests/JackpotFormsTests/StubFormRepositoryTests.swift",
     ]
 )
-
-bash(TEST_CMD)
-rule()
-text("### ▶ Create PR — JackpotForms")
-text(executed("JackpotFormsTests"))
 text(
-    "Open `DynamicFormView.swift` and resume the whole-form previews, including\n"
-    "**Registration — from JSON**, **Offline** and **Unknown form — 404**."
+    "At this point the engine renders the bundled schema end to end: open `DynamicFormView.swift`\n"
+    "and resume **Registration — from JSON**. Now the feature that presents it:"
 )
-rule()
-
-# ---------------------------------------------------------------- PR 4
-
-text("## PR 4 — JackpotRegistration")
-text(
-    "The feature: a registration service, the Sign Up sheet that drives the two-page form, the\n"
-    "rules registration adds to the generic engine, and the `UIHostingController` the existing\n"
-    "popup container can hold as-is."
-)
-
-bash(
-    "mkdir -p JackpotKit/Sources/JackpotRegistration\n"
-    "mkdir -p JackpotKit/Tests/JackpotRegistrationTests"
-)
-
 files(
     [
-        "JackpotKit/Sources/JackpotRegistration/RegistrationService.swift",
+        (
+            "JackpotKit/Sources/JackpotRegistration/RegistrationService.swift",
+            "The protocol, the mock that demos both outcomes, and `RemoteRegistrationService`, which\n"
+            "only needs `FormRepository` — the live repository arrives at step 4.",
+        ),
         (
             "JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift",
             "`RegistrationDependencies` applies `applyingRegistrationRules()` — the ID-type link and\n"
@@ -591,50 +617,134 @@ files(
         ),
         (
             "JackpotKit/Sources/JackpotRegistration/RegistrationPanelController.swift",
-            "A drop-in for the view controller PR 5 deletes: same `addChild`/`popupContainer` call site,\n"
-            "SwiftUI behind it.",
+            "A drop-in for the view controller step 4 deletes: same `addChild`/`popupContainer` call\n"
+            "site, SwiftUI behind it.",
         ),
         "JackpotKit/Sources/JackpotRegistration/Previews.swift",
         "JackpotKit/Tests/JackpotRegistrationTests/RegistrationServiceTests.swift",
     ]
 )
-
 bash(TEST_CMD)
-rule()
-text("### ▶ Create PR — JackpotRegistration")
-text(executed("JackpotRegistrationTests"))
-text("Open `Previews.swift` and run the flow end to end.")
-rule()
+create_pr("JackpotForms + JackpotRegistration, on the bundled schema",
+          "JackpotFormsTests", "JackpotRegistrationTests",
+          note="Open `JackpotRegistration/Previews.swift` and resume **Sign Up — dark**: the whole flow,\n"
+               "both pages, success and the duplicate-mobile failure (`0000000000`), with no app and no\n"
+               "backend.")
 
-# ---------------------------------------------------------------- PR 5
+# ---------------------------------------------------------------- step 3
 
-text("## PR 5 — Replace the current flow")
+text("## Step 3 — JackpotNetworking")
 text(
-    "**In Xcode:** File → Add Package Dependencies → Add Local… → `JackpotKit`, then add\n"
-    "**JackpotRegistration** to the app target's frameworks."
+    "The transport: `HTTPClient` is the seam tests stub, `APIEndpoint` is one request shape,\n"
+    "`RemoteApiClient` is the pipeline. 200 / 400 / 401 / 500 are the contract;\n"
+    "`unexpectedStatus` carries anything infrastructure returns. Nothing here knows about forms,\n"
+    "and nothing here needs translations: the app keeps `getTranslation` for now."
 )
+bash(
+    "mkdir -p JackpotKit/Sources/JackpotNetworking\n"
+    "mkdir -p JackpotKit/Tests/JackpotNetworkingTests"
+)
+manifest_step(3, "A standalone module; nothing depends on it yet.")
+files(
+    [
+        "JackpotKit/Sources/JackpotNetworking/HTTPMethod.swift",
+        "JackpotKit/Sources/JackpotNetworking/HTTPClient.swift",
+        "JackpotKit/Sources/JackpotNetworking/APIEnvironment.swift",
+        "JackpotKit/Sources/JackpotNetworking/APIEndpoint.swift",
+        "JackpotKit/Sources/JackpotNetworking/APIError.swift",
+        "JackpotKit/Sources/JackpotNetworking/RequestInterceptor.swift",
+        (
+            "JackpotKit/Sources/JackpotNetworking/ConditionalRequest.swift",
+            "Registration never sends a conditional request; `RemoteApiClient` still implements the\n"
+            "protocol method, so the types have to exist. Step 6 uses them.",
+        ),
+        "JackpotKit/Sources/JackpotNetworking/RemoteApiClient.swift",
+        "JackpotKit/Tests/JackpotNetworkingTests/MockHTTPClient.swift",
+        "JackpotKit/Tests/JackpotNetworkingTests/APIEndpointTests.swift",
+        "JackpotKit/Tests/JackpotNetworkingTests/APIProblemTests.swift",
+        (
+            "JackpotKit/Tests/JackpotNetworkingTests/RemoteApiClientTests.swift",
+            "The retry policy is the part worth asserting: a 5xx or a dropped connection is retried, a\n"
+            "4xx never is, and a non-idempotent request is retried only when the transport failed before\n"
+            "the server could have seen it.",
+        ),
+    ]
+)
+bash(TEST_CMD)
+create_pr("JackpotNetworking", "JackpotNetworkingTests")
 
+# ---------------------------------------------------------------- step 4
+
+text("## Step 4 — Connect the forms to the network, and replace the flow in the app")
+text(
+    "The `Remote` folder joins `JackpotForms`: the cron endpoints, the submit envelope, the error\n"
+    "boundary and `.live()`. The engine is untouched — that is the point of the protocol — and\n"
+    "the sheet is untouched too; the only line that changes at the call site is `.mock()` →\n"
+    "`.live(baseURL:localizer:)`. The localizer is the app's existing `getTranslation`, behind one\n"
+    "named type, so step 5 replaces a single file."
+)
+bash("mkdir -p JackpotKit/Sources/JackpotForms/Remote")
+manifest_step(4, "`JackpotForms` and its tests gain `JackpotNetworking`. No new targets.")
+files(
+    [
+        (
+            "JackpotKit/Sources/JackpotForms/Remote/FormEndpoints.swift",
+            "The cron URLs, the submit body, and `FormSubmitParser` — HTTP 200 is not success, the\n"
+            "envelope's `isSuccessful` is, and a body that is not the envelope is a rejection.",
+        ),
+        (
+            "JackpotKit/Sources/JackpotForms/Remote/FormErrorMapper.swift",
+            "The boundary that decides what the user reads. The engine cannot see `APIError`, so\n"
+            "anything not translated here becomes a generic failure on screen. Error codes resolve\n"
+            "through whichever `FormLocalizing` the host supplied.",
+        ),
+        "JackpotKit/Sources/JackpotForms/Remote/RemoteFormRepository.swift",
+        (
+            "JackpotKit/Sources/JackpotForms/Remote/FormDependencies+Live.swift",
+            "`.live(baseURL:localizer:)` — swap it for `.mock()` at the call site and nothing else\n"
+            "changes.",
+        ),
+        "JackpotKit/Tests/JackpotFormsTests/FormErrorMappingTests.swift",
+        (
+            "JackpotKit/Tests/JackpotFormsTests/RemoteFormRepositoryTests.swift",
+            "The live repository driven through the same protocol as the stub, which is the check that\n"
+            "the two are actually interchangeable.",
+        ),
+    ]
+)
+bash(TEST_CMD)
+text(
+    "Then the app, once. **In Xcode:** File → Add Package Dependencies → Add Local… →\n"
+    "`JackpotKit`, then add **JackpotRegistration** to the app target's frameworks."
+)
+swift_literal(
+    "Sources/Features/Registration/LegacyTranslationLocalizer.swift",
+    """import JackpotForms
+
+/// The one place the registration feature reads the legacy translation table. Step 5 deletes this
+/// file and passes `TranslationsLocalizer` instead; nothing else calls `getTranslation` for it.
+struct LegacyTranslationLocalizer: FormLocalizing {
+    /// `getTranslation` returns the key on a miss; the engine needs nil there to fall back to humanised copy.
+    func string(forKey key: String) -> String? {
+        let value = getTranslation(Key: key)
+        return value == key ? nil : value
+    }
+}
+""",
+)
 swift_literal(
     "Sources/Features/Registration/RegistrationPresenter.swift",
     """import UIKit
-import JackpotForms
 import JackpotRegistration
 
 extension MainViewController {
-
-    private var registrationLocalizer: ClosureLocalizer {
-        ClosureLocalizer { key in
-            let value = getTranslation(Key: key)
-            return value == key ? nil : value
-        }
-    }
 
     func presentRegistration() {
         let controller = RegistrationPanelController(
             dependencies: RegistrationDependencies(
                 forms: .live(
                     baseURL: URL(string: "https://config.jpc.africa/crm")!,
-                    localizer: registrationLocalizer
+                    localizer: LegacyTranslationLocalizer()
                 ),
                 service: MockRegistrationService()
             ),
@@ -656,12 +766,9 @@ extension MainViewController {
     }
 }
 """,
-    note="`ClosureLocalizer` is the migration seam. The app's `getTranslation` returns the key itself on\n"
-    "a miss; mapping that back to `nil` is what lets the engine fall through to humanised copy instead\n"
-    "of rendering a raw key. `MockRegistrationService` stays until the submit contract is confirmed;\n"
+    note="`MockRegistrationService` stays until the submit contract is confirmed;\n"
     "`RemoteRegistrationService(repository:)` is the one-line swap.",
 )
-
 step += 1
 text(f"**{step}.** Point every existing entry point at `presentRegistration()`:")
 text(
@@ -670,7 +777,6 @@ text(
     "- `NavigationHandler` — the `registration` sitemap branch\n"
     "- the Login panel's **Sign Up ›** link"
 )
-
 step += 1
 text(f"**{step}.** Delete:")
 fence(
@@ -684,16 +790,136 @@ fence(
 )
 text("And from `GlobalData.swift`:")
 fence("", "registrationPopup\nflowOneViewController\nflowTwoViewController")
-
 bash(
     'grep -rn "registrationPopup\\|flowOneViewController\\|flowTwoViewController" --include=*.swift .',
     note="Expect no results.",
 )
+create_pr("live registration in the app", "JackpotFormsTests",
+          note="Build and run. Open sign-up from the header and the bottom bar; complete both pages.\n"
+               "Every label reads as it did — that is `LegacyTranslationLocalizer` doing its job.")
 
-rule()
-text("### ▶ Create PR — Replace registration flow")
-text("Build and run. Open sign-up from the header and the bottom bar; complete both pages.")
-rule()
+# ---------------------------------------------------------------- step 5
+
+text("## Step 5 — Fix translations")
+text(
+    "[ADR-0001](adr/0001-app-data-decoding-and-configuration-decomposition.md) phase 2.\n"
+    "`Translations` is the session's table, normalised once at construction instead of on every\n"
+    "lookup; `TranslationsStore` owns it for the session; `TranslationsLocalizer` is the adapter\n"
+    "that feeds it to the form engine, and lives in `JackpotRegistration` so neither the engine\n"
+    "nor the table knows about the other. `getTranslation` becomes a shim over the store, which\n"
+    "fixes the per-lookup rebuild for the whole app with no call-site changes."
+)
+bash(
+    "mkdir -p JackpotKit/Sources/JackpotLocalization\n"
+    "mkdir -p JackpotKit/Tests/JackpotLocalizationTests"
+)
+manifest_step(5, "`JackpotLocalization` arrives with no dependencies; `JackpotRegistration` and its tests\n"
+                 "gain it.")
+files(
+    [
+        (
+            "JackpotKit/Sources/JackpotLocalization/Translations.swift",
+            "Two lookups matter: keys are tried region-suffixed first (`terms-jza` before `terms`),\n"
+            "and API error codes are keys too, which is what lets a server error come back in the\n"
+            "user's language.",
+        ),
+        (
+            "JackpotKit/Sources/JackpotLocalization/TranslationsRepository.swift",
+            "The protocol and the fixed-table stub. The live implementation reads the app-data payload\n"
+            "and arrives with it at step 6.",
+        ),
+        "JackpotKit/Sources/JackpotLocalization/TranslationsStore.swift",
+        "JackpotKit/Tests/JackpotLocalizationTests/TranslationsTests.swift",
+        "JackpotKit/Tests/JackpotLocalizationTests/TranslationsStoreTests.swift",
+        "JackpotKit/Sources/JackpotRegistration/TranslationsLocalizer.swift",
+        "JackpotKit/Tests/JackpotRegistrationTests/TranslationsLocalizerTests.swift",
+    ]
+)
+swift_literal(
+    "the app",
+    """// 1. The store is created once, at the composition root, and injected.
+let translations = TranslationsStore(repository: StubTranslationsRepository(Translations()))
+translations.adopt(Translations(GlobalData.shareData.configData?.locale ?? [:],
+                                regionCode: GlobalData.shareData.AppSetupData.wmsNavigationRegionCode))
+
+// 2. The legacy helper becomes a shim. `regional` is passed through as given, so existing
+//    call sites return byte-identical strings; the deprecation is the burn-down list.
+@available(*, deprecated, message: "Inject TranslationsStore; call translations(key)")
+@MainActor
+func getTranslation(Key: String, regional: Bool = false) -> String {
+    AppContainer.shared.translations.translations(Key, regional: regional)
+}
+
+// 3. Delete LegacyTranslationLocalizer.swift; registration takes the adapter. An empty table
+//    means app-data has not landed; the bundled placeholder copy keeps the form legible until it does.
+let table = translations.translations
+forms: .live(baseURL: configURL,
+             localizer: table.isEmpty ? ComposedKeyLocalizer.jpcRegistration : TranslationsLocalizer(table))
+""",
+    suffix=" — three changes",
+)
+bash(TEST_CMD)
+create_pr("translations", "JackpotLocalizationTests", "JackpotRegistrationTests",
+          note="Every label reads as before; API error codes now resolve to localised copy.")
+
+# ---------------------------------------------------------------- step 6
+
+text("## Step 6 — Fix app data")
+text(
+    "[ADR-0001](adr/0001-app-data-decoding-and-configuration-decomposition.md) phase 1 and\n"
+    "[LAUNCH-PERFORMANCE](LAUNCH-PERFORMANCE.md). `AppDataResponse` splits the bootstrap payload\n"
+    "by top-level key so one null section cannot lose the other five; `FileAppDataCache` keeps the\n"
+    "last good payload; `AppDataLoader` serves it at zero latency and revalidates behind it;\n"
+    "`RemoteTranslationsRepository` feeds the store from the same payload."
+)
+bash(
+    "mkdir -p JackpotKit/Sources/JackpotAppData\n"
+    "mkdir -p JackpotKit/Tests/JackpotAppDataTests"
+)
+manifest_step(6, "The last module. This is the manifest in the repository, verbatim.")
+files(
+    [
+        "JackpotKit/Sources/JackpotAppData/AppData.swift",
+        "JackpotKit/Sources/JackpotAppData/AppDataCache.swift",
+        "JackpotKit/Sources/JackpotAppData/AppDataLoader.swift",
+        "JackpotKit/Sources/JackpotAppData/RemoteTranslationsRepository.swift",
+        "JackpotKit/Tests/JackpotAppDataTests/AppDataResponseTests.swift",
+        (
+            "JackpotKit/Tests/JackpotAppDataTests/AppDataLoaderTests.swift",
+            "Cold launch, warm launch from cache, a 304 re-stamping the entry, staleness, and a failed\n"
+            "revalidation leaving the cache intact.",
+        ),
+    ]
+)
+swift_literal(
+    "the app — bootstrap",
+    """let loader = AppDataLoader(apiClient: client, cache: FileAppDataCache(), policy: .default)
+
+// On launch, before any UI:
+if let snapshot = await loader.cached(region: region, tenant: "jackpotcity", locale: "en-US") {
+    apply(snapshot.response)          // zero latency
+} else {
+    showLaunchSkeleton()              // first launch, or beyond maxStale
+    apply(try await loader.load(region: region, tenant: "jackpotcity", locale: "en-US").response)
+}
+
+// Always, in the background:
+Task { if let fresh = try? await loader.refresh(region: region, tenant: "jackpotcity", locale: "en-US") { apply(fresh.response) } }
+
+func apply(_ response: AppDataResponse) {
+    translations.adopt(Translations(response.locales, regionCode: region))
+    // every other section is decoded by the feature that owns it
+}
+""",
+)
+bash(TEST_CMD)
+create_pr("app data", "JackpotAppDataTests",
+          note="Log `AppDataSnapshot.origin` at launch; a low `.cache` rate means `maxStale` is too tight.")
+
+# Fill the header's total now that every test file has been counted.
+total = sum(test_counts.values())
+blocks = [(kind, payload.replace(TOTAL_TOKEN, str(total))) if kind == "p" else (kind, payload)
+          for kind, payload in blocks]
 
 # ================================================================ renderers
 
@@ -941,7 +1167,7 @@ markdown = render_markdown()
 
 with open(OUT, "w") as f:
     f.write(markdown)
-print(f"wrote {OUT}: {markdown.count(chr(10))} lines, {step} steps")
+print(f"wrote {OUT}: {markdown.count(chr(10))} lines, {step} steps, {total} tests")
 
 if "--pdf" in sys.argv:
     from weasyprint import HTML

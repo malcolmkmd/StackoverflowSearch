@@ -3,7 +3,6 @@ import XCTest
 
 /// Keys and values below are taken from the real app-data response.
 final class TranslationsTests: XCTestCase {
-
     private let sample = Translations([
         "6000328": "Maximum OTP tries reached, Please contact support on +233 30 825 5838",
         "markets.windrawwin": "1X2",
@@ -49,9 +48,8 @@ final class TranslationsTests: XCTestCase {
                        "Send me promotions")
     }
 
-    /// The CRM sometimes hands us a key that already carries the region suffix — the
-    /// registration schema's `fieldLabel` is literally `receivePromotionalInformation-jza`.
-    /// Looking that up must not double-suffix into a miss.
+    /// The CRM sometimes hands us a key that already carries the region suffix — the registration
+    /// schema's `fieldLabel` is literally `receivePromotionalInformation-jza`.
     func testAPreSuffixedKeyStillResolves() {
         XCTAssertEqual(sample("receivePromotionalInformation-jza"),
                        "Send Jackpot City Promotions to me")

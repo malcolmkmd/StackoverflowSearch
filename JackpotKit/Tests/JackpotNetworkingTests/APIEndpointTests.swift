@@ -2,7 +2,6 @@ import XCTest
 @testable import JackpotNetworking
 
 final class APIEndpointTests: XCTestCase {
-
     func testBuildsURLFromEnvironmentAndPath() throws {
         let request = try WidgetRequest().urlRequest(in: .test)
         XCTAssertEqual(request.url?.absoluteString,

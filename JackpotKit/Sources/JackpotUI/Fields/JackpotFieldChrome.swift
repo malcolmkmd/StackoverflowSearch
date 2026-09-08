@@ -55,8 +55,7 @@ public extension View {
 // MARK: - Error row
 
 public extension View {
-    /// Marks a field invalid: the chrome draws the invalid ring and `message` appears beneath
-    /// the control. Nil or empty clears both. Apply it to the whole field, not just the input.
+    /// The invalid ring and the message beneath the control; nil clears both.
     func jackpotFieldError(_ message: String?) -> some View {
         modifier(JackpotFieldErrorRow(message: message?.isEmpty == false ? message : nil))
     }
@@ -82,14 +81,13 @@ private struct JackpotFieldErrorRow: ViewModifier {
 
 // MARK: - Floating label
 
-/// The in-field label the text field, dropdown and date field share. It sits where a
-/// placeholder would and rises to the top edge of the control when the field is focused or
-/// holds a value; `content` is the value drawn beneath it.
+/// The in-field label shared by text field, dropdown and date field; it rises when focused or holding a value.
 struct JackpotFloatingField<Content: View>: View {
     private let title: String
     private let isFloating: Bool
     private let isFocused: Bool
     private let content: Content
+    /// Clear of the value beneath it in a 52pt control.
     private let raisedLabelOffset: CGFloat = -16
 
     @Environment(\.jackpotTheme) private var theme
@@ -110,6 +108,7 @@ struct JackpotFloatingField<Content: View>: View {
                 .jackpotFont(\.fieldText)
                 .foregroundStyle(theme.colors.textPrimary)
                 .lineLimit(1)
+                // Scaled rather than re-set in the label font, so the rise animates.
                 .scaleEffect(isFloating ? 0.85 : 1, anchor: .leading)
                 .offset(y: isFloating ? raisedLabelOffset : 0)
                 .allowsHitTesting(false)
@@ -121,4 +120,3 @@ struct JackpotFloatingField<Content: View>: View {
         .animation(.easeOut(duration: 0.15), value: isFloating)
     }
 }
-

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A themed surface at phone width for previewing one component or a small group.
+/// A themed surface at phone width for previewing components.
 public struct JackpotPreviewPanel<Content: View>: View {
     private let title: String?
     private let content: Content
@@ -74,8 +74,6 @@ struct JackpotUI_Previews: PreviewProvider {
         }
     }
 
-    /// The shell registration is presented in, as the app shows it: title and close button on
-    /// `surface`, fields on `background`, the login footer on `surface` again.
     struct Shell: View {
         @State private var mobile = ""
         @State private var email = ""

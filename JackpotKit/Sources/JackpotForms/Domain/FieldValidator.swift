@@ -2,18 +2,14 @@ import Foundation
 
 public enum ValidationResult: Equatable, Sendable {
     case valid
-    /// Localisation key for the message to show.
+    /// Localisation key for the message.
     case invalid(messageKey: String)
 
     public var isValid: Bool { self == .valid }
 }
 
-/// Validates a value against a field's schema rules.
-///
-/// The regexes come from a server, so they can be malformed. A pattern that will not compile
-/// is treated as "no constraint" rather than propagating the throw — one CRM typo must not
-/// break signup. Compiled expressions are cached by pattern string, because compiling on every
-/// keystroke for every field is wasteful.
+/// Regexes come from a server: one that will not compile is treated as no constraint, and compiled
+/// expressions are cached by pattern.
 public struct FieldValidator: Sendable {
     private let regexResolver: any RegexResolving
     private let cache = RegexCache()
@@ -22,8 +18,7 @@ public struct FieldValidator: Sendable {
         self.regexResolver = regexResolver
     }
 
-    /// - Parameter overrideRegex: pattern that replaces `field.regex`, used when a
-    ///   dropdown selection changes a dependent field's rule (ID type → ID number).
+    /// - Parameter overrideRegex: replaces `field.regex` when a dropdown selection changes a dependent field's rule.
     public func validate(_ value: FormValue,
                          against field: FormField,
                          overrideRegex: String? = nil) -> ValidationResult {
@@ -33,8 +28,7 @@ public struct FieldValidator: Sendable {
             return .invalid(messageKey: field.validationMessageKey)
         }
 
-        // Some schema regexes permit empty explicitly (referralCode: `...|^$`) but not all do,
-        // so this guard is what keeps optional fields genuinely optional.
+        // Not every optional field's regex permits empty; this is what keeps optional optional.
         if !field.isRequired, value.isEmpty { return .valid }
 
         guard let pattern = resolvedPattern(overrideRegex ?? field.regex), !pattern.isEmpty else {
@@ -48,7 +42,6 @@ public struct FieldValidator: Sendable {
         return matched ? .valid : .invalid(messageKey: field.validationMessageKey)
     }
 
-    /// Pattern for a dropdown option's `regex`, resolving names via the catalogue.
     public func optionPattern(_ raw: String?) -> String? {
         resolvedPattern(raw)
     }
@@ -60,7 +53,6 @@ public struct FieldValidator: Sendable {
     }
 }
 
-/// Thread-safe compiled-regex cache.
 private final class RegexCache: @unchecked Sendable {
     private var storage: [String: NSRegularExpression?] = [:]
     private let lock = NSLock()

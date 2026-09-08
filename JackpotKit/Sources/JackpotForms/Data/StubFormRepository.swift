@@ -1,10 +1,8 @@
 import Foundation
 
-/// Serves forms from bundled JSON. Backs the sandbox and previews, and lets the whole feature
-/// be built and reviewed before the endpoint is reachable from the app.
+/// Serves bundled JSON, so the feature runs before the endpoint is reachable.
 public struct StubFormRepository: FormRepository {
     private let forms: [FormName: Data]
-    /// Seconds. (`Duration` is iOS 16 — this package targets 15.)
     private let delay: TimeInterval
     private let error: (any Error)?
 
@@ -25,7 +23,6 @@ public struct StubFormRepository: FormRepository {
         return FormSubmitResult()
     }
 
-    /// Decodes raw JSON straight to a form, for previews and tests.
     static func decode(_ data: Data) throws -> FormSchema {
         FormMapper.map(try JSONDecoder().decode(FormDTO.self, from: data))
     }
