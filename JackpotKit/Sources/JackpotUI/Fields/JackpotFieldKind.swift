@@ -15,8 +15,9 @@ public enum JackpotCapitalization: Equatable, Sendable {
     }
 }
 
-/// Keyboard, autofill and autocorrection settings applied as one unit, so a field's semantics
-/// are declared once instead of as four loose modifiers per call site.
+/// Keyboard, autofill, autocorrection and secure-entry settings as one value, so a field's
+/// semantics are declared once — `JackpotTextField("Email", text: $email, kind: .email)` —
+/// instead of as four loose modifiers per call site.
 public struct JackpotFieldKind: Equatable, Sendable {
     public var keyboard: UIKeyboardType = .default
     public var contentType: UITextContentType?
@@ -51,11 +52,6 @@ public struct JackpotFieldKind: Equatable, Sendable {
                                                      disablesAutocorrection: true,
                                                      isSecure: true)
 
-    public static let oneTimeCode = JackpotFieldKind(keyboard: .numberPad,
-                                                     contentType: .oneTimeCode,
-                                                     capitalization: .never,
-                                                     disablesAutocorrection: true)
-
     public static let number = JackpotFieldKind(keyboard: .numberPad,
                                                 capitalization: .never,
                                                 disablesAutocorrection: true)
@@ -67,21 +63,13 @@ public struct JackpotFieldKind: Equatable, Sendable {
     }
 }
 
-public extension View {
-    func jackpotField(_ kind: JackpotFieldKind) -> some View {
-        modifier(JackpotFieldKindModifier(kind: kind))
-    }
-}
-
-private struct JackpotFieldKindModifier: ViewModifier {
-    let kind: JackpotFieldKind
-
-    func body(content: Content) -> some View {
-        content
-            .keyboardType(kind.keyboard)
+extension View {
+    /// Applies the kind's keyboard and autofill settings. Secure entry is the field's own
+    /// business, because it decides between `SecureField` and `TextField`.
+    func textInput(_ kind: JackpotFieldKind) -> some View {
+        keyboardType(kind.keyboard)
             .textContentType(kind.contentType)
             .textInputAutocapitalization(kind.capitalization.textInput)
             .autocorrectionDisabled(kind.disablesAutocorrection)
-            .jackpotSecureEntry(kind.isSecure)
     }
 }

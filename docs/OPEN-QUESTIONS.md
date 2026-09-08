@@ -65,14 +65,16 @@ Passport relaxes `idNumber`'s `^[0-9]{13}$`. Literal patterns like `sourceOfFund
 
 **What changed as a result.** The link was inferred from field order — "the field after the
 dropdown". That works for the current schema but breaks silently if the CRM reorders rows or
-inserts a field. On a regulated field that's the wrong failure mode, so the link is now declared:
+inserts a field. On a regulated field that's the wrong failure mode, so the link is declared,
+and it is declared by the feature rather than the engine:
 
 ```swift
-FormDependencies(regexDependencies: ["idNumberType": "idNumber"])   // default
+// JackpotRegistration — applied by RegistrationDependencies on top of any FormDependencies
+rules.regexDependencies = ["idNumberType": "idNumber"]
 ```
 
-Field order is still the fallback for links nobody has told us about. Six tests cover it,
-including that switching type revalidates without the user re-typing.
+The engine's default is no links at all; there is no positional fallback. Tests cover the
+link, its absence, and that switching type revalidates without the user re-typing.
 
 ### Q4b · What is the actual passport regex? ✅ answered
 
@@ -82,7 +84,7 @@ onto `idNumber` when Passport is selected.
 
 The 5–20 bounds are the ones we already used; say if the real min/max is tighter.
 
-- **Where:** `RegexCatalog.jpcDefaults` in `JackpotFormsDomain/RegexResolving.swift`.
+- **Where:** `RegexCatalog.jpcDefaults` in `JackpotForms/Domain/RegexResolving.swift`.
 
 ### Q5 · How is a validation message key composed?
 
@@ -212,8 +214,8 @@ We keep everything; going back and forward loses nothing.
 ## Answered
 
 - ~~Do named option regexes drive a dependent field?~~ **Yes** — ID vs passport selects which
-  rule `idNumber` validates against. Link now declared explicitly rather than inferred from
-  field order. (Q4)
+  rule `idNumber` validates against. The link is declared by `RegistrationDependencies`, never
+  inferred from field order. (Q4)
 - ~~What is the passport rule?~~ Length only, `^.{5,20}$` — not alphanumeric. (Q4b)
 - ~~Is the locale user-selectable?~~ **No.** `TranslationsStore` loads once per session; no
   refetch, no re-render on switch.

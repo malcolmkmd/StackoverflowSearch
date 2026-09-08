@@ -1,8 +1,6 @@
 import XCTest
 @testable import JackpotRegistration
-import JackpotFormsDomain
 import JackpotForms
-import JackpotNetworking
 
 final class RegistrationServiceTests: XCTestCase {
 
@@ -33,13 +31,6 @@ final class RegistrationServiceTests: XCTestCase {
     func testEveryErrorHasUserFacingCopy() {
         let cases: [RegistrationError] = [.mobileAlreadyRegistered, .offline, .server(message: "x"), .unexpected]
         for c in cases { XCTAssertFalse((c.errorDescription ?? "").isEmpty, "\(c)") }
-    }
-
-    func testAPIErrorsMapToRegistrationErrors() {
-        XCTAssertEqual(RegistrationError(.transport(.notConnectedToInternet)), .offline)
-        XCTAssertEqual(RegistrationError(.badRequest(APIProblem(code: 1042, message: "dup"))), .mobileAlreadyRegistered)
-        XCTAssertEqual(RegistrationError(.badRequest(APIProblem(code: 7, message: "Bad input"))), .server(message: "Bad input"))
-        XCTAssertEqual(RegistrationError(.server(nil)), .unexpected)
     }
 
     func testFormLoadErrorsMapToRegistrationErrors() {
@@ -89,6 +80,30 @@ final class RegistrationServiceTests: XCTestCase {
         XCTAssertEqual(localizer.string(forKey: "username"), "Enter Mobile Number")
         XCTAssertNil(localizer.string(forKey: "dateOfBirth"))
         XCTAssertEqual(localizer.display("dateOfBirth"), "Date Of Birth")
+    }
+}
+
+/// The engine ships with no cross-field links and no date cap; registration adds both, whatever
+/// repository the host passes in.
+final class RegistrationRulesTests: XCTestCase {
+
+    func testRegistrationLinksIDTypeToIDNumber() {
+        let dependencies = RegistrationDependencies.mock()
+        XCTAssertEqual(dependencies.forms.regexDependencies, ["idNumberType": "idNumber"])
+    }
+
+    func testDateOfBirthIsCappedAtEighteenYearsAgo() throws {
+        let now = Date(timeIntervalSince1970: 1_757_203_200)     // 2025-09-07
+        let rules = FormDependencies.mock().applyingRegistrationRules(now: now)
+        let cap = try XCTUnwrap(rules.maximumDate)
+        let years = Calendar(identifier: .gregorian).dateComponents([.year], from: cap, to: now).year
+        XCTAssertEqual(years, 18)
+    }
+
+    func testTheGenericEngineHasNeither() {
+        let plain = FormDependencies.mock()
+        XCTAssertTrue(plain.regexDependencies.isEmpty)
+        XCTAssertNil(plain.maximumDate)
     }
 }
 

@@ -1,6 +1,6 @@
-#if DEBUG
 import SwiftUI
 
+/// A themed surface at phone width for previewing one component or a small group.
 public struct JackpotPreviewPanel<Content: View>: View {
     private let title: String?
     private let content: Content
@@ -12,26 +12,23 @@ public struct JackpotPreviewPanel<Content: View>: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: .sm) {
-            if let title {
-                Text(title).font(.caption).jackpotForegroundStyle(\.textSecondary)
-            }
             content
         }
         .padding(.m)
         .frame(width: 390)
         .jackpotTheme(.jackpotCity)
-        .jackpotBackground(\.surface)
+        .jackpotBackground(\.background)
     }
 }
 
 // MARK: - Component gallery
 
+#if DEBUG
 struct JackpotUI_Previews: PreviewProvider {
     struct Harness: View {
         @State private var mobile = ""
         @State private var email = ""
         @State private var secret = "Passwo1"
-        @State private var touched = false
         @State private var promotions = false
         @State private var agreed = true
         @State private var income: String? = nil
@@ -40,34 +37,25 @@ struct JackpotUI_Previews: PreviewProvider {
         var body: some View {
             ScrollView {
                 JackpotPreviewPanel("Gallery") {
-                    JackpotTextField("Mobile Number", text: $mobile)
-                        .onEditingEnded { touched = true }
-                        .jackpotField(.phoneNumber)
-                        .jackpotFieldPrefix("+27")
+                    JackpotTextField("Mobile Number", text: $mobile, kind: .phoneNumber, prefix: "+27")
 
-                    JackpotTextField("Email", text: $email)
-                        .jackpotField(.email)
+                    JackpotTextField("Email", text: $email, kind: .email)
 
-                    JackpotLabeledField(error: "Password must be 8–20 characters") {
-                        JackpotTextField("Password", text: $secret)
-                            .jackpotField(.newPassword)
-                    }
+                    JackpotTextField("Password", text: $secret, kind: .newPassword)
+                        .jackpotFieldError("Password must be 8–20 characters")
 
                     JackpotChecklist("Password Validity", items: [
                         .init(id: "min", text: "Minimum of 8 characters", isSatisfied: false),
                         .init(id: "max", text: "Maximum of 20 characters", isSatisfied: true),
                     ])
 
-                    JackpotLabeledField(error: "Please choose one") {
-                        JackpotDropdown("Source Of Income", selection: $income, options: [
-                            .init(id: "salary", label: "Salary or Wages"),
-                            .init(id: "pension", label: "Pension or Grant"),
-                        ])
-                    }
+                    JackpotDropdown("Source Of Income", selection: $income, options: [
+                        .init(id: "salary", label: "Salary or Wages"),
+                        .init(id: "pension", label: "Pension or Grant"),
+                    ])
+                    .jackpotFieldError("Please choose one")
 
-                    JackpotLabeledField("Date Of Birth") {
-                        JackpotDateField("Enter Date Of Birth", selection: $dateOfBirth)
-                    }
+                    JackpotDateField("Date Of Birth", selection: $dateOfBirth)
 
                     Toggle("Send Jackpot City Promotions to me", isOn: $promotions)
                         .toggleStyle(.jackpotCheckbox)
@@ -82,7 +70,33 @@ struct JackpotUI_Previews: PreviewProvider {
                 }
             }
             .jackpotTheme(.jackpotCity)
-            .jackpotBackground(\.surface)
+            .jackpotBackground(\.background)
+        }
+    }
+
+    /// The shell registration is presented in, as the app shows it: title and close button on
+    /// `surface`, fields on `background`, the login footer on `surface` again.
+    struct Shell: View {
+        @State private var mobile = ""
+        @State private var email = ""
+
+        var body: some View {
+            JackpotPanel("Sign Up", onClose: {}) {
+                VStack(spacing: .sm) {
+                    JackpotTextField("Mobile Number", text: $mobile, kind: .phoneNumber, prefix: "+27")
+                    JackpotTextField("Email", text: $email, kind: .email)
+                }
+                .padding(.m)
+            } footer: {
+                VStack(spacing: .sm) {
+                    JackpotLinkRow("Already have an account?", link: "Login") {}
+                    Button("Next") {}.buttonStyle(.jackpot).disabled(true)
+                }
+            }
+            .padding(.m)
+            .frame(width: 390)
+            .jackpotTheme(.jackpotCity)
+            .jackpotBackground(\.background)
         }
     }
 
@@ -90,6 +104,8 @@ struct JackpotUI_Previews: PreviewProvider {
         Group {
             Harness().preferredColorScheme(.dark).previewDisplayName("Gallery — dark")
             Harness().preferredColorScheme(.light).previewDisplayName("Gallery — light")
+            Shell().preferredColorScheme(.dark).previewDisplayName("Sheet shell — dark")
+            Shell().preferredColorScheme(.light).previewDisplayName("Sheet shell — light")
             JackpotPreviewPanel("Error") {
                 JackpotErrorView("The network connection was lost.").onRetry {}
             }

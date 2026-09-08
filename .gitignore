@@ -42,3 +42,6 @@ xcuserdata
 !*.xcworkspace/contents.xcworkspacedata
 /*.gcno
 **/xcshareddata/WorkspaceSettings.xcsettings
+
+# Generated on demand by scripts/build-playbook.py --pdf; the Markdown is the committed source.
+docs/BUILD-PLAYBOOK.pdf

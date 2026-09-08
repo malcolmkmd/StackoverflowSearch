@@ -2,25 +2,36 @@ import SwiftUI
 
 public struct JackpotTextField: View {
     @Binding private var text: String
-    private let placeholder: String
+    private let title: String
+    private let kind: JackpotFieldKind
+    private let prefix: String
+    private let suffix: String
     private var editingEndedAction: (() -> Void)?
     private var focusChangedAction: ((Bool) -> Void)?
 
     @Environment(\.jackpotTheme) private var theme
-    @Environment(\.jackpotFieldPrefix) private var prefix
-    @Environment(\.jackpotFieldSuffix) private var suffix
-    @Environment(\.jackpotSecureEntry) private var isSecure
     @Environment(\.jackpotFocusedField) private var focusedField
     @Environment(\.jackpotFieldIdentity) private var identity
-    @Environment(\.jackpotSubmitLabel) private var submitLabel
     @FocusState private var isFocused: Bool
     @State private var isRevealed = false
 
     private var requestedFocus: String? { focusedField?.wrappedValue }
 
-    public init(_ placeholder: String, text: Binding<String>) {
-        self.placeholder = placeholder
+    /// - Parameters:
+    ///   - title: the in-field label. It floats to the top edge on focus or once there is text.
+    ///   - kind: keyboard, autofill and secure-entry semantics.
+    ///   - prefix: a fixed cell before the input, like `+27` on a mobile number.
+    ///   - suffix: trailing text inside the field.
+    public init(_ title: String,
+                text: Binding<String>,
+                kind: JackpotFieldKind = .text,
+                prefix: String = "",
+                suffix: String = "") {
+        self.title = title
         self._text = text
+        self.kind = kind
+        self.prefix = prefix
+        self.suffix = suffix
     }
 
     /// Fires on blur. Chain it before any `View` modifier, like `Gesture.onEnded`.
@@ -53,22 +64,15 @@ public struct JackpotTextField: View {
                     .accessibilityHidden(true)
             }
 
-            ZStack(alignment: .leading) {
+            JackpotFloatingField(title, isFloating: isFloating, isFocused: isFocused) {
                 input
                     .jackpotTextStyle(\.fieldText)
+                    .textInput(kind)
                     .focused($isFocused)
-                    .submitLabel(submitLabel)
-                    .padding(.top, isFloating ? theme.sizes.spacing : 0)
                     // The prefix cell is hidden above, so fold it in rather than leaving
                     // VoiceOver to stumble over a stray "+27".
-                    .accessibilityLabel(prefix.isEmpty ? Text(placeholder) : Text("\(placeholder), \(prefix)"))
-
-                JackpotFloatingLabel(title: placeholder, isFloating: isFloating, isFocused: isFocused)
-                    .offset(y: isFloating ? -16 : 0)
+                    .accessibilityLabel(prefix.isEmpty ? Text(title) : Text("\(title), \(prefix)"))
             }
-            .padding(.horizontal, theme.sizes.contentPadding)
-            .frame(height: theme.sizes.controlHeight)
-            .animation(.easeOut(duration: 0.15), value: isFloating)
 
             if !suffix.isEmpty {
                 Text(suffix)
@@ -78,7 +82,7 @@ public struct JackpotTextField: View {
                     .onTapGesture { isFocused = true }
             }
 
-            if isSecure {
+            if kind.isSecure {
                 Button {
                     isRevealed.toggle()
                 } label: {
@@ -114,7 +118,7 @@ public struct JackpotTextField: View {
 
     @ViewBuilder
     private var input: some View {
-        if isSecure, !isRevealed {
+        if kind.isSecure, !isRevealed {
             SecureField("", text: $text)
         } else {
             TextField("", text: $text)

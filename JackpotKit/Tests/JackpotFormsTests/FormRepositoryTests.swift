@@ -1,7 +1,5 @@
 import XCTest
-@testable import JackpotFormsRemote
-@testable import JackpotFormsData
-import JackpotFormsDomain
+@testable import JackpotForms
 import JackpotNetworking
 
 final class FormSubmitEndpointTests: XCTestCase {
@@ -37,13 +35,6 @@ final class FormSubmitEndpointTests: XCTestCase {
             .urlRequest(in: .cron(baseURL: cron))
         XCTAssertEqual(request.url?.absoluteString,
                        "https://config.jpc.africa/cron/forms/jackpotcity/JZA/registration?api-version=2.0")
-    }
-
-    func testFetchByIdUsesTheSamePathTemplateAsByName() throws {
-        let request = try FormRequest(brand: "jackpotcity", region: "JZA", identifier: "1052")
-            .urlRequest(in: .cron(baseURL: cron))
-        XCTAssertEqual(request.url?.absoluteString,
-                       "https://config.jpc.africa/cron/forms/jackpotcity/JZA/1052?api-version=2.0")
     }
 
     func testSubmitBodyUsesSnakeCaseKeysAndTypedFields() throws {
@@ -93,6 +84,17 @@ final class FormSubmitEndpointTests: XCTestCase {
         XCTAssertEqual(error?.message, "An Error Occurred.")
     }
 
+    /// A gateway page served with status 200, or JSON of some other shape, is not a
+    /// registered account.
+    func testABodyThatIsNotTheEnvelopeIsARejection() {
+        for body in ["<html>Access denied</html>", "{}", "[]", #"{"httpStatusCode":200}"#] {
+            guard case .rejected(let error) = FormSubmitParser.parse(Data(body.utf8)) else {
+                return XCTFail("\(body) must not read as success")
+            }
+            XCTAssertNil(error, body)
+        }
+    }
+
     private static let sample = FormSubmission(
         formCodeName: .registration,
         values: [
@@ -107,12 +109,20 @@ final class FormSubmitEndpointTests: XCTestCase {
 
 final class FormRepositoryOperationTests: XCTestCase {
 
-    func testStubFindsAFormByNumericId() async throws {
-        let url = try XCTUnwrap(Bundle.module.url(forResource: "registration", withExtension: "json"))
-        let repo = StubFormRepository(forms: [.registration: try Data(contentsOf: url)], delay: 0)
-        let form = try await repo.form(id: "1052")
-        XCTAssertEqual(form.codeName, .registration)
+    func testStubServesTheBundledForm() async throws {
+        let repo = StubFormRepository(forms: BundledForms.all, delay: 0)
+        let form = try await repo.form(named: .registration)
         XCTAssertEqual(form.id, 1052)
+    }
+
+    func testStubReportsAnUnknownFormAsNotFound() async {
+        let repo = StubFormRepository(forms: BundledForms.all, delay: 0)
+        do {
+            _ = try await repo.form(named: FormName("deposit"))
+            XCTFail("expected a throw")
+        } catch {
+            XCTAssertEqual(error as? FormLoadError, .notFound(FormName("deposit")))
+        }
     }
 
     func testStubSubmitSucceeds() async throws {

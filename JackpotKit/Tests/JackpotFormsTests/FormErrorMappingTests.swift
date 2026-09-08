@@ -1,9 +1,7 @@
 import XCTest
-@testable import JackpotFormsRemote
-import JackpotFormsDomain
+@testable import JackpotForms
 import JackpotNetworking
 import JackpotLocalization
-import JackpotForms
 
 final class CRMEnvironmentTests: XCTestCase {
 
@@ -24,7 +22,7 @@ final class CRMEnvironmentTests: XCTestCase {
 }
 
 /// The server's own wording has to survive the trip from JSON to the screen, and every hop is a
-/// place it could be dropped. `JackpotFormsUI` cannot see `APIError`, so without `FormLoadError`
+/// place it could be dropped. The engine cannot see `APIError`, so without `FormLoadError`
 /// carrying the message across that boundary everything becomes "Something went wrong".
 final class FormErrorMappingTests: XCTestCase {
 

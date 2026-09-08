@@ -1,17 +1,18 @@
 import SwiftUI
 
+// What travels through the environment is what genuinely cascades: the theme, a button's
+// loading state, and the shared focus value a group of fields coordinates on. Per-field data
+// (label, kind, prefix) is an initialiser argument on the field itself.
+
 extension EnvironmentValues {
     @Entry public var jackpotTheme: JackpotTheme = .jackpotCity
-    @Entry public var jackpotValidationMessage: String? = nil
-    @Entry public var jackpotFieldLabel: String? = nil
-    @Entry public var jackpotFieldPrefix: String = ""
-    @Entry public var jackpotFieldSuffix: String = ""
-    @Entry public var jackpotSecureEntry: Bool = false
     @Entry public var jackpotIsLoading: Bool = false
-    @Entry public var jackpotIsSelected: Bool = false
     @Entry public var jackpotFocusedField: Binding<String?>? = nil
     @Entry public var jackpotFieldIdentity: String? = nil
-    @Entry public var jackpotSubmitLabel: SubmitLabel = .return
+
+    /// Set by `jackpotFieldError(_:)` and read by the field chrome, so the invalid ring and the
+    /// message under the control always agree.
+    @Entry var jackpotFieldError: String? = nil
 }
 
 // MARK: - Theme
@@ -24,36 +25,12 @@ public extension View {
     }
 }
 
-// MARK: - Field configuration
-
-public extension View {
-    func jackpotValidationMessage(_ message: String?) -> some View {
-        environment(\.jackpotValidationMessage, message?.isEmpty == false ? message : nil)
-    }
-
-    func jackpotFieldPrefix(_ text: String) -> some View {
-        environment(\.jackpotFieldPrefix, text)
-    }
-
-    func jackpotFieldSuffix(_ text: String) -> some View {
-        environment(\.jackpotFieldSuffix, text)
-    }
-
-    func jackpotSecureEntry(_ isEnabled: Bool = true) -> some View {
-        environment(\.jackpotSecureEntry, isEnabled)
-    }
-}
-
 // MARK: - Control state
 
 public extension View {
     /// Disables as well as spins: a button that spins but still fires is a double submit.
     func jackpotLoading(_ isLoading: Bool = true) -> some View {
         environment(\.jackpotIsLoading, isLoading).disabled(isLoading)
-    }
-
-    func jackpotSelected(_ isSelected: Bool = true) -> some View {
-        environment(\.jackpotIsSelected, isSelected)
     }
 }
 
@@ -68,9 +45,5 @@ public extension View {
 
     func jackpotFieldIdentity(_ identity: String) -> some View {
         environment(\.jackpotFieldIdentity, identity)
-    }
-
-    func jackpotSubmitLabel(_ label: SubmitLabel) -> some View {
-        environment(\.jackpotSubmitLabel, label)
     }
 }

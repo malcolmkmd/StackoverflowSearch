@@ -45,6 +45,7 @@ final class JackpotSpacingTests: XCTestCase {
         XCTAssertEqual(sizes.spacing, JackpotSpacing.sm.rawValue)
         XCTAssertEqual(sizes.contentPadding, JackpotSpacing.m.rawValue)
         XCTAssertEqual(sizes.progressBarHeight, JackpotSpacing.xxs.rawValue)
+        XCTAssertEqual(sizes.panelCornerRadius, JackpotSpacing.lm.rawValue)
         XCTAssertEqual(sizes.fieldShape.cornerSize, CGSize(width: JackpotSpacing.sm.rawValue, height: JackpotSpacing.sm.rawValue))
     }
 
@@ -52,9 +53,7 @@ final class JackpotSpacingTests: XCTestCase {
         _ = EmptyView().padding(.sm)
         _ = EmptyView().padding(.horizontal, .m)
         _ = EmptyView().padding([.horizontal, .bottom], .l)
-        _ = EmptyView().cornerRadius(.sm)
         _ = EmptyView().frame(width: .l, height: .l)
-        _ = EmptyView().shadow(radius: .xxs)
         _ = VStack(spacing: .sm) { EmptyView() }
         _ = HStack(alignment: .top, spacing: .xs) { EmptyView() }
         XCTAssertEqual(EdgeInsets(.sm).top, JackpotSpacing.sm.rawValue)
@@ -68,7 +67,7 @@ final class JackpotColorSchemeTests: XCTestCase {
 
     func testSurfaceAndTextInvertBetweenAppearances() {
         let colors = JackpotColors.jackpotCity
-        for keyPath in [\JackpotColors.surface, \.fieldBackground, \.textPrimary, \.textSecondary] {
+        for keyPath in [\JackpotColors.background, \.surface, \.fieldBackground, \.textPrimary, \.textSecondary] {
             let color = UIColor(colors[keyPath: keyPath])
             XCTAssertNotEqual(color.resolvedColor(with: light),
                               color.resolvedColor(with: dark),
@@ -81,24 +80,28 @@ final class JackpotColorSchemeTests: XCTestCase {
         XCTAssertEqual(color.resolvedColor(with: light), color.resolvedColor(with: dark))
     }
 
-    func testFocusedBorderIsTheSharedEmphasisHexInBothAppearances() {
+    /// The focus ring is the brand blue in both appearances: #E1E1E5 was 1.1:1 on the light
+    /// field fill, so focus was carried by border width alone.
+    func testFocusedBorderIsTheBrandBlueInBothAppearances() {
         let color = JackpotColors.jackpotCity.fieldBorderFocused
-        XCTAssertEqual(hex(color, light), 0xE1E1E5)
-        XCTAssertEqual(hex(color, dark), 0xE1E1E5)
+        XCTAssertEqual(hex(color, light), 0x0060EC)
+        XCTAssertEqual(hex(color, dark), 0x0060EC)
     }
 
     func testLockedTokenHexes() {
         let colors = JackpotColors.jackpotCity
         let expected: [(KeyPath<JackpotColors, Color>, UInt32, UInt32)] = [
-            (\.surface, 0xFFFFFF, 0x131316),
+            (\.background, 0xFFFFFF, 0x131316),
+            (\.surface, 0xF0F0F2, 0x202126),
             (\.fieldBackground, 0xF0F0F2, 0x202126),
             (\.fieldBorder, 0xE1E2E6, 0x3E3E48),
-            (\.fieldBorderFocused, 0xE1E1E5, 0xE1E1E5),
+            (\.fieldBorderFocused, 0x0060EC, 0x0060EC),
             (\.textPrimary, 0x2F2F37, 0xE1E1E5),
             (\.textSecondary, 0x565A63, 0xE1E1E5),
             (\.textOnAccent, 0xFFFFFF, 0xFFFFFF),
             (\.accent, 0x0060EC, 0x4D8FFF),
             (\.accentFill, 0x0060EC, 0x0060EC),
+            (\.accentFillDisabled, 0xD4E4F8, 0x262B3B),
             (\.error, 0xDF0000, 0xFF6B6B),
             (\.warning, 0x945C05, 0xF59E21),
             (\.success, 0x0F7542, 0x33B870),
@@ -115,6 +118,7 @@ final class JackpotColorSchemeTests: XCTestCase {
     func testTextClearsWCAGContrastOnEveryBackgroundItLandsOn() {
         let colors = JackpotColors.jackpotCity
         let backgrounds: [(String, KeyPath<JackpotColors, Color>)] = [
+            ("background", \.background),
             ("surface", \.surface),
             ("fieldBackground", \.fieldBackground),
         ]
@@ -133,13 +137,25 @@ final class JackpotColorSchemeTests: XCTestCase {
                 for (fgName, fg) in foregrounds {
                     let text = flatten(resolve(colors[keyPath: fg], traits), over: background)
                     // #DF0000 on #F0F0F2 is 4.46:1 — the locked brand red, just under 4.5.
-                    let floor: CGFloat = (fgName == "error" && bgName == "fieldBackground"
+                    let floor: CGFloat = (fgName == "error" && bgName != "background"
                                           && traits.userInterfaceStyle == .light) ? 4.4 : 4.5
                     XCTAssertGreaterThanOrEqual(
                         contrastRatio(text, background), floor,
                         "\(fgName) on \(bgName) in \(name(traits)) is unreadable")
                 }
             }
+        }
+    }
+
+    /// The disabled fill sits on `background`; its `textPrimary` label must still be readable.
+    func testDisabledPrimaryLabelClearsContrastOnTheDisabledFill() {
+        let colors = JackpotColors.jackpotCity
+        for traits in [light, dark] {
+            let page = resolve(colors.background, traits)
+            let fill = flatten(resolve(colors.accentFillDisabled, traits), over: page)
+            let label = resolve(colors.textPrimary, traits)
+            XCTAssertGreaterThanOrEqual(contrastRatio(label, fill), 4.5,
+                                        "textPrimary on the dimmed accent in \(name(traits))")
         }
     }
 
@@ -153,16 +169,26 @@ final class JackpotColorSchemeTests: XCTestCase {
         }
     }
 
-    func testFieldFillIsDistinguishableFromTheSurfaceBehindIt() {
+    /// Fields sit on `background`, so that is the pair the fill has to separate from.
+    func testFieldFillIsDistinguishableFromTheBackgroundBehindIt() {
         let colors = JackpotColors.jackpotCity
         for traits in [light, dark] {
             let fill = resolve(colors.fieldBackground, traits)
-            let surface = resolve(colors.surface, traits)
-            XCTAssertNotEqual(fill, surface, "field fill matches the surface in \(name(traits))")
+            let behind = resolve(colors.background, traits)
+            XCTAssertNotEqual(fill, behind, "field fill matches the background in \(name(traits))")
             // 1.05, not 3:1 — the locked fills separate by ~1.14, so this pins the
-            // regression (fill identical to surface) without overruling the design.
-            XCTAssertGreaterThan(contrastRatio(fill, surface), 1.05,
-                                 "field fill is too close to the surface in \(name(traits))")
+            // regression (fill identical to its background) without overruling the design.
+            XCTAssertGreaterThan(contrastRatio(fill, behind), 1.05,
+                                 "field fill is too close to the background in \(name(traits))")
+        }
+    }
+
+    /// The raised layer and the base layer must differ, or a sheet header stops reading as a band.
+    func testSurfaceIsDistinguishableFromTheBackground() {
+        let colors = JackpotColors.jackpotCity
+        for traits in [light, dark] {
+            XCTAssertNotEqual(resolve(colors.surface, traits), resolve(colors.background, traits),
+                              "surface matches background in \(name(traits))")
         }
     }
 

@@ -1,10 +1,13 @@
 import SwiftUI
 
+// MARK: - Background
+
+/// Fill, hairline and the focused / invalid ring every field shares.
 public struct JackpotFieldBackground: ViewModifier {
     private let isFocused: Bool
 
     @Environment(\.jackpotTheme) private var theme
-    @Environment(\.jackpotValidationMessage) private var validationMessage
+    @Environment(\.jackpotFieldError) private var error
     @Environment(\.isEnabled) private var isEnabled
 
     public init(isFocused: Bool = false) {
@@ -25,7 +28,7 @@ public struct JackpotFieldBackground: ViewModifier {
     private enum Emphasis: Equatable { case none, focused, invalid }
 
     private var emphasis: Emphasis {
-        if validationMessage != nil { return .invalid }
+        if error != nil { return .invalid }
         return isFocused ? .focused : .none
     }
 
@@ -49,78 +52,73 @@ public extension View {
     }
 }
 
-struct JackpotFloatingLabel: View {
-    let title: String
-    let isFloating: Bool
-    var isFocused: Bool = false
+// MARK: - Error row
 
-    @Environment(\.jackpotTheme) private var theme
-
-    var body: some View {
-        Text(title)
-            .font(isFloating ? theme.typography.label : theme.typography.fieldText)
-            .environment(\.font, isFloating ? theme.typography.label : theme.typography.fieldText)
-            .foregroundStyle(labelColor)
-            .scaleEffect(isFloating ? 0.75 : 1, anchor: .leading)
-            .lineLimit(1)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
-
-    private var labelColor: Color {
-        if isFloating {
-            return isFocused ? theme.colors.accent : theme.colors.textPrimary
-        }
-        return theme.colors.textSecondary
+public extension View {
+    /// Marks a field invalid: the chrome draws the invalid ring and `message` appears beneath
+    /// the control. Nil or empty clears both. Apply it to the whole field, not just the input.
+    func jackpotFieldError(_ message: String?) -> some View {
+        modifier(JackpotFieldErrorRow(message: message?.isEmpty == false ? message : nil))
     }
 }
 
-// MARK: - Form row
+private struct JackpotFieldErrorRow: ViewModifier {
+    let message: String?
 
-public struct JackpotLabeledField<Content: View>: View {
-    private let label: String?
-    private let error: String?
+    func body(content: Content) -> some View {
+        VStack(alignment: .leading, spacing: .xs) {
+            content.environment(\.jackpotFieldError, message)
+
+            if let message {
+                Text(message)
+                    .jackpotTextStyle(\.error, color: \.error)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Error: \(message)")
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: message)
+    }
+}
+
+// MARK: - Floating label
+
+/// The in-field label the text field, dropdown and date field share. It sits where a
+/// placeholder would and rises to the top edge of the control when the field is focused or
+/// holds a value; `content` is the value drawn beneath it.
+struct JackpotFloatingField<Content: View>: View {
+    private let title: String
+    private let isFloating: Bool
+    private let isFocused: Bool
     private let content: Content
+    private let raisedLabelOffset: CGFloat = -16
 
-    public init(_ label: String? = nil, error: String? = nil, @ViewBuilder content: () -> Content) {
-        self.label = label
-        self.error = error
+    @Environment(\.jackpotTheme) private var theme
+
+    init(_ title: String, isFloating: Bool, isFocused: Bool = false, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.isFloating = isFloating
+        self.isFocused = isFocused
         self.content = content()
     }
 
-    public var body: some View {
-        VStack(alignment: .leading, spacing: .xs) {
-            if let label, !label.isEmpty {
-                Text(label).jackpotTextStyle(\.label, color: \.textSecondary)
-            }
-
+    var body: some View {
+        ZStack(alignment: .leading) {
             content
-                .jackpotValidationMessage(error)
-                .environment(\.jackpotFieldLabel, label)
+                .padding(.top, isFloating ? theme.sizes.spacing : 0)
 
-            if let error, !error.isEmpty {
-                Text(error)
-                    .jackpotTextStyle(\.error, color: \.error)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityLabel("Error: \(error)")
-            }
+            Text(title)
+                .jackpotFont(\.fieldText)
+                .foregroundStyle(theme.colors.textPrimary)
+                .lineLimit(1)
+                .scaleEffect(isFloating ? 0.85 : 1, anchor: .leading)
+                .offset(y: isFloating ? raisedLabelOffset : 0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
-        .animation(.easeOut(duration: 0.2), value: error)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, theme.sizes.contentPadding)
+        .frame(height: theme.sizes.controlHeight)
+        .animation(.easeOut(duration: 0.15), value: isFloating)
     }
 }
 
-// MARK: - Divider
-
-public struct JackpotDivider: View {
-    @Environment(\.jackpotTheme) private var theme
-
-    public init() {}
-
-    public var body: some View {
-        Rectangle()
-            .fill(theme.colors.fieldBorder)
-            .frame(height: 1)
-            .padding(.vertical, .xxs)
-            .accessibilityHidden(true)
-    }
-}

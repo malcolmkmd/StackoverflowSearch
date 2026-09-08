@@ -1,6 +1,5 @@
 import XCTest
-@testable import JackpotFormsData
-import JackpotFormsDomain
+@testable import JackpotForms
 
 final class FieldValidatorTests: XCTestCase {
 
@@ -11,11 +10,8 @@ final class FieldValidatorTests: XCTestCase {
                        inputType: InputType = .text,
                        required: Bool = true,
                        regex: String?) -> FormField {
-        FormField(id: 1, identifier: identifier, name: identifier, labelKey: identifier,
-                  type: type, inputType: inputType, textStyle: "Regular",
-                  validationMessageKey: "regex", isRequired: required, isVisible: true, isReadOnly: false,
-                  regex: regex, prefix: "", suffix: "", placeholderKey: identifier,
-                  dropdownOptions: [], radioOptions: [])
+        FormField(id: 1, identifier: identifier, type: type, inputType: inputType,
+                  isRequired: required, regex: regex)
     }
 
     // MARK: Real patterns from the registration schema
@@ -79,13 +75,11 @@ final class FieldValidatorTests: XCTestCase {
     }
 
     func testReadOnlyAndInvisibleFieldsAreNeverInvalid() {
-        var f = field("a", regex: "^impossible$")
-        f = FormField(id: f.id, identifier: f.identifier, name: f.name, labelKey: f.labelKey,
-                      type: f.type, inputType: f.inputType, textStyle: f.textStyle,
-                      validationMessageKey: f.validationMessageKey, isRequired: true,
-                      isVisible: false, isReadOnly: false, regex: f.regex,
-                      prefix: "", suffix: "", placeholderKey: "", dropdownOptions: [], radioOptions: [])
-        XCTAssertTrue(validator.validate(.text(""), against: f).isValid)
+        let hidden = FormField(id: 1, identifier: "a", isRequired: true, isVisible: false, regex: "^impossible$")
+        XCTAssertTrue(validator.validate(.text(""), against: hidden).isValid)
+
+        let readOnly = FormField(id: 2, identifier: "b", isRequired: true, isReadOnly: true, regex: "^impossible$")
+        XCTAssertTrue(validator.validate(.text(""), against: readOnly).isValid)
     }
 
     // MARK: Named regexes (the ID-type → ID-number dependency)

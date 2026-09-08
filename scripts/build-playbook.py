@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Rebuild docs/BUILD-PLAYBOOK.md (and .pdf) from the files actually on disk.
 
-Documents the registration flow (`DynamicFormView(formName: .registration)` +
-`registration.json`) and the registration-only preview harness. Shared sources
-are shown as the registration-used slice.
+Documents the registration path: `RegistrationView` over `DynamicFormView(formName:
+.registration)`, fed by the bundled `registration.json` or the live CRM schema.
 
-Every code block in the playbook is read from source at build time, so the document cannot
-drift from the code it documents. Content is recorded once as a list of structured blocks and
-rendered twice, so the Markdown and the PDF cannot drift from each other either.
+Every code block is read from the repository at build time and emitted verbatim, so the
+document cannot drift from the code it documents. Content is recorded once as a list of
+structured blocks and rendered twice, so the Markdown and the PDF cannot drift from each
+other either.
 
     python3 scripts/build-playbook.py          # Markdown — stdlib only
-    python3 scripts/build-playbook.py --pdf    # Markdown + PDF
+    python3 scripts/build-playbook.py --pdf    # Markdown + PDF (not committed; see below)
 
 The PDF renderer needs a little setup:
 
@@ -19,7 +19,8 @@ The PDF renderer needs a little setup:
     .venv/bin/python scripts/build-playbook.py --pdf
 
 Adding a file to a PR means adding it to that PR's `files([...])` list below; the step
-numbering, the outline and the contents page all follow from the order of those lists.
+numbering and the contents page follow from the order of those lists. Update TESTS from the
+last suite run.
 """
 
 import os, sys, html, re
@@ -30,6 +31,15 @@ OUT_PDF = os.path.join(ROOT, "docs/BUILD-PLAYBOOK.pdf")
 
 SIM = "'platform=iOS Simulator,name=iPhone 17 Pro'"
 TEST_CMD = f"cd JackpotKit\nxcodebuild -scheme JackpotKit-Package -destination {SIM} test"
+
+# Executed-test counts per suite, from the last `xcodebuild … test` run.
+TESTS = {
+    "JackpotUITests": 20,
+    "JackpotNetworkingTests": 34,
+    "JackpotLocalizationTests": 16,   # TranslationsTests; the store's 6 are the follow-up
+    "JackpotFormsTests": 83,
+    "JackpotRegistrationTests": 11,
+}
 
 blocks = []
 step = 0
@@ -61,15 +71,13 @@ def swift_literal(label, body, note=None, suffix=""):
     fence("swift", body)
 
 
-def file_step(rel, note=None, transform=None):
+def file_step(rel, note=None):
     global step
     full = os.path.join(ROOT, rel)
     if not os.path.exists(full):
         sys.exit(f"missing: {rel}")
     with open(full) as f:
         body = f.read()
-    if transform:
-        body = transform(body, rel)
     step += 1
     text(f"**{step}.** `{rel}`")
     if note:
@@ -85,355 +93,6 @@ def files(pairs):
             file_step(item)
 
 
-def require_replace(body, old, new, rel):
-    if old not in body:
-        sys.exit(f"playbook excerpt ({rel}): missing {old!r}")
-    return body.replace(old, new, 1)
-
-
-def drop_from_marker(body, marker, rel):
-    idx = body.find(marker)
-    if idx == -1:
-        sys.exit(f"playbook excerpt ({rel}): missing marker {marker!r}")
-    return body[:idx].rstrip() + "\n"
-
-
-def registration_button_style(body, rel):
-    body = require_replace(body, "        case primary\n        case secondary\n        case tertiary\n",
-                           "        case primary\n        case secondary\n", rel)
-    body = require_replace(body, "            case .primary:\n"
-                                 "                theme.sizes.fieldShape.fill(isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill)\n"
-                                 "            case .secondary:\n"
-                                 "                JackpotButtonHairline(fill: theme.colors.surface)\n"
-                                 "            case .tertiary:\n"
-                                 "                theme.sizes.fieldShape.fill(Color.clear)\n",
-                           "            case .primary:\n"
-                           "                theme.sizes.fieldShape.fill(isDimmed ? theme.colors.fieldBackground : theme.colors.accentFill)\n"
-                           "            case .secondary:\n"
-                           "                JackpotButtonHairline(fill: theme.colors.surface)\n", rel)
-    body = require_replace(body, "            case .primary:   return isDimmed ? theme.colors.textSecondary : theme.colors.textOnAccent\n"
-                                 "            case .secondary: return isDimmed ? theme.colors.textSecondary : theme.colors.textPrimary\n"
-                                 "            case .tertiary:  return isDimmed ? theme.colors.textSecondary : theme.colors.accent\n",
-                           "            case .primary:   return isDimmed ? theme.colors.textSecondary : theme.colors.textOnAccent\n"
-                           "            case .secondary: return isDimmed ? theme.colors.textSecondary : theme.colors.textPrimary\n", rel)
-    return drop_from_marker(body, "// MARK: - Selectable card", rel)
-
-
-def registration_toggle_style(body, rel):
-    body = require_replace(body, "        case checkbox\n        case `switch`\n",
-                           "        case checkbox\n", rel)
-    body = require_replace(body, "            switch appearance {\n            case .checkbox: checkbox\n            case .switch:   platformSwitch\n            }\n",
-                           "            checkbox\n", rel)
-    body = require_replace(body, "        private var platformSwitch: some View {\n"
-                                 "            Toggle(configuration)\n"
-                                 "                .toggleStyle(.switch)\n"
-                                 "                .jackpotTextStyle(\\.rowLabel)\n"
-                                 "        }\n\n",
-                           "", rel)
-    return require_replace(body, "    static var jackpotCheckbox: JackpotToggleStyle { JackpotToggleStyle(.checkbox) }\n"
-                                 "    static var jackpotSwitch: JackpotToggleStyle { JackpotToggleStyle(.switch) }\n",
-                           "    static var jackpotCheckbox: JackpotToggleStyle { JackpotToggleStyle(.checkbox) }\n", rel)
-
-
-def registration_field_chrome(body, rel):
-    return drop_from_marker(body, "// MARK: - Divider", rel)
-
-
-def registration_field_kind(body, rel):
-    return require_replace(body, "    public static let oneTimeCode = JackpotFieldKind(keyboard: .numberPad,\n"
-                                 "                                                     contentType: .oneTimeCode,\n"
-                                 "                                                     capitalization: .never,\n"
-                                 "                                                     disablesAutocorrection: true)\n\n",
-                           "", rel)
-
-
-def registration_theme(body, rel):
-    body = require_replace(body, "    /// Accent as *text* and tint — tertiary labels, selected shell. This is the Android\n",
-                           "    /// Accent as *text* and tint — selected shell. This is the Android\n", rel)
-    return require_replace(body, "    public var progressBarHeight: CGFloat = JackpotSpacing.xxs.rawValue\n"
-                                 "    public var textAreaMinHeight: CGFloat = 110\n"
-                                 "    public var cardMinHeight: CGFloat = 140\n",
-                           "    public var progressBarHeight: CGFloat = JackpotSpacing.xxs.rawValue\n", rel)
-
-
-def registration_form_field(body, rel):
-    body = require_replace(
-        body,
-        "public enum FieldType: Equatable, Hashable, Sendable {\n"
-        "    case input\n"
-        "    case button\n"
-        "    case checkbox\n"
-        "    case radio\n"
-        "    case radioGroup\n"
-        "    case dropdown\n"
-        "    case divider\n"
-        "    case textArea\n"
-        "    case recaptchaV2\n"
-        "    case recaptchaV3\n"
-        "    case toggle\n"
-        "    case welcomeOffer\n"
-        "    case unknown(String)\n"
-        "\n"
-        "    public init(raw: String) {\n"
-        "        switch raw.lowercased().replacingOccurrences(of: \" \", with: \"\") {\n"
-        "        case \"input\":                    self = .input\n"
-        "        case \"button\":                   self = .button\n"
-        "        case \"checkbox\":                 self = .checkbox\n"
-        "        case \"radio\":                    self = .radio\n"
-        "        case \"radiogroup\":               self = .radioGroup\n"
-        "        case \"dropdown\", \"select\":       self = .dropdown\n"
-        "        case \"divider\":                  self = .divider\n"
-        "        case \"textarea\":                 self = .textArea\n"
-        "        case \"recapchav2\", \"recaptchav2\": self = .recaptchaV2\n"
-        "        case \"recapchav3\", \"recaptchav3\": self = .recaptchaV3\n"
-        "        case \"toggle\":                   self = .toggle\n"
-        "        case \"welcomeoffer\":             self = .welcomeOffer\n"
-        "        default:                         self = .unknown(raw)\n"
-        "        }\n"
-        "    }\n"
-        "\n"
-        "    /// Layout-only types hold no value and are never validated or submitted.\n"
-        "    public var isDecorative: Bool {\n"
-        "        switch self {\n"
-        "        case .divider, .button: return true\n"
-        "        default:                return false\n"
-        "        }\n"
-        "    }\n"
-        "}\n",
-        "public enum FieldType: Equatable, Hashable, Sendable {\n"
-        "    case input\n"
-        "    case checkbox\n"
-        "    case dropdown\n"
-        "    case unknown(String)\n"
-        "\n"
-        "    public init(raw: String) {\n"
-        "        switch raw.lowercased().replacingOccurrences(of: \" \", with: \"\") {\n"
-        "        case \"input\":              self = .input\n"
-        "        case \"checkbox\":           self = .checkbox\n"
-        "        case \"dropdown\", \"select\": self = .dropdown\n"
-        "        default:                   self = .unknown(raw)\n"
-        "        }\n"
-        "    }\n"
-        "}\n",
-        rel,
-    )
-    body = require_replace(
-        body,
-        "\npublic struct RadioOption: Identifiable, Equatable, Hashable, Sendable {\n"
-        "    public let value: String\n"
-        "    public let textKey: String\n"
-        "\n"
-        "    public var id: String { value }\n"
-        "\n"
-        "    public init(value: String, textKey: String) {\n"
-        "        self.value = value\n"
-        "        self.textKey = textKey\n"
-        "    }\n"
-        "}\n",
-        "",
-        rel,
-    )
-    body = require_replace(body, "    public let dropdownOptions: [DropdownOption]\n"
-                                 "    public let radioOptions: [RadioOption]\n",
-                           "    public let dropdownOptions: [DropdownOption]\n", rel)
-    body = require_replace(body, "                dropdownOptions: [DropdownOption], radioOptions: [RadioOption]) {",
-                           "                dropdownOptions: [DropdownOption]) {", rel)
-    body = require_replace(body, "        self.dropdownOptions = dropdownOptions\n"
-                                 "        self.radioOptions = radioOptions\n",
-                           "        self.dropdownOptions = dropdownOptions\n", rel)
-    return require_replace(body, "        isVisible && !type.isDecorative && !(type == .recaptchaV2 || type == .recaptchaV3)\n",
-                           "        isVisible\n", rel)
-
-
-def registration_form_dto(body, rel):
-    body = require_replace(body, "    let fieldDropdowns: [FieldDropdownDTO]?\n"
-                                 "    let fieldRadioGroup: [FieldRadioDTO]?\n",
-                           "    let fieldDropdowns: [FieldDropdownDTO]?\n", rel)
-    return require_replace(
-        body,
-        "\npublic struct FieldRadioDTO: Decodable {\n"
-        "    let value: String\n"
-        "    let text: String?\n"
-        "}\n",
-        "",
-        rel,
-    )
-
-
-def registration_form_mapper(body, rel):
-    return require_replace(
-        body,
-        "            dropdownOptions: (dto.fieldDropdowns ?? []).map {\n"
-        "                DropdownOption(value: $0.value, textKey: $0.text ?? $0.value, regex: $0.regex)\n"
-        "            },\n"
-        "            radioOptions: (dto.fieldRadioGroup ?? []).map {\n"
-        "                RadioOption(value: $0.value, textKey: $0.text ?? $0.value)\n"
-        "            }\n",
-        "            dropdownOptions: (dto.fieldDropdowns ?? []).map {\n"
-        "                DropdownOption(value: $0.value, textKey: $0.text ?? $0.value, regex: $0.regex)\n"
-        "            }\n",
-        rel,
-    )
-
-
-def registration_environment(body, rel):
-    body = require_replace(body, "    @Entry public var jackpotIsLoading: Bool = false\n"
-                                 "    @Entry public var jackpotIsSelected: Bool = false\n",
-                           "    @Entry public var jackpotIsLoading: Bool = false\n", rel)
-    return require_replace(
-        body,
-        "\n    func jackpotSelected(_ isSelected: Bool = true) -> some View {\n"
-        "        environment(\\.jackpotIsSelected, isSelected)\n"
-        "    }\n",
-        "",
-        rel,
-    )
-
-
-def registration_validator_tests(body, rel):
-    return body.replace(", radioOptions: []", "")
-
-
-def registration_form_model(body, rel):
-    return require_replace(
-        body,
-        "        switch field.type {\n"
-        "        case .checkbox, .toggle: return .bool(false)\n"
-        "        case .dropdown, .radio, .radioGroup: return .option(\"\")\n"
-        "        default: return field.inputType == .calendar ? .empty : .text(\"\")\n"
-        "        }\n",
-        "        switch field.type {\n"
-        "        case .checkbox: return .bool(false)\n"
-        "        case .dropdown: return .option(\"\")\n"
-        "        default: return field.inputType == .calendar ? .empty : .text(\"\")\n"
-        "        }\n",
-        rel,
-    )
-
-
-def registration_field_renderer(body, rel):
-    body = require_replace(
-        body,
-        "        switch field.type {\n"
-        "        case .input:                    InputFieldView(field: field, model: model)\n"
-        "        case .textArea:                 TextAreaFieldView(field: field, model: model)\n"
-        "        case .dropdown:                 DropdownFieldView(field: field, model: model)\n"
-        "        case .checkbox:                 CheckboxFieldView(field: field, model: model)\n"
-        "        case .toggle:                   ToggleFieldView(field: field, model: model)\n"
-        "        case .radio, .radioGroup:       RadioGroupFieldView(field: field, model: model)\n"
-        "        case .divider:                  JackpotDivider()\n"
-        "        case .welcomeOffer:             WelcomeOfferFieldView(field: field, model: model)\n"
-        "        case .button:                   EmptyView()          // the form's footer owns navigation\n"
-        "        case .recaptchaV2, .recaptchaV3: RecaptchaPlaceholderView(field: field)\n"
-        "        case .unknown:                  EmptyView()          // reported via model.unsupportedFields\n"
-        "        }\n",
-        "        switch field.type {\n"
-        "        case .input:    InputFieldView(field: field, model: model)\n"
-        "        case .dropdown: DropdownFieldView(field: field, model: model)\n"
-        "        case .checkbox: CheckboxFieldView(field: field, model: model)\n"
-        "        default:        EmptyView()\n"
-        "        }\n",
-        rel,
-    )
-    body = require_replace(
-        body,
-        "\n/// reCAPTCHA needs a `WKWebView` bridge. The type is recognised without one so the form still\n"
-        "/// renders and validates around it.\n"
-        "struct RecaptchaPlaceholderView: View {\n"
-        "    let field: FormField\n"
-        "    @Environment(\\.jackpotTheme) private var theme\n"
-        "\n"
-        "    var body: some View {\n"
-        "        #if DEBUG\n"
-        "        Text(\"reCAPTCHA (\\(field.identifier)) — not implemented\")\n"
-        "            .jackpotTextStyle(\\.error, color: \\.textSecondary)\n"
-        "            .frame(maxWidth: .infinity, minHeight: 60)\n"
-        "            .jackpotFieldBackground()\n"
-        "        #else\n"
-        "        EmptyView()\n"
-        "        #endif\n"
-        "    }\n"
-        "}\n",
-        "",
-        rel,
-    )
-    body = require_replace(body, "    /// Only single-line text entry joins return-key navigation. A date opens a picker, and a\n"
-                                 "    /// text area needs the return key for newlines.\n",
-                           "    /// Only single-line text entry joins return-key navigation. A date opens a picker.\n", rel)
-    body = require_replace(body, "    /// Selection binding for dropdowns and radio groups. An empty selection is `.option(\"\")`.\n",
-                           "    /// Selection binding for dropdowns. An empty selection is `.option(\"\")`.\n", rel)
-    return require_replace(
-        body,
-        "\n    func radioOptions(for field: FormField) -> [JackpotOption] {\n"
-        "        field.radioOptions.map { JackpotOption(id: $0.value, label: localized($0.textKey)) }\n"
-        "    }\n",
-        "",
-        rel,
-    )
-
-
-def registration_checkbox_field(body, rel):
-    return require_replace(
-        body,
-        "\nstruct ToggleFieldView: View {\n"
-        "    let field: FormField\n"
-        "    @ObservedObject var model: DynamicFormModel\n"
-        "\n"
-        "    var body: some View {\n"
-        "        JackpotLabeledField(error: model.error(for: field)) {\n"
-        "            Toggle(model.localized(field.labelKey), isOn: model.bool(for: field))\n"
-        "                .toggleStyle(.jackpotSwitch)\n"
-        "                .disabled(field.isReadOnly)\n"
-        "        }\n"
-        "    }\n"
-        "}\n",
-        "",
-        rel,
-    )
-
-
-def registration_preview_fixtures(body, rel):
-    body = require_replace(body, "                             dropdowns: [DropdownOption] = [],\n"
-                                 "                             radios: [RadioOption] = []) -> FormField {\n",
-                           "                             dropdowns: [DropdownOption] = []) -> FormField {\n", rel)
-    body = require_replace(body, "            dropdownOptions: dropdowns,\n"
-                                 "            radioOptions: radios\n",
-                           "            dropdownOptions: dropdowns\n", rel)
-    body = require_replace(
-        body,
-        "    public static let notes = field(\"notes\", type: .textArea, label: \"Notes\",\n"
-        "                                    placeholder: \"Anything else?\", required: false)\n"
-        "\n"
-        "    public static let contactMethod = field(\n"
-        "        \"contactMethod\", type: .radioGroup, label: \"Preferred contact method\", required: true,\n"
-        "        regex: \"^.+$\",\n"
-        "        radios: [\n"
-        "            RadioOption(value: \"sms\", textKey: \"SMS\"),\n"
-        "            RadioOption(value: \"email\", textKey: \"Email\"),\n"
-        "            RadioOption(value: \"whatsapp\", textKey: \"WhatsApp\"),\n"
-        "        ]\n"
-        "    )\n"
-        "\n"
-        "    public static let welcomeOffer = field(\n"
-        "        \"welcomeOffer\", type: .welcomeOffer, label: \"Select your Welcome Offer:\", required: false,\n"
-        "        dropdowns: [\n"
-        "            DropdownOption(value: \"depositMatch\", textKey: \"100% Deposit Match\", regex: nil),\n"
-        "            DropdownOption(value: \"freeSpins\", textKey: \"50 Free Spins\", regex: nil),\n"
-        "        ]\n"
-        "    )\n\n",
-        "",
-        rel,
-    )
-    return require_replace(body, "    /// Values that make section one valid — useful for previewing the unlocked\n"
-                                 "    /// Welcome Offer and the enabled Next button.\n",
-                           "    /// Values that make section one valid — useful for previewing the enabled Next button.\n", rel)
-
-
-def registration_input_field(body, rel):
-    return require_replace(body, "        case \"otp\", \"pin\", \"code\":                 return .oneTimeCode\n",
-                           "", rel)
-
-
 def table(headers, rows):
     blocks.append(("table", (headers, rows)))
 
@@ -442,125 +101,122 @@ def rule():
     blocks.append(("hr", None))
 
 
+def executed(*suites):
+    return "\n".join(f"`{s}: Executed {TESTS[s]} tests, with 0 failures`" for s in suites)
+
+
 # ---------------------------------------------------------------- header
 
 text("# Build Playbook")
 text(
     "Create the files in the order given. Run the commands where they appear. Open a PR where\n"
-    "marked. Shared sources are reproduced as registration uses them."
+    "marked. Every code block is the file exactly as it is in the repository."
 )
 text(
-    "This playbook documents the **registration** path and the **preview harness** that renders\n"
-    "those same twelve fields. Registration is `DynamicFormView(formName: .registration)` driven\n"
-    "by `JackpotKit/Sources/JackpotFormsUI/Resources/registration.json` (mirrored under Tests).\n"
-    "The live CRM schema at `config.jpc.africa/cron/forms/jackpotcity/JZA/registration` uses the\n"
-    "same `fieldType` set. Shared theme tokens stay because those screens consume them."
+    "This playbook covers the **registration** path: `RegistrationView` hosts\n"
+    "`DynamicFormView(formName: .registration)`, which renders either the bundled\n"
+    "`JackpotKit/Sources/JackpotForms/Resources/registration.json` or the live CRM schema at\n"
+    "`config.jpc.africa/cron/forms/jackpotcity/JZA/registration` — the same twelve fields."
 )
 text(
-    "`JackpotKit` is one package; each folder under `Sources/` is a module, and later PRs append\n"
-    "targets to the same manifest. The whole suite runs in a simulator via\n"
+    "`JackpotKit` is one package; each folder under `Sources/` is a module. Registration is\n"
+    "carried by four of them — `JackpotUI` (design system), `JackpotNetworking` (transport),\n"
+    "`JackpotForms` (the schema-driven engine) and `JackpotRegistration` (the feature) — plus\n"
+    "the `Translations` value type from `JackpotLocalization`. `JackpotAppData` and the store half\n"
+    "of `JackpotLocalization` are the app-data follow-up\n"
+    "([ADR-0001](adr/0001-app-data-decoding-and-configuration-decomposition.md)); the manifest\n"
+    "lists them, so copy their files from the repository or drop those two targets until you\n"
+    "need them. They are not covered here."
+)
+text(
+    "The floor is iOS 15, the host app's. The whole suite runs in a simulator via\n"
     "`xcodebuild -scheme JackpotKit-Package` — there is no macOS destination, because `JackpotUI`\n"
     "imports `UIKit`."
 )
-text("**153 tests** through PR 5.")
+text(f"**{sum(TESTS.values())} tests** through PR 5.")
 text("### Registration catalog")
 text(
-    "Twelve fields over two sections. Re-checked against the bundled fixture, the test fixture,\n"
-    "and the live CRM response. The `fieldType` values on registration are **Input**,\n"
-    "**Dropdown**, and **Checkbox**. Date of birth is `Input` + `inputType: Calender` (the schema\n"
-    "spelling)."
+    "Twelve fields over two sections, checked against the bundled capture and the live CRM\n"
+    "response. The `fieldType` values on registration are **Input**, **Dropdown** and\n"
+    "**Checkbox**; `FieldType` has exactly those three cases plus `unknown`. Date of birth is\n"
+    "`Input` + `inputType: Calender` (the schema spelling)."
 )
 table(
     ["Step", "Identifier", "`fieldType`", "`inputType`", "Renders as"],
     [
-        ["1.1", "`username`", "Input", "Number", "`JackpotTextField` + `+27` prefix (bundled), `.phoneNumber` / `.number`"],
-        ["1.2", "`password`", "Input", "Password", "`JackpotTextField` + `JackpotChecklist` while focused"],
-        ["1.3", "`firstname`", "Input", "Text", "`JackpotTextField`, `.givenName`"],
-        ["1.4", "`lastname`", "Input", "Text", "`JackpotTextField`, `.familyName`"],
-        ["1.5", "`email`", "Input", "Email", "`JackpotTextField`, `.email`"],
-        ["1.6", "`referralCode`", "Input", "Text", "`JackpotTextField` (optional)"],
-        ["2.1", "`idNumberType`", "Dropdown", "Text", "`JackpotDropdown` (drives `idNumber` regex)"],
+        ["1.1", "`username`", "Input", "Number", "`JackpotTextField` · `.phoneNumber` · `+27` prefix"],
+        ["1.2", "`password`", "Input", "Password", "`JackpotTextField` · `.newPassword` · `JackpotChecklist` while focused"],
+        ["1.3", "`firstname`", "Input", "Text", "`JackpotTextField` · `.givenName`"],
+        ["1.4", "`lastname`", "Input", "Text", "`JackpotTextField` · `.familyName`"],
+        ["1.5", "`email`", "Input", "Email", "`JackpotTextField` · `.email`"],
+        ["1.6", "`referralCode`", "Input", "Text", "`JackpotTextField` · optional"],
+        ["2.1", "`idNumberType`", "Dropdown", "Text", "`JackpotDropdown` · drives the `idNumber` regex"],
         ["2.2", "`idNumber`", "Input", "Text", "`JackpotTextField`"],
-        ["2.3", "`dateOfBirth`", "Input", "Calender", "`JackpotDateField`"],
+        ["2.3", "`dateOfBirth`", "Input", "Calender", "`JackpotDateField` · capped at 18 years ago"],
         ["2.4", "`sourceOfFunds`", "Dropdown", "Text", "`JackpotDropdown`"],
-        ["2.5", "`receivePromotionalInformation`", "Checkbox", "Text", "Toggle + `.jackpotCheckbox`"],
-        ["2.6", "`terms`", "Checkbox", "Text", "Toggle + `.jackpotCheckbox` (required `^true$`)"],
+        ["2.5", "`receivePromotionalInformation`", "Checkbox", "Text", "`Toggle` · `.jackpotCheckbox`"],
+        ["2.6", "`terms`", "Checkbox", "Text", "`Toggle` · `.jackpotCheckbox` · required `^true$`"],
     ],
 )
 text(
-    "Live CRM matches those twelve identifiers and three `fieldType`s. The bundled capture still\n"
-    "ships `username.prefix = \"+27\"`; the live payload currently leaves prefix empty (the view\n"
-    "still maps `username` to `.phoneNumber`)."
+    "The bundled capture ships `username.prefix = \"+27\"`; the live payload currently leaves\n"
+    "prefix empty (the view still maps `username` to `.phoneNumber`)."
 )
 text(
-    "Input and Dropdown keep the label **inside** the control: it sits in the field and floats\n"
-    "to the top edge on focus or when the field has a value. `dateOfBirth` keeps\n"
-    "`JackpotLabeledField` above `JackpotDateField`. Checkboxes keep the toggle label. Error\n"
-    "text stays below the control."
-)
-text(
-    "The form shell actually uses: `JackpotLabeledField` (above-field label on date; error\n"
-    "shell on Input / Dropdown / Checkbox), `FormNavigationBar` with `.jackpot` /\n"
-    "`.jackpot(.secondary)` (Next / Sign Up / Previous — see below), `.jackpotBar` progress,\n"
-    "`JackpotErrorView` on load failure, and the locked colour / spacing / size tokens below."
+    "Every field keeps its label **inside** the control: it sits where a placeholder would and\n"
+    "floats to the top edge on focus or once there is a value (`JackpotFloatingField`). Error\n"
+    "text sits beneath the control and the ring turns red, both from one modifier,\n"
+    "`.jackpotFieldError(_:)`. Field data — label, kind, prefix — is an initialiser argument on\n"
+    "the field; only the theme, a button's loading state and the shared focus value travel\n"
+    "through the environment."
 )
 text("### How to go to the next screen")
 text(
-    "The gold/blue button at the bottom of registration is **host shell** on\n"
-    "`FormNavigationBar` in `DynamicFormView.swift`. `RegistrationView` is a thin wrapper\n"
-    "around `DynamicFormView`. The bundled `registration.json` and the live CRM schema\n"
-    "(`GET …/cron/forms/jackpotcity/JZA/registration?api-version=2.0`) are the twelve fields\n"
-    "above — paging is not a field."
+    "The buttons at the bottom of registration are `FormNavigationBar` in `DynamicFormView.swift`,\n"
+    "which registration places in the panel's footer under the login row. `RegistrationView`\n"
+    "owns a `DynamicFormModel` and composes `DynamicFormContent` (the pages) and\n"
+    "`FormNavigationBar` around it; `DynamicFormView` is the same two stacked, for hosts that\n"
+    "want the bar under the pages. The bundled `registration.json` and the live CRM schema are\n"
+    "the twelve fields above — paging is not a field."
 )
 table(
     ["Visible control", "Style", "When", "Action"],
     [
-        ["**Next**", "`.jackpot` (primary)", "Section 1 — not last", "`advance()` → `DynamicFormModel.advance()`"],
+        ["**Next**", "`.jackpot` (primary)", "Section 1 — not last", "`DynamicFormModel.advance()`"],
         ["**Previous**", "`.jackpot(.secondary)`", "Section 2+", "`goBack()` — values kept"],
         ["**Sign Up**", "`.jackpot` (primary)", "Last section", "`model.submit(onSubmit)`"],
     ],
 )
 text(
-    "`Next` stays **disabled** until every value-carrying field on the visible section\n"
-    "validates (`isCurrentSectionValid`). Tapping it marks the section touched, revalidates,\n"
-    "and if valid increments `sectionIndex` (step 1 → step 2). `Sign Up` stays disabled until\n"
-    "`isFormValid`, then `RegistrationView`'s callback calls `RegistrationService.register`.\n"
-    "A progress bar (`.jackpotBar`) sits above the scroll view when `sections.count > 1`.\n"
-    "Previous is `surface` + `fieldBorder` + `textPrimary`. Next / Sign Up use `accentFill` +\n"
-    "`textOnAccent` when enabled, and the field-fill disabled treatment when not."
+    "`Next` stays **disabled** — the accent fill dimmed to `accentFillDisabled` under\n"
+    "`textPrimary` — until every visible field on the current section validates\n"
+    "(`isCurrentSectionValid`). Tapping it marks the section touched, revalidates, and if valid\n"
+    "increments `sectionIndex`. `Sign Up` stays disabled until `isFormValid`, then\n"
+    "`RegistrationView`'s callback calls `RegistrationService.register`. A progress bar\n"
+    "(`.jackpotBar`) sits above the scroll view when `sections.count > 1`."
 )
-text("### Registration preview path")
+text("### Registration rules and the preview path")
 text(
-    "`kitchenSink.json` is the bundled **registration-fields** schema — the same twelve\n"
-    "identifiers and three `fieldType`s as `registration.json`."
-)
-text(
-    "1. **Schema.** `JackpotFormsUI/Resources/kitchenSink.json` — `formCodeName: kitchenSink`,\n"
-    "   `formTitle: Registration fields`. Types: `Input` (Text / Number / Password / Email /\n"
-    "   Calender), `Dropdown`, `Checkbox`. Same twelve fields as registration.\n"
-    "2. **Name.** `FormName.kitchenSink` is in `FormName.bundled` with `.registration`.\n"
-    "3. **Load.** `FormPreviewData.bundledForms` reads both JSON resources into\n"
-    "   `StubFormRepository`. `.mock()` and the on-device sandbox use that dictionary.\n"
-    "4. **Sandbox.** `FormSandboxView.mocked()` and `RegistrationSandbox` pick\n"
-    "   Registration / Registration fields. Both load through `DynamicFormView`.\n"
-    "5. **Canvas.** `JackpotForms/Previews.swift` → `DynamicFormView(formName: .kitchenSink)`\n"
-    "   titled **Registration fields — from JSON**.\n"
-    "6. **FormPreview.** `PreviewFixtures.swift` is the hand-built twin used by per-field\n"
-    "   `#Preview`s (`InputFieldView`, `DateFieldView`, …) and by `DynamicFormView` section\n"
-    "   previews. The catalog is the twelve registration fields.\n"
-    "7. **Gallery.** `JackpotPreviewPanel.swift` is the JackpotUI sheet for registration shell\n"
-    "   (text field, checklist, dropdown, date, checkbox, progress, Next / Sign Up / Previous).\n"
-    "8. **FormNavigationBar.** Host shell on `DynamicFormView`: Previous (`.jackpot(.secondary)`)\n"
-    "   on section 2, Next (`.jackpot`) while a later section exists, Sign Up (`.jackpot`) on\n"
-    "   the last section."
-)
-table(
-    ["`fieldType`", "Where it renders"],
-    [
-        ["Input", "Registration JSON + Gallery + `FormPreview` field previews"],
-        ["Dropdown", "Registration JSON + Gallery + `DropdownFieldView` previews"],
-        ["Checkbox", "Registration JSON + Gallery + `CheckboxFieldView` previews"],
-    ],
+    "1. **Schema.** `JackpotForms/Resources/registration.json`, the CRM's response saved\n"
+    "   verbatim. `BundledForms.all` reads it; `StubFormRepository` serves it.\n"
+    "2. **Mock wiring.** `FormDependencies.mock()` is the stub repository plus the placeholder\n"
+    "   copy table `ComposedKeyLocalizer.jpcRegistration`. `.live(baseURL:)` swaps in\n"
+    "   `RemoteFormRepository`; nothing else changes.\n"
+    "3. **Registration's rules.** The engine ships with no cross-field regex links and no date\n"
+    "   cap. `RegistrationDependencies` adds `regexDependencies: [\"idNumberType\": \"idNumber\"]`\n"
+    "   and an 18-years-ago `maximumDate` on top of whatever `forms` the host passes in.\n"
+    "4. **Sandbox.** The app's `SearchView` presents `RegistrationSandbox` with `.jackpotPopup`,\n"
+    "   the way the app presents its panels; the sandbox hosts `RegistrationView(dependencies:\n"
+    "   .mock())` and shows the `RegistrationResult` it gets back, so the whole panel runs on a\n"
+    "   device with no backend.\n"
+    "5. **Previews.** `FormPreview.registration` decodes the bundled JSON through the real mapper\n"
+    "   for the seeded-model previews in `DynamicFormView.swift` and each field view.\n"
+    "   `JackpotPreviewPanel.swift` is the component gallery.\n"
+    "6. **The sheet.** `RegistrationView` is the form inside `JackpotPanel`: title and close\n"
+    "   button on `surface`, the pages on `background`, and in the footer band `JackpotLinkRow`\n"
+    "   with `FormNavigationBar` beneath it.\n"
+    "   **Sign Up — dark / light** in `JackpotRegistration/Previews.swift` and **Sheet shell** in\n"
+    "   the gallery render it in both appearances."
 )
 rule()
 
@@ -568,28 +224,31 @@ rule()
 
 text("## PR 1 — JackpotUI")
 text(
-    "The design system, with no knowledge of forms. Components take a value and a binding; the theme\n"
-    "and the per-field configuration travel through the environment, so no component carries styling\n"
-    "parameters. Only the pieces registration and its preview harness render are listed below."
+    "The design system, with no knowledge of forms. Components take a title, a binding and their\n"
+    "own configuration; the theme travels through the environment. Every component previews\n"
+    "alone in the gallery."
 )
 text("### Colour tokens")
 text(
     "Locked `JackpotColors` set. Same hex is one `Palette` entry — roles that share a value point\n"
-    "at it. There is no `link` token; that Android role is `accent`."
+    "at it, and a role gets its own name when it can diverge (`surface` and `fieldBackground`).\n"
+    "There is no `link` token; that Android role is `accent`."
 )
 table(
     ["Token", "Light", "Dark", "Role"],
     [
-        ["`surface`", "#FFFFFF", "#131316", "Form / page background, Previous button fill (Android `formBackground`)"],
-        ["`fieldBackground`", "#F0F0F2", "#202126", "Field fill, disabled Next / Sign Up, checklist (also Android dialog `background`)"],
+        ["`background`", "#FFFFFF", "#131316", "The base layer screens and components draw on; the form body, the Previous button, and the close button and login row on a band (Android `formBackground`)"],
+        ["`surface`", "#F0F0F2", "#202126", "The raised layer: sheet header and footer bands, the date picker sheet (Android `surface`)"],
+        ["`fieldBackground`", "#F0F0F2", "#202126", "Field fill and the checklist — same pair as `surface`, its own role"],
         ["`fieldBorder`", "#E1E2E6", "#3E3E48", "Hairline, progress track, Previous button"],
-        ["`fieldBorderFocused`", "#E1E1E5", "#E1E1E5", "Focus ring. Shared `Palette.emphasis` hex"],
+        ["`fieldBorderFocused`", "#0060EC", "#0060EC", "Focus ring, the brand blue in both appearances (same value as `accentFill`)"],
         ["`fieldBorderInvalid`", "#DF0000", "#FF6B6B", "Invalid ring — same value as `error`"],
         ["`textPrimary`", "#2F2F37", "#E1E1E5", "Titles and values (Android `titleText` / Text Priority)"],
         ["`textSecondary`", "#565A63", "#E1E1E5", "Labels and placeholders"],
         ["`textOnAccent`", "#FFFFFF", "#FFFFFF", "Label on `accentFill`"],
-        ["`accent`", "#0060EC", "#4D8FFF", "Tint, selected shell (Android `link`)"],
+        ["`accent`", "#0060EC", "#4D8FFF", "Tint, raised label when focused, ticks (Android `link`)"],
         ["`accentFill`", "#0060EC", "#0060EC", "Primary button fill"],
+        ["`accentFillDisabled`", "#D4E4F8", "#262B3B", "Disabled primary button fill, under `textPrimary`. Both read from the app's screens pending the Android pair"],
         ["`error`", "#DF0000", "#FF6B6B", "Validation and load errors"],
         ["`warning`", "#945C05", "#F59E21", "Checklist incomplete"],
         ["`success`", "#0F7542", "#33B870", "Checklist complete"],
@@ -610,79 +269,55 @@ bash(
     "printf '.build/\\n.swiftpm/\\n*.xcuserdatad\\n' > .gitignore"
 )
 
-swift_literal(
-    "JackpotKit/Package.swift",
-    """// swift-tools-version: 5.7
-import PackageDescription
-
-let package = Package(
-    name: "JackpotKit",
-    defaultLocalization: "en",
-    platforms: [.iOS(.v15)],
-    products: [
-        .library(name: "JackpotUI", targets: ["JackpotUI"]),
-    ],
-    targets: [
-        .target(name: "JackpotUI"),
-        .testTarget(name: "JackpotUITests", dependencies: ["JackpotUI"]),
-    ]
-)
-""",
-)
-
 files(
     [
+        (
+            "JackpotKit/Package.swift",
+            "The whole manifest, once. Later PRs add files to targets it already declares, so it\n"
+            "never changes again in this playbook. Every target opts into strict concurrency\n"
+            "checking to match the app's `SWIFT_STRICT_CONCURRENCY = complete`.",
+        ),
         (
             "JackpotKit/Sources/JackpotUI/Theme/JackpotTheme.swift",
             "Adaptive light/dark palette. Hexes are the locked token table above; `Palette.emphasis`\n"
             "is the shared #E1E1E5 so focused border and dark text are one value, not aliases.",
-            registration_theme,
         ),
         (
             "JackpotKit/Sources/JackpotUI/Theme/JackpotEnvironment.swift",
-            "`JackpotFieldConfiguration` is what keeps the field views parameter-free: a caller sets\n"
-            "`jackpotFieldState`/`jackpotFieldError` once and every field below reads it.",
-            registration_environment,
+            "The environment carries what genuinely cascades. `jackpotFieldError` is internal: it is\n"
+            "set by the `jackpotFieldError(_:)` modifier and read by the chrome.",
         ),
         "JackpotKit/Sources/JackpotUI/Theme/JackpotStyling.swift",
         (
             "JackpotKit/Sources/JackpotUI/Styles/JackpotButtonStyle.swift",
-            "`.jackpot` is Next / Sign Up: `accentFill` + `textOnAccent` when enabled, field fill when\n"
-            "disabled. `.jackpot(.secondary)` is Previous: `surface` fill, `fieldBorder` hairline,\n"
-            "`textPrimary` label.",
-            registration_button_style,
+            "`.jackpot` is Next / Sign Up: `accentFill` + `textOnAccent` when enabled,\n"
+            "`accentFillDisabled` under `textPrimary` when disabled. `.jackpot(.secondary)` is Previous:\n"
+            "`background` fill, `fieldBorder` hairline, `textPrimary` label.",
         ),
         (
-            "JackpotKit/Sources/JackpotUI/Styles/JackpotToggleStyle.swift",
-            "Registration checkboxes use `.jackpotCheckbox`.",
-            registration_toggle_style,
+            "JackpotKit/Sources/JackpotUI/Styles/JackpotCheckboxToggleStyle.swift",
+            "Registration's two consents use `.jackpotCheckbox`.",
         ),
         "JackpotKit/Sources/JackpotUI/Styles/JackpotProgressViewStyle.swift",
         (
-            "JackpotKit/Sources/JackpotUI/Fields/JackpotFieldChrome.swift",
-            "The shared background, the in-field floating label, and `JackpotLabeledField` — date\n"
-            "keeps the above-field label; Input / Dropdown / Checkbox use it for the error row.",
-            registration_field_chrome,
+            "JackpotKit/Sources/JackpotUI/Fields/JackpotFieldKind.swift",
+            "Keyboard / autofill kinds, passed as `kind:` to `JackpotTextField`. Registration uses\n"
+            "text, name, email, phone, number and new-password.",
         ),
         (
-            "JackpotKit/Sources/JackpotUI/Fields/JackpotFieldKind.swift",
-            "Keyboard / autofill kinds applied with `jackpotField(_:)`. Registration uses text, name,\n"
-            "email, phone, number, and new-password.",
-            registration_field_kind,
+            "JackpotKit/Sources/JackpotUI/Fields/JackpotFieldChrome.swift",
+            "The shared background, the `jackpotFieldError(_:)` row, and `JackpotFloatingField` — the\n"
+            "one place the in-field label's rise is laid out.",
         ),
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotTextField.swift",
-            "In-field label floats on focus or when the field has a value. Prefix cell and\n"
-            "secure reveal stay as they were.",
+            "Title, kind, prefix and suffix on `init`. Secure entry and the reveal button follow\n"
+            "from `kind.isSecure`.",
         ),
-        (
-            "JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift",
-            "In-field label floats when a value is selected.",
-        ),
+        "JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift",
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotDateField.swift",
-            "The `Calender` input type: a read-only field presenting a graphical picker in a sheet.\n"
-            "`DateFieldView` wraps it in `JackpotLabeledField` so the label stays above the control.",
+            "The `Calender` input type: a read-only field presenting a wheel picker in a sheet.",
         ),
         (
             "JackpotKit/Sources/JackpotUI/Components/JackpotChecklist.swift",
@@ -693,9 +328,25 @@ files(
             "Shown when a form fails to load.",
         ),
         (
+            "JackpotKit/Sources/JackpotUI/Components/JackpotLinkRow.swift",
+            "The \"Already have an account? Login\" row, filled with `background` on the footer band, and\n"
+            "its mirror under Login.",
+        ),
+        (
+            "JackpotKit/Sources/JackpotUI/Components/JackpotPopup.swift",
+            "`.jackpotPopup(isPresented:)` presents a panel the way the app does: over the page, which\n"
+            "dims behind a `background` scrim, inset and pinned to the top. Not a system sheet.",
+        ),
+        (
+            "JackpotKit/Sources/JackpotUI/Components/JackpotPanel.swift",
+            "The shell registration is presented in: the header and footer bands on `surface`, the\n"
+            "close button and the content on `background`. Resume **Sheet shell** in the gallery to see\n"
+            "the layers.",
+        ),
+        (
             "JackpotKit/Sources/JackpotUI/Preview/JackpotPreviewPanel.swift",
-            "The panel wraps a preview in the themed surface. Resume **Gallery** for registration\n"
-            "shell (Input / Dropdown / Checkbox / date / FormNavigationBar buttons).",
+            "The panel wraps a preview in the themed surface. Resume **Gallery** for every registration\n"
+            "component in one place.",
         ),
         "JackpotKit/Tests/JackpotUITests/JackpotThemeTests.swift",
     ]
@@ -704,221 +355,24 @@ files(
 bash(TEST_CMD)
 rule()
 text("### ▶ Create PR — JackpotUI")
-text("`JackpotUITests: Executed 13 tests, with 0 failures`")
+text(executed("JackpotUITests"))
 text(
-    "Open `JackpotPreviewPanel.swift` and resume the **Gallery** preview. Then check the\n"
-    "registration field previews on `JackpotTextField`, `JackpotDropdown`, `JackpotDateField`,\n"
-    "and `JackpotChecklist`."
+    "Open `JackpotPreviewPanel.swift` and resume the **Gallery** preview in both appearances."
 )
 rule()
 
 # ---------------------------------------------------------------- PR 2
 
-text("## PR 2 — JackpotForms")
+text("## PR 2 — JackpotNetworking + Translations")
 text(
-    "Three modules pointing one way: `JackpotFormsDomain` (types and rules, no I/O),\n"
-    "`JackpotFormsData` (wire shapes and the bundled stub), `JackpotFormsUI` (the engine and the\n"
-    "renderer). Nothing here knows how a form is fetched — the engine only ever sees\n"
-    "`FormRepository`, which is what lets PR 3 swap the stub for the network without touching it.\n"
-    "The catalog is the registration schema: Input, Dropdown, and Checkbox."
+    "The transport, and the localisation table the form engine adapts. Both are standalone\n"
+    "modules with nothing above them, so they land before the engine that uses them. 200 / 400 /\n"
+    "401 / 500 are the contract; `unexpectedStatus` carries anything infrastructure returns."
 )
 
 bash(
-    "mkdir -p JackpotKit/Sources/{JackpotFormsDomain,JackpotFormsData}\n"
-    "mkdir -p JackpotKit/Sources/JackpotFormsUI/{Fields,Demo,Resources}\n"
-    "mkdir -p JackpotKit/Tests/JackpotFormsTests/Fixtures"
-)
-
-swift_literal(
-    "JackpotKit/Package.swift",
-    """        .library(
-            name: "JackpotForms",
-            targets: ["JackpotFormsDomain", "JackpotFormsData", "JackpotFormsUI"]
-        ),
-
-        .target(name: "JackpotFormsDomain"),
-        .target(name: "JackpotFormsData", dependencies: ["JackpotFormsDomain"]),
-        .target(
-            name: "JackpotFormsUI",
-            dependencies: ["JackpotFormsDomain", "JackpotUI"],
-            resources: [.process("Resources")]
-        ),
-        .testTarget(
-            name: "JackpotFormsTests",
-            dependencies: ["JackpotFormsDomain", "JackpotFormsData", "JackpotFormsUI"],
-            resources: [.process("Fixtures")]
-        ),
-""",
-    suffix=" — add to `products:` and `targets:`",
-)
-
-files(
-    [
-        (
-            "JackpotKit/Sources/JackpotFormsDomain/FormName.swift",
-            "`.registration` is the live form. `.kitchenSink` is the bundled registration-fields\n"
-            "preview schema — same twelve fields, loaded by Canvas and the sandbox.",
-        ),
-        "JackpotKit/Sources/JackpotFormsDomain/FormValue.swift",
-        (
-            "JackpotKit/Sources/JackpotFormsDomain/FormField.swift",
-            "Registration constructs Input, Dropdown, and Checkbox (plus `InputType.calendar` for DOB).",
-            registration_form_field,
-        ),
-        "JackpotKit/Sources/JackpotFormsDomain/Form.swift",
-        "JackpotKit/Sources/JackpotFormsDomain/FormSubmitResult.swift",
-        "JackpotKit/Sources/JackpotFormsDomain/PasswordPolicy.swift",
-        (
-            "JackpotKit/Sources/JackpotFormsDomain/RegexResolving.swift",
-            "How a dropdown changes another field's rule: the schema names a pattern, this resolves it.",
-        ),
-        "JackpotKit/Sources/JackpotFormsDomain/FieldValidator.swift",
-        "JackpotKit/Sources/JackpotFormsDomain/FormLoadError.swift",
-        "JackpotKit/Sources/JackpotFormsDomain/FormLocalizing.swift",
-        "JackpotKit/Sources/JackpotFormsDomain/FormRepository.swift",
-        (
-            "JackpotKit/Sources/JackpotFormsData/FormDTO.swift",
-            None,
-            registration_form_dto,
-        ),
-        (
-            "JackpotKit/Sources/JackpotFormsData/FormMapper.swift",
-            None,
-            registration_form_mapper,
-        ),
-        "JackpotKit/Sources/JackpotFormsData/StubFormRepository.swift",
-    ]
-)
-
-bash(
-    "cp registration.json JackpotKit/Sources/JackpotFormsUI/Resources/registration.json\n"
-    "cp kitchenSink.json  JackpotKit/Sources/JackpotFormsUI/Resources/kitchenSink.json\n"
-    "cp JackpotKit/Sources/JackpotFormsUI/Resources/registration.json \\\n"
-    "   JackpotKit/Tests/JackpotFormsTests/Fixtures/registration.json",
-    note="`registration.json` is the CRM's response saved verbatim — 12 fields over two sections.\n"
-    "`kitchenSink.json` is the bundled registration-fields preview of those same twelve fields\n"
-    "(Input / Dropdown / Checkbox only). `JackpotFormsUI` processes both as resources. The\n"
-    "fixture mirror lets the suites load registration from their own `Bundle.module`.",
-)
-
-files(
-    [
-        "JackpotKit/Sources/JackpotFormsUI/FormDependencies.swift",
-        (
-            "JackpotKit/Sources/JackpotFormsUI/DynamicFormModel.swift",
-            "The engine. `advance()` / `goBack()` / `submit()` are what Next, Previous, and Sign Up\n"
-            "call. `touched` is why an untouched field stays silent until Next, and\n"
-            "`applyRegexDependencies` is how selecting Passport relaxes the SA-ID rule on a\n"
-            "different field.",
-            registration_form_model,
-        ),
-        (
-            "JackpotKit/Sources/JackpotFormsUI/Demo/PreviewFixtures.swift",
-            "Hand-built `FormPreview` fixtures. `registration` mirrors the CRM schema — the twelve\n"
-            "registration fields.",
-            registration_preview_fixtures,
-        ),
-        (
-            "JackpotKit/Sources/JackpotFormsUI/Fields/FieldRenderer.swift",
-            "The switch is the whole contract. Registration hits `.input` (Calender →\n"
-            "`DateFieldView`), `.dropdown`, and `.checkbox`.",
-            registration_field_renderer,
-        ),
-        (
-            "JackpotKit/Sources/JackpotFormsUI/Fields/InputFieldView.swift",
-            None,
-            registration_input_field,
-        ),
-        "JackpotKit/Sources/JackpotFormsUI/Fields/DropdownFieldView.swift",
-        "JackpotKit/Sources/JackpotFormsUI/Fields/DateFieldView.swift",
-        (
-            "JackpotKit/Sources/JackpotFormsUI/Fields/CheckboxFieldView.swift",
-            "`receivePromotionalInformation` and `terms`.",
-            registration_checkbox_field,
-        ),
-        (
-            "JackpotKit/Sources/JackpotFormsUI/DynamicFormView.swift",
-            "`FormNavigationBar` is the Next / Previous / Sign Up shell. That is how step 1 becomes\n"
-            "step 2. `RegistrationView` just hosts this view.",
-        ),
-        (
-            "JackpotKit/Sources/JackpotFormsUI/Demo/PreviewSupport.swift",
-            "Registration copy table, plus `FormPreviewData.bundledForms` (registration + registration-fields preview).",
-        ),
-        (
-            "JackpotKit/Sources/JackpotFormsUI/Demo/FormSandboxView.swift",
-            "The review harness: pick Registration or Registration fields and submit into a sheet.\n"
-            "`RegistrationSandbox` in the app target wraps this.",
-        ),
-        "JackpotKit/Tests/JackpotFormsTests/FormDecodingTests.swift",
-        (
-            "JackpotKit/Tests/JackpotFormsTests/FieldValidatorTests.swift",
-            None,
-            registration_validator_tests,
-        ),
-        (
-            "JackpotKit/Tests/JackpotFormsTests/DynamicFormModelTests.swift",
-            "The behaviour a user experiences: untouched fields stay silent, Next reveals every error at\n"
-            "once, section gating, submit blocked while invalid, and the payload keyed by\n"
-            "`fieldIdentifier`.",
-        ),
-    ]
-)
-
-bash(TEST_CMD)
-rule()
-text("### ▶ Create PR — JackpotForms")
-text("`JackpotFormsTests: Executed 49 tests, with 0 failures`")
-text(
-    "Open `DynamicFormView.swift` and resume the registration whole-form previews. Open\n"
-    "`JackpotForms/Previews.swift` and resume **Registration fields — from JSON**."
-)
-rule()
-
-# ---------------------------------------------------------------- PR 3
-
-text("## PR 3 — JackpotNetworking + the live repository")
-text(
-    "The transport, then the repository built on it. `JackpotFormsUI` is untouched in this PR — that\n"
-    "is the point of the protocol. `JackpotForms` arrives as the composition target: it is the only\n"
-    "module that sees both the network and the UI, so it is the only one that has to change when the\n"
-    "wiring does."
-)
-
-bash(
-    "mkdir -p JackpotKit/Sources/{JackpotNetworking,JackpotLocalization,JackpotFormsRemote,JackpotForms}\n"
+    "mkdir -p JackpotKit/Sources/{JackpotNetworking,JackpotLocalization}\n"
     "mkdir -p JackpotKit/Tests/{JackpotNetworkingTests,JackpotLocalizationTests}"
-)
-
-swift_literal(
-    "JackpotKit/Package.swift",
-    """        .library(name: "JackpotNetworking", targets: ["JackpotNetworking"]),
-        .library(name: "JackpotLocalization", targets: ["JackpotLocalization"]),
-
-        .target(name: "JackpotNetworking"),
-        .target(name: "JackpotLocalization"),
-        .testTarget(name: "JackpotNetworkingTests", dependencies: ["JackpotNetworking"]),
-        .testTarget(name: "JackpotLocalizationTests", dependencies: ["JackpotLocalization"]),
-
-        .target(
-            name: "JackpotFormsRemote",
-            dependencies: ["JackpotFormsDomain", "JackpotFormsData", "JackpotNetworking"]
-        ),
-        .target(
-            name: "JackpotForms",
-            dependencies: [
-                "JackpotFormsDomain",
-                "JackpotFormsData",
-                "JackpotFormsUI",
-                "JackpotFormsRemote",
-                "JackpotLocalization",
-                "JackpotNetworking",
-            ]
-        ),
-""",
-    suffix=" — add to `products:` and `targets:`",
-    note="`JackpotFormsRemote` and `JackpotForms` join the `JackpotForms` library product, and\n"
-    "`JackpotFormsTests` gains all four new targets as dependencies.",
 )
 
 files(
@@ -929,6 +383,11 @@ files(
         "JackpotKit/Sources/JackpotNetworking/APIEndpoint.swift",
         "JackpotKit/Sources/JackpotNetworking/APIError.swift",
         "JackpotKit/Sources/JackpotNetworking/RequestInterceptor.swift",
+        (
+            "JackpotKit/Sources/JackpotNetworking/ConditionalRequest.swift",
+            "Registration never sends a conditional request; `RemoteApiClient` still implements the\n"
+            "protocol method, so the types have to exist.",
+        ),
         "JackpotKit/Sources/JackpotNetworking/RemoteApiClient.swift",
         "JackpotKit/Tests/JackpotNetworkingTests/MockHTTPClient.swift",
         "JackpotKit/Tests/JackpotNetworkingTests/APIEndpointTests.swift",
@@ -939,39 +398,153 @@ files(
             "4xx never is, and a non-idempotent request is retried only when the transport failed before\n"
             "the server could have seen it.",
         ),
-    ]
-)
-
-bash(TEST_CMD, note="`JackpotNetworkingTests: Executed 34 tests`. Now the repository.")
-
-files(
-    [
         (
             "JackpotKit/Sources/JackpotLocalization/Translations.swift",
             "The session's localisation table. Two lookups matter: keys are tried region-suffixed first\n"
             "(`terms-jza` before `terms`), and API error codes are keys too, which is what lets a server\n"
-            "error come back in the user's language.",
-        ),
-        "JackpotKit/Sources/JackpotFormsRemote/CRMEnvironment.swift",
-        "JackpotKit/Sources/JackpotFormsRemote/FormEndpoints.swift",
-        (
-            "JackpotKit/Sources/JackpotFormsRemote/FormErrorMapper.swift",
-            "The boundary that decides what the user reads. `JackpotFormsUI` cannot see `APIError`, so\n"
-            "anything not translated here becomes a generic failure on screen.",
-        ),
-        "JackpotKit/Sources/JackpotFormsRemote/RemoteFormRepository.swift",
-        "JackpotKit/Sources/JackpotForms/TranslationsLocalizer.swift",
-        (
-            "JackpotKit/Sources/JackpotForms/JackpotForms.swift",
-            "The composition root: `.mock` for previews (bundled registration + registration-fields),\n"
-            "`.live` for the app. `FormSandboxView.mocked()` is the preview harness.",
-        ),
-        (
-            "JackpotKit/Sources/JackpotForms/Previews.swift",
-            "JSON-backed previews: registration (loading / offline / 404) and\n"
-            "`DynamicFormView(formName: .kitchenSink)` — **Registration fields — from JSON**.",
+            "error come back in the user's language. `TranslationsRepository.swift` and\n"
+            "`TranslationsStore.swift` in the same folder are the app-data follow-up.",
         ),
         "JackpotKit/Tests/JackpotLocalizationTests/TranslationsTests.swift",
+    ]
+)
+
+bash(TEST_CMD)
+rule()
+text("### ▶ Create PR — JackpotNetworking + Translations")
+text(executed("JackpotNetworkingTests", "JackpotLocalizationTests"))
+rule()
+
+# ---------------------------------------------------------------- PR 3
+
+text("## PR 3 — JackpotForms")
+text(
+    "One module, four folders pointing one way: `Domain` (types and rules, no I/O), `Data`\n"
+    "(wire shapes, the bundled stub), `UI` (the engine and the renderer) and `Remote` (the live\n"
+    "repository and `.live()`). The engine only ever sees `FormRepository`, which is what lets the\n"
+    "stub and the network be swapped at one line in composition. Wire types are `internal`;\n"
+    "nothing outside `Data/` and `Remote/` knows a JSON key name."
+)
+
+bash(
+    "mkdir -p JackpotKit/Sources/JackpotForms/{Domain,Data,Remote,UI/Fields,Resources}\n"
+    "mkdir -p JackpotKit/Tests/JackpotFormsTests"
+)
+
+files(
+    [
+        (
+            "JackpotKit/Sources/JackpotForms/Domain/FormName.swift",
+            "`.registration` is the live form.",
+        ),
+        "JackpotKit/Sources/JackpotForms/Domain/FormValue.swift",
+        (
+            "JackpotKit/Sources/JackpotForms/Domain/FormField.swift",
+            "`FieldType` is Input, Dropdown and Checkbox — the registration catalog — plus `unknown`,\n"
+            "which is what keeps the form usable when the CRM adds a type this build cannot draw.",
+        ),
+        "JackpotKit/Sources/JackpotForms/Domain/FormSchema.swift",
+        "JackpotKit/Sources/JackpotForms/Domain/FormSubmitResult.swift",
+        "JackpotKit/Sources/JackpotForms/Domain/PasswordPolicy.swift",
+        (
+            "JackpotKit/Sources/JackpotForms/Domain/RegexResolving.swift",
+            "How a dropdown changes another field's rule: the schema names a pattern, this resolves it.",
+        ),
+        "JackpotKit/Sources/JackpotForms/Domain/FieldValidator.swift",
+        "JackpotKit/Sources/JackpotForms/Domain/FormLoadError.swift",
+        "JackpotKit/Sources/JackpotForms/Domain/FormLocalizing.swift",
+        "JackpotKit/Sources/JackpotForms/Domain/FormRepository.swift",
+        "JackpotKit/Sources/JackpotForms/Data/FormDTO.swift",
+        "JackpotKit/Sources/JackpotForms/Data/FormMapper.swift",
+        "JackpotKit/Sources/JackpotForms/Data/StubFormRepository.swift",
+        "JackpotKit/Sources/JackpotForms/Data/BundledForms.swift",
+        (
+            "JackpotKit/Sources/JackpotForms/Data/RegistrationCopy.swift",
+            "The placeholder copy table, until the app-data `locales` section is wired in.",
+        ),
+    ]
+)
+
+bash(
+    "cp registration.json JackpotKit/Sources/JackpotForms/Resources/registration.json",
+    note="`registration.json` is the CRM's response saved verbatim — 12 fields over two sections.\n"
+    "`JackpotForms` processes it as a resource; `BundledForms` reads it from `Bundle.module`\n"
+    "for the stub repository, the previews and the tests alike.",
+)
+
+files(
+    [
+        (
+            "JackpotKit/Sources/JackpotForms/UI/FormDependencies.swift",
+            "The engine's dependencies and `.mock()`. Defaults are generic: no regex links, no date\n"
+            "cap. Registration adds its own in PR 4.",
+        ),
+        (
+            "JackpotKit/Sources/JackpotForms/UI/DynamicFormModel.swift",
+            "The engine. `load()` is `async` and a no-op once loaded, so re-appearing on screen cannot\n"
+            "reset a half-filled form. `advance()` / `goBack()` / `submit()` are what Next, Previous\n"
+            "and Sign Up call. `touched` is why an untouched field stays silent until Next, and\n"
+            "`overrideRegex(for:)` is how selecting Passport relaxes the SA-ID rule on a different\n"
+            "field.",
+        ),
+        (
+            "JackpotKit/Sources/JackpotForms/UI/Fields/FieldRenderer.swift",
+            "The switch is the whole contract. Registration hits `.input` (Calender →\n"
+            "`DateFieldView`), `.dropdown` and `.checkbox`.",
+        ),
+        "JackpotKit/Sources/JackpotForms/UI/Fields/InputFieldView.swift",
+        "JackpotKit/Sources/JackpotForms/UI/Fields/DropdownFieldView.swift",
+        "JackpotKit/Sources/JackpotForms/UI/Fields/DateFieldView.swift",
+        (
+            "JackpotKit/Sources/JackpotForms/UI/Fields/CheckboxFieldView.swift",
+            "`receivePromotionalInformation` and `terms`.",
+        ),
+        (
+            "JackpotKit/Sources/JackpotForms/UI/DynamicFormView.swift",
+            "Three views over one model. `DynamicFormContent` is the pages; `FormNavigationBar` is\n"
+            "Previous / Next / Sign Up — that is how step 1 becomes step 2 — and slides the pages\n"
+            "using the direction the model publishes; `DynamicFormView` stacks the two for hosts that\n"
+            "want the bar under the pages. Registration composes the first two itself.",
+        ),
+        (
+            "JackpotKit/Sources/JackpotForms/UI/FormPreview.swift",
+            "Decodes the bundled JSON for the seeded-model previews, so the previews and the stub\n"
+            "cannot disagree about the schema.",
+        ),
+    ]
+)
+
+text(
+    "At this point the engine renders the bundled schema end to end. Open `DynamicFormView.swift`\n"
+    "and resume **Registration — from JSON**, then wire the network:"
+)
+
+files(
+    [
+        (
+            "JackpotKit/Sources/JackpotForms/Remote/FormEndpoints.swift",
+            "The cron URLs, the submit body, and `FormSubmitParser` — HTTP 200 is not success, the\n"
+            "envelope's `isSuccessful` is, and a body that is not the envelope is a rejection.",
+        ),
+        (
+            "JackpotKit/Sources/JackpotForms/Remote/FormErrorMapper.swift",
+            "The boundary that decides what the user reads. The engine cannot see `APIError`, so\n"
+            "anything not translated here becomes a generic failure on screen.",
+        ),
+        "JackpotKit/Sources/JackpotForms/Remote/RemoteFormRepository.swift",
+        "JackpotKit/Sources/JackpotForms/Remote/TranslationsLocalizer.swift",
+        (
+            "JackpotKit/Sources/JackpotForms/Remote/FormDependencies+Live.swift",
+            "`.live(baseURL:)` — swap it for `.mock()` at the call site and nothing else changes.",
+        ),
+        "JackpotKit/Tests/JackpotFormsTests/FormDecodingTests.swift",
+        "JackpotKit/Tests/JackpotFormsTests/FieldValidatorTests.swift",
+        (
+            "JackpotKit/Tests/JackpotFormsTests/DynamicFormModelTests.swift",
+            "The behaviour a user experiences: untouched fields stay silent, Next reveals every error at\n"
+            "once, section gating, submit blocked while invalid, the payload keyed by\n"
+            "`fieldIdentifier`, and the ID-type → ID-number rule.",
+        ),
         "JackpotKit/Tests/JackpotFormsTests/FormErrorMappingTests.swift",
         (
             "JackpotKit/Tests/JackpotFormsTests/FormRepositoryTests.swift",
@@ -983,11 +556,11 @@ files(
 
 bash(TEST_CMD)
 rule()
-text("### ▶ Create PR — JackpotNetworking + live repository")
+text("### ▶ Create PR — JackpotForms")
+text(executed("JackpotFormsTests"))
 text(
-    "`JackpotNetworkingTests: Executed 34 tests, with 0 failures`\n"
-    "`JackpotLocalizationTests: Executed 16 tests, with 0 failures`\n"
-    "`JackpotFormsTests: Executed 81 tests, with 0 failures`"
+    "Open `DynamicFormView.swift` and resume the whole-form previews, including\n"
+    "**Registration — from JSON**, **Offline** and **Unknown form — 404**."
 )
 rule()
 
@@ -995,8 +568,9 @@ rule()
 
 text("## PR 4 — JackpotRegistration")
 text(
-    "The feature: a registration service, the screen that drives the two-page form, and the\n"
-    "`UIHostingController` the existing popup container can hold as-is."
+    "The feature: a registration service, the Sign Up sheet that drives the two-page form, the\n"
+    "rules registration adds to the generic engine, and the `UIHostingController` the existing\n"
+    "popup container can hold as-is."
 )
 
 bash(
@@ -1004,40 +578,16 @@ bash(
     "mkdir -p JackpotKit/Tests/JackpotRegistrationTests"
 )
 
-swift_literal(
-    "JackpotKit/Package.swift",
-    """        .library(name: "JackpotRegistration", targets: ["JackpotRegistration"]),
-
-        .target(
-            name: "JackpotRegistration",
-            dependencies: [
-                "JackpotUI",
-                "JackpotForms",
-                "JackpotFormsDomain",
-                "JackpotFormsUI",
-                "JackpotNetworking",
-            ]
-        ),
-        .testTarget(
-            name: "JackpotRegistrationTests",
-            dependencies: [
-                "JackpotRegistration",
-                "JackpotFormsDomain",
-                "JackpotForms",
-                "JackpotNetworking",
-            ]
-        ),
-""",
-    suffix=" — add to `products:` and `targets:`",
-)
-
 files(
     [
         "JackpotKit/Sources/JackpotRegistration/RegistrationService.swift",
         (
             "JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift",
-            "`RegistrationView` hosts `DynamicFormView(formName: .registration)`. Next / Previous /\n"
-            "Sign Up live in `FormNavigationBar`.",
+            "`RegistrationDependencies` applies `applyingRegistrationRules()` — the ID-type link and\n"
+            "the 18-year date cap — to whatever `forms` it is given. `RegistrationView` is the Sign Up\n"
+            "sheet: it owns the `DynamicFormModel`, puts `DynamicFormContent` inside `JackpotPanel`, and\n"
+            "fills the footer with the login row and `FormNavigationBar`, with `onClose` for the\n"
+            "header and `onLogin` for the row.",
         ),
         (
             "JackpotKit/Sources/JackpotRegistration/RegistrationPanelController.swift",
@@ -1052,7 +602,7 @@ files(
 bash(TEST_CMD)
 rule()
 text("### ▶ Create PR — JackpotRegistration")
-text("`JackpotRegistrationTests: Executed 9 tests, with 0 failures`")
+text(executed("JackpotRegistrationTests"))
 text("Open `Previews.swift` and run the flow end to end.")
 rule()
 
@@ -1067,7 +617,7 @@ text(
 swift_literal(
     "Sources/Features/Registration/RegistrationPresenter.swift",
     """import UIKit
-import JackpotFormsDomain
+import JackpotForms
 import JackpotRegistration
 
 extension MainViewController {
@@ -1087,7 +637,12 @@ extension MainViewController {
                     localizer: registrationLocalizer
                 ),
                 service: MockRegistrationService()
-            )
+            ),
+            onClose: { [weak self] in self?.popupContainer.dismiss() },
+            onLogin: { [weak self] in
+                self?.popupContainer.dismiss()
+                self?.presentLogin()
+            }
         ) { [weak self] result in
             self?.routeAfterRegistration(result)
         }
@@ -1103,7 +658,8 @@ extension MainViewController {
 """,
     note="`ClosureLocalizer` is the migration seam. The app's `getTranslation` returns the key itself on\n"
     "a miss; mapping that back to `nil` is what lets the engine fall through to humanised copy instead\n"
-    "of rendering a raw key.",
+    "of rendering a raw key. `MockRegistrationService` stays until the submit contract is confirmed;\n"
+    "`RemoteRegistrationService(repository:)` is the one-line swap.",
 )
 
 step += 1
@@ -1382,33 +938,6 @@ nav li.l3 {{ padding-left: 5mm; font-weight: 400; color: #4a5058; }}
 # ---------------------------------------------------------------- emit
 
 markdown = render_markdown()
-
-FORBIDDEN = (
-    r"\.jackpot\(\.tertiary\)",
-    r"case tertiary",
-    r"Prominence\.tertiary",
-    r"case \.tertiary",
-    r"JackpotCardButtonStyle",
-    r"jackpotSwitch",
-    r"JackpotDivider",
-    r"ToggleFieldView",
-    r"RadioOption",
-    r"FieldRadioDTO",
-    r"fieldRadioGroup",
-    r"radioOptions",
-    r"WelcomeOffer",
-    r"TextAreaFieldView",
-    r"JackpotTextArea",
-    r"RecaptchaPlaceholderView",
-    r"SignaturePad",
-    r"jackpotIsSelected",
-    r"jackpotSelected",
-    r"### Out of scope",
-    r"tertiary",
-)
-for pattern in FORBIDDEN:
-    if re.search(pattern, markdown, re.IGNORECASE):
-        sys.exit(f"playbook still contains {pattern!r}")
 
 with open(OUT, "w") as f:
     f.write(markdown)

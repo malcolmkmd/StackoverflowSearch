@@ -1,12 +1,21 @@
-// swift-tools-version: 5.7
+// swift-tools-version: 5.10
 import PackageDescription
 
-// Single local package the app depends on. Each folder under Sources/ is a Swift module.
-// Add a new module by creating Sources/<Name> and listing it in products + targets below.
+// One local package; each folder under Sources/ is a module.
 //
-// In Xcode: File → Add Package Dependencies → Add Local… → JackpotKit
-// Then add the JackpotKit product to the app target. Import the module you need
-// (`import JackpotUI`, `import JackpotRegistration`, …).
+// In Xcode: File → Add Package Dependencies → Add Local… → JackpotKit, then add the product you
+// need to the app target. `JackpotRegistration` is the registration feature, `JackpotForms` the
+// schema-driven engine it runs on, `JackpotUI` the design system.
+//
+// `JackpotAppData` and the store half of `JackpotLocalization` are the app-data follow-up
+// (docs/adr/0001); registration does not depend on either.
+//
+// The floor is iOS 15, the host app's. That is why the models are `ObservableObject` and why
+// a few views carry an `#available(iOS 16.0, *)` branch.
+
+/// The app builds with `SWIFT_STRICT_CONCURRENCY = complete`; the package is held to the same bar.
+let strict: [SwiftSetting] = [.enableExperimentalFeature("StrictConcurrency")]
+
 let package = Package(
     name: "JackpotKit",
     defaultLocalization: "en",
@@ -14,100 +23,45 @@ let package = Package(
     products: [
         .library(
             name: "JackpotKit",
-            targets: [
-                "JackpotUI",
-                "JackpotNetworking",
-                "JackpotAppData",
-                "JackpotLocalization",
-                "JackpotFormsDomain",
-                "JackpotFormsData",
-                "JackpotFormsUI",
-                "JackpotFormsRemote",
-                "JackpotForms",
-                "JackpotRegistration",
-            ]
+            targets: ["JackpotUI", "JackpotNetworking", "JackpotLocalization", "JackpotAppData",
+                      "JackpotForms", "JackpotRegistration"]
         ),
         .library(name: "JackpotUI", targets: ["JackpotUI"]),
         .library(name: "JackpotNetworking", targets: ["JackpotNetworking"]),
-        .library(name: "JackpotAppData", targets: ["JackpotAppData"]),
         .library(name: "JackpotLocalization", targets: ["JackpotLocalization"]),
-        .library(
-            name: "JackpotForms",
-            targets: [
-                "JackpotForms",
-                "JackpotFormsDomain",
-                "JackpotFormsData",
-                "JackpotFormsUI",
-                "JackpotFormsRemote",
-            ]
-        ),
+        .library(name: "JackpotAppData", targets: ["JackpotAppData"]),
+        .library(name: "JackpotForms", targets: ["JackpotForms"]),
         .library(name: "JackpotRegistration", targets: ["JackpotRegistration"]),
     ],
     targets: [
-        .target(name: "JackpotUI"),
+        .target(name: "JackpotUI", swiftSettings: strict),
         .testTarget(name: "JackpotUITests", dependencies: ["JackpotUI"]),
 
-        .target(name: "JackpotNetworking"),
-        .target(name: "JackpotAppData", dependencies: ["JackpotNetworking"]),
-        .target(name: "JackpotLocalization", dependencies: ["JackpotNetworking", "JackpotAppData"]),
+        .target(name: "JackpotNetworking", swiftSettings: strict),
         .testTarget(name: "JackpotNetworkingTests", dependencies: ["JackpotNetworking"]),
-        .testTarget(name: "JackpotAppDataTests", dependencies: ["JackpotAppData", "JackpotNetworking"]),
+
+        .target(name: "JackpotLocalization", swiftSettings: strict),
         .testTarget(name: "JackpotLocalizationTests", dependencies: ["JackpotLocalization"]),
 
-        .target(name: "JackpotFormsDomain"),
-        .target(name: "JackpotFormsData", dependencies: ["JackpotFormsDomain"]),
         .target(
-            name: "JackpotFormsUI",
-            dependencies: ["JackpotFormsDomain", "JackpotUI"],
-            resources: [.process("Resources")]
+            name: "JackpotAppData",
+            dependencies: ["JackpotNetworking", "JackpotLocalization"],
+            swiftSettings: strict
         ),
-        .target(
-            name: "JackpotFormsRemote",
-            dependencies: ["JackpotFormsDomain", "JackpotFormsData", "JackpotNetworking"]
-        ),
+        .testTarget(name: "JackpotAppDataTests", dependencies: ["JackpotAppData", "JackpotNetworking"]),
+
         .target(
             name: "JackpotForms",
-            dependencies: [
-                "JackpotFormsDomain",
-                "JackpotFormsData",
-                "JackpotFormsUI",
-                "JackpotFormsRemote",
-                "JackpotLocalization",
-                "JackpotNetworking",
-            ]
+            dependencies: ["JackpotUI", "JackpotNetworking", "JackpotLocalization"],
+            resources: [.process("Resources")],
+            swiftSettings: strict
         ),
         .testTarget(
             name: "JackpotFormsTests",
-            dependencies: [
-                "JackpotFormsDomain",
-                "JackpotFormsData",
-                "JackpotFormsUI",
-                "JackpotFormsRemote",
-                "JackpotForms",
-                "JackpotNetworking",
-                "JackpotLocalization",
-            ],
-            resources: [.process("Fixtures")]
+            dependencies: ["JackpotForms", "JackpotNetworking", "JackpotLocalization"]
         ),
 
-        .target(
-            name: "JackpotRegistration",
-            dependencies: [
-                "JackpotUI",
-                "JackpotForms",
-                "JackpotFormsDomain",
-                "JackpotFormsUI",
-                "JackpotNetworking",
-            ]
-        ),
-        .testTarget(
-            name: "JackpotRegistrationTests",
-            dependencies: [
-                "JackpotRegistration",
-                "JackpotFormsDomain",
-                "JackpotForms",
-                "JackpotNetworking",
-            ]
-        ),
+        .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
+        .testTarget(name: "JackpotRegistrationTests", dependencies: ["JackpotRegistration", "JackpotForms"]),
     ]
 )

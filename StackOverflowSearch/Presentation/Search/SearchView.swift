@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import JackpotUI
 
 struct SearchView: View {
     
@@ -36,8 +37,10 @@ struct SearchView: View {
                 }
             }
         }
-        .sheet(isPresented: $showsRegistration) {
-            RegistrationSandbox()
+        // The way the app presents its panels: over the page, not a system sheet. The inset is
+        // the header's height, so the header stays visible, dimmed, above the panel.
+        .jackpotPopup(isPresented: $showsRegistration, topInset: 60) {
+            RegistrationSandbox(onClose: { showsRegistration = false })
         }
         .task {
             viewModel.loadInitial()

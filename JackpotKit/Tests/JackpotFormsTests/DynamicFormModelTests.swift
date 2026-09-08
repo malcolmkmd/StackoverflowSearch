@@ -1,39 +1,22 @@
 import Combine
 import XCTest
-@testable import JackpotFormsUI
-import JackpotFormsData
-import JackpotFormsDomain
+@testable import JackpotForms
 
 /// End-to-end validation behaviour against the real registration schema: what the user
 /// actually experiences, rather than the regexes in isolation.
 @MainActor
 final class DynamicFormModelTests: XCTestCase {
 
-    private func makeModel(delay: TimeInterval = 0) -> DynamicFormModel {
-        let url = Bundle.module.url(forResource: "registration", withExtension: "json")!
-        let data = try! Data(contentsOf: url)
-        return DynamicFormModel(
+    private func loaded(regexDependencies: [String: String] = ["idNumberType": "idNumber"]) async -> DynamicFormModel {
+        let model = DynamicFormModel(
             formName: .registration,
             dependencies: FormDependencies(
-                repository: StubFormRepository(forms: [.registration: data], delay: delay)
+                repository: StubFormRepository(forms: BundledForms.all, delay: 0),
+                regexDependencies: regexDependencies
             )
         )
-    }
-
-    private func loaded() async throws -> DynamicFormModel {
-        let model = makeModel()
-        model.load()
-        try await waitUntil { model.form != nil }
+        await model.load()
         return model
-    }
-
-    private func waitUntil(timeout: TimeInterval = 2,
-                           _ condition: @MainActor () -> Bool) async throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition() {
-            if Date() > deadline { XCTFail("Timed out"); return }
-            try await Task.sleep(nanoseconds: 5_000_000)
-        }
     }
 
     private func field(_ model: DynamicFormModel, _ id: String) throws -> FormField {
@@ -43,7 +26,7 @@ final class DynamicFormModelTests: XCTestCase {
     // MARK: Loading
 
     func testLoadsSchemaAndSeedsEveryField() async throws {
-        let model = try await loaded()
+        let model = await loaded()
         XCTAssertEqual(model.sections.count, 2)
         XCTAssertEqual(model.sectionIndex, 0)
         XCTAssertTrue(model.isFirstSection)
@@ -52,10 +35,29 @@ final class DynamicFormModelTests: XCTestCase {
         XCTAssertEqual(model.value(for: try field(model, "terms")), .bool(false))
     }
 
+    /// Re-appearing on screen calls `load()` again; it must not reset a half-filled form.
+    func testLoadIsANoOpOnceLoaded() async throws {
+        let model = await loaded()
+        model.setValue(.text("849134302"), for: try field(model, "username"))
+        await model.load()
+        XCTAssertEqual(model.value(for: try field(model, "username")), .text("849134302"))
+    }
+
+    func testAFailedLoadCanBeRetried() async throws {
+        let repository = FailOnceRepository()
+        let model = DynamicFormModel(formName: .registration,
+                                     dependencies: FormDependencies(repository: repository))
+        await model.load()
+        XCTAssertEqual(model.viewState, .failed(FormLoadError.offline.errorDescription!))
+
+        await model.load()
+        XCTAssertNotNil(model.form, "the retry should reach the schema")
+    }
+
     // MARK: Errors appear only after the user has engaged
 
     func testUntouchedFieldsShowNoErrorEvenWhenInvalid() async throws {
-        let model = try await loaded()
+        let model = await loaded()
         let mobile = try field(model, "username")
         XCTAssertNil(model.error(for: mobile))          // empty + required, but untouched
         model.markTouched(mobile)
@@ -63,7 +65,7 @@ final class DynamicFormModelTests: XCTestCase {
     }
 
     func testAdvancingRevealsEveryErrorInTheSection() async throws {
-        let model = try await loaded()
+        let model = await loaded()
         XCTAssertFalse(model.advance())                  // blocked
         XCTAssertEqual(model.sectionIndex, 0)
         for id in ["username", "password", "firstname", "lastname", "email"] {
@@ -76,7 +78,7 @@ final class DynamicFormModelTests: XCTestCase {
     // MARK: Section gating
 
     func testCannotAdvanceUntilSectionOneIsValid() async throws {
-        let model = try await loaded()
+        let model = await loaded()
         XCTAssertFalse(model.isCurrentSectionValid)
 
         try fillSectionOne(model)
@@ -90,10 +92,21 @@ final class DynamicFormModelTests: XCTestCase {
         XCTAssertEqual(model.sectionIndex, 0)
     }
 
+    /// The navigation bar can live away from the pages, so the pages learn which way to slide
+    /// from the model rather than from the button that was tapped.
+    func testPagingDirectionFollowsTheLastMove() async throws {
+        let model = await loaded()
+        try fillSectionOne(model)
+        XCTAssertTrue(model.advance())
+        XCTAssertEqual(model.pagingDirection, .forward)
+        model.goBack()
+        XCTAssertEqual(model.pagingDirection, .backward)
+    }
+
     // MARK: The ID-type → ID-number dependency
 
     func testPassportSelectionRelaxesTheThirteenDigitIdRule() async throws {
-        let model = try await loaded()
+        let model = await loaded()
         try fillSectionOne(model)
         _ = model.advance()
 
@@ -115,14 +128,14 @@ final class DynamicFormModelTests: XCTestCase {
     // MARK: Submission
 
     func testSubmitIsBlockedWhileAnythingIsInvalid() async throws {
-        let model = try await loaded()
+        let model = await loaded()
         var called = false
         await model.submit { _ in called = true }
         XCTAssertFalse(called)
     }
 
     func testSubmitDeliversEveryValueKeyedByFieldIdentifier() async throws {
-        let model = try await loaded()
+        let model = await loaded()
         try fillSectionOne(model)
         _ = model.advance()
         try fillSectionTwo(model)
@@ -145,7 +158,7 @@ final class DynamicFormModelTests: XCTestCase {
     }
 
     func testSubmitSurfacesAThrownError() async throws {
-        let model = try await loaded()
+        let model = await loaded()
         try fillSectionOne(model)
         _ = model.advance()
         try fillSectionTwo(model)
@@ -158,7 +171,7 @@ final class DynamicFormModelTests: XCTestCase {
     // MARK: Progress
 
     func testProgressTracksSatisfiedRequiredFields() async throws {
-        let model = try await loaded()
+        let model = await loaded()
         XCTAssertEqual(model.progress, 0, accuracy: 0.001)
         try fillSectionOne(model)
         XCTAssertGreaterThan(model.progress, 0.3)
@@ -166,6 +179,64 @@ final class DynamicFormModelTests: XCTestCase {
         _ = model.advance()
         try fillSectionTwo(model)
         XCTAssertEqual(model.progress, 1.0, accuracy: 0.001)
+    }
+
+    // MARK: Render scheduling
+
+    /// The return key marks the field on submit and the blur that follows marks it again.
+    /// A second render there is what made the error appear a beat after focus moved.
+    func testReTouchingAFieldSchedulesNoFurtherRender() async throws {
+        let model = await loaded()
+        let mobile = try field(model, "username")
+        var renders = 0
+        let subscription = model.objectWillChange.sink { _ in renders += 1 }
+        defer { subscription.cancel() }
+
+        model.markTouched(mobile)
+        XCTAssertEqual(renders, 1)
+        model.markTouched(mobile)
+        XCTAssertEqual(renders, 1)
+    }
+
+    func testTouchingByIdentifierRevealsTheErrorAndIgnoresUnknownFields() async throws {
+        let model = await loaded()
+        let mobile = try field(model, "username")
+        model.setValue(.text("123"), for: mobile)
+        XCTAssertNil(model.error(for: mobile), "untouched, so still silent")
+
+        model.markTouched(identifiedBy: "username")
+        XCTAssertNotNil(model.error(for: mobile))
+
+        model.markTouched(identifiedBy: "notAField")   // must not trap
+    }
+
+    // MARK: Return-key focus order
+
+    func testFocusOrderCoversOnlyTextEntryInSchemaOrder() async throws {
+        let model = await loaded()
+        XCTAssertEqual(model.focusableIdentifiers,
+                       ["username", "password", "firstname", "lastname", "email", "referralCode"])
+    }
+
+    func testReturnWalksToTheNextFieldAndStopsAtTheEnd() async throws {
+        let model = await loaded()
+        XCTAssertEqual(model.fieldAfter("username"), "password")
+        XCTAssertEqual(model.fieldAfter("email"), "referralCode")
+        XCTAssertNil(model.fieldAfter("referralCode"), "The last field dismisses rather than wrapping")
+    }
+
+    func testFocusOrderIgnoresUnknownAndAbsentFields() async throws {
+        let model = await loaded()
+        XCTAssertNil(model.fieldAfter(nil))
+        XCTAssertNil(model.fieldAfter("notAField"))
+    }
+
+    func testDateAndPickerFieldsAreNotKeyboardFocusable() async throws {
+        let model = await loaded()
+        for identifier in ["dateOfBirth", "idNumberType", "sourceOfFunds", "terms"] {
+            XCTAssertFalse(try field(model, identifier).acceptsKeyboardFocus,
+                           "\(identifier) opens a picker or toggles, so the return key should skip it")
+        }
     }
 
     // MARK: Helpers
@@ -185,64 +256,21 @@ final class DynamicFormModelTests: XCTestCase {
         model.setValue(.option("SalaryOrWages"), for: try field(model, "sourceOfFunds"))
         model.setValue(.bool(true), for: try field(model, "terms"))
     }
+}
 
-    // MARK: Render scheduling
+/// Offline on the first fetch, the bundled schema after that.
+private final class FailOnceRepository: FormRepository, @unchecked Sendable {
+    private var hasFailed = false
 
-    /// The return key marks the field on submit and the blur that follows marks it again.
-    /// A second render there is what made the error appear a beat after focus moved.
-    func testReTouchingAFieldSchedulesNoFurtherRender() async throws {
-        let model = try await loaded()
-        let mobile = try field(model, "username")
-        var renders = 0
-        let subscription = model.objectWillChange.sink { _ in renders += 1 }
-        defer { subscription.cancel() }
-
-        model.markTouched(mobile)
-        XCTAssertEqual(renders, 1)
-        model.markTouched(mobile)
-        XCTAssertEqual(renders, 1)
-    }
-
-    func testTouchingByIdentifierRevealsTheErrorAndIgnoresUnknownFields() async throws {
-        let model = try await loaded()
-        let mobile = try field(model, "username")
-        model.setValue(.text("123"), for: mobile)
-        XCTAssertNil(model.error(for: mobile), "untouched, so still silent")
-
-        model.markTouched(identifiedBy: "username")
-        XCTAssertNotNil(model.error(for: mobile))
-
-        model.markTouched(identifiedBy: "notAField")   // must not trap
-    }
-
-    // MARK: Return-key focus order
-
-    func testFocusOrderCoversOnlyTextEntryInSchemaOrder() async throws {
-        let model = try await loaded()
-        XCTAssertEqual(model.focusableIdentifiers,
-                       ["username", "password", "firstname", "lastname", "email", "referralCode"])
-    }
-
-    func testReturnWalksToTheNextFieldAndStopsAtTheEnd() async throws {
-        let model = try await loaded()
-        XCTAssertEqual(model.fieldAfter("username"), "password")
-        XCTAssertEqual(model.fieldAfter("email"), "referralCode")
-        XCTAssertNil(model.fieldAfter("referralCode"), "The last field dismisses rather than wrapping")
-    }
-
-    func testFocusOrderIgnoresUnknownAndAbsentFields() async throws {
-        let model = try await loaded()
-        XCTAssertNil(model.fieldAfter(nil))
-        XCTAssertNil(model.fieldAfter("notAField"))
-    }
-
-    func testDateAndPickerFieldsAreNotKeyboardFocusable() async throws {
-        let model = try await loaded()
-        for identifier in ["dateOfBirth", "idNumberType", "sourceOfFunds", "terms"] {
-            XCTAssertFalse(try field(model, identifier).acceptsKeyboardFocus,
-                           "\(identifier) opens a picker or toggles, so the return key should skip it")
+    func form(named name: FormName) async throws -> FormSchema {
+        if !hasFailed {
+            hasFailed = true
+            throw FormLoadError.offline
         }
+        return try await StubFormRepository(forms: BundledForms.all, delay: 0).form(named: name)
     }
+
+    func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult { FormSubmitResult() }
 }
 
 /// Confirmed behaviour: the ID Number Type dropdown selects whether the user is entering a
@@ -253,26 +281,15 @@ final class DynamicFormModelTests: XCTestCase {
 @MainActor
 final class IDTypeRegexDependencyTests: XCTestCase {
 
-    private func loadedSectionTwo(
-        regexDependencies: [String: String] = ["idNumberType": "idNumber"],
-        appliesOptionRegex: Bool = true
-    ) async throws -> DynamicFormModel {
-        let url = Bundle.module.url(forResource: "registration", withExtension: "json")!
-        let data = try Data(contentsOf: url)
+    private func loadedSectionTwo(regexDependencies: [String: String] = ["idNumberType": "idNumber"]) async -> DynamicFormModel {
         let model = DynamicFormModel(
             formName: .registration,
             dependencies: FormDependencies(
-                repository: StubFormRepository(forms: [.registration: data], delay: 0),
-                appliesOptionRegexToDependentField: appliesOptionRegex,
+                repository: StubFormRepository(forms: BundledForms.all, delay: 0),
                 regexDependencies: regexDependencies
             )
         )
-        model.load()
-        let deadline = Date().addingTimeInterval(2)
-        while model.form == nil {
-            if Date() > deadline { XCTFail("timed out"); break }
-            try await Task.sleep(nanoseconds: 5_000_000)
-        }
+        await model.load()
         return model
     }
 
@@ -281,7 +298,7 @@ final class IDTypeRegexDependencyTests: XCTestCase {
     }
 
     func testSouthAfricanIDRequiresThirteenDigits() async throws {
-        let model = try await loadedSectionTwo()
+        let model = await loadedSectionTwo()
         let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
 
         model.setValue(.option("idNumber"), for: type)
@@ -294,7 +311,7 @@ final class IDTypeRegexDependencyTests: XCTestCase {
     }
 
     func testPassportAcceptsAnAlphanumericNumber() async throws {
-        let model = try await loadedSectionTwo()
+        let model = await loadedSectionTwo()
         let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
 
         model.setValue(.option("passport"), for: type)
@@ -306,7 +323,7 @@ final class IDTypeRegexDependencyTests: XCTestCase {
     /// Switching type revalidates immediately — the user shouldn't have to re-type to see the
     /// rule change.
     func testSwitchingTypeRevalidatesWithoutRetyping() async throws {
-        let model = try await loadedSectionTwo()
+        let model = await loadedSectionTwo()
         let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
 
         model.setValue(.option("idNumber"), for: type)
@@ -324,7 +341,7 @@ final class IDTypeRegexDependencyTests: XCTestCase {
     /// A literal pattern on a dropdown option describes the *selection*, not another field.
     /// `sourceOfFunds` options carry `"[a-zA-Z]"`; that must never leak onto its neighbour.
     func testLiteralOptionPatternsDoNotLeakOntoOtherFields() async throws {
-        let model = try await loadedSectionTwo()
+        let model = await loadedSectionTwo()
         let source = try field(model, "sourceOfFunds")
         let promo = try field(model, "receivePromotionalInformation")
 
@@ -334,23 +351,14 @@ final class IDTypeRegexDependencyTests: XCTestCase {
         XCTAssertNil(model.error(for: promo))
     }
 
-    /// With the link declared, the rule survives a schema reorder. Without it, resolution falls
-    /// back to field order — which is exactly the fragility the declaration removes.
-    func testExplicitLinkIsNotPositional() async throws {
-        let model = try await loadedSectionTwo(regexDependencies: ["idNumberType": "idNumber"])
+    /// The engine's default is no links at all: without one, the field's own regex always
+    /// applies, whatever the dropdown says.
+    func testNoLinkMeansTheFieldsOwnRuleApplies() async throws {
+        let model = await loadedSectionTwo(regexDependencies: [:])
         let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
         model.setValue(.option("passport"), for: type)
         model.setValue(.text("A1234567"), for: number)
         model.markTouched(number)
-        XCTAssertNil(model.error(for: number))
-    }
-
-    func testCanBeDisabledEntirely() async throws {
-        let model = try await loadedSectionTwo(appliesOptionRegex: false)
-        let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
-        model.setValue(.option("passport"), for: type)
-        model.setValue(.text("A1234567"), for: number)
-        model.markTouched(number)
-        XCTAssertNotNil(model.error(for: number), "disabled → the field's own regex always applies")
+        XCTAssertNotNil(model.error(for: number))
     }
 }

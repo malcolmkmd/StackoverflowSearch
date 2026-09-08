@@ -34,7 +34,9 @@ func presentRegistration() {
         dependencies: RegistrationDependencies(
             forms: .live(baseURL: configBaseURL, localizer: legacyLocalizer),
             service: MockRegistrationService()   // → RemoteRegistrationService once the endpoint is confirmed
-        )
+        ),
+        onClose: { [weak self] in self?.popupContainer.dismiss() },
+        onLogin: { [weak self] in self?.popupContainer.dismiss(); self?.presentLogin() }
     ) { [weak self] result in
         self?.routeAfterRegistration(result)
     }
@@ -71,8 +73,8 @@ follow-up.
 `MockRegistrationService` is wired rather than `RemoteRegistrationService` because the
 registration POST's path, body and response shape are **not confirmed** — see
 [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md). `RemoteRegistrationService` exists, compiles and is one
-line to swap in; its
-`RegisterRequest` is a best guess to be corrected with the backend. Shipping this PR with the
+line to swap in; it posts through `FormRepository.submitForm`, whose envelope handling is
+tested against captured responses. Shipping this PR with the
 mock service means the *screen* is live and validated end to end while the *submit* still
 needs the contract — which is the honest state of things.
 
@@ -80,15 +82,15 @@ needs the contract — which is the honest state of things.
 
 ## Testing
 
-The package suites are unchanged and green — 152 tests:
+The package suites are unchanged and green — 164 tests:
 
 ```bash
 cd JackpotKit
 xcodebuild -scheme JackpotKit-Package -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
 
-`JackpotUITests` 13 · `JackpotFormsTests` 80 · `JackpotNetworkingTests` 34 ·
-`JackpotLocalizationTests` 16 · `JackpotRegistrationTests` 9
+`JackpotUITests` 20 · `JackpotFormsTests` 83 · `JackpotNetworkingTests` 34 ·
+`JackpotLocalizationTests` 16 · `JackpotRegistrationTests` 11
 
 Manual, on a device: open sign-up from the header and from the bottom bar; complete both pages;
 confirm section gating, the ID-type → ID-number rule change, the password checklist, and that
@@ -98,7 +100,7 @@ wrapper doing its job.
 
 ## Review guide
 
-1. The one new file. It should be ~20 lines and reference nothing but the two modules and
-   `getTranslation`.
+1. The one new file. It should be ~20 lines and reference nothing but `JackpotForms`,
+   `JackpotRegistration` and `getTranslation`.
 2. The deletions. Grep for `registrationPopup`, `flowOne`, `flowTwo` — zero hits expected.
 3. Nothing else in the diff. If there is, it belongs in another PR.

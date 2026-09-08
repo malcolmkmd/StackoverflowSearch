@@ -18,11 +18,17 @@ public struct JackpotTheme: Equatable, Sendable {
 // MARK: - Colours
 
 public struct JackpotColors: Equatable, Sendable {
+    /// The base layer: what screens and components draw on, and what a control resting on a
+    /// `surface` band is filled with — a panel's close button, the "Already have an account?" row.
+    public var background = Palette.background
+    /// The raised layer: a sheet's header and footer bands, a presented picker.
     public var surface = Palette.surface
 
-    public var fieldBackground = Palette.fieldBackground
+    /// Field fill. Shares `surface`'s pair today; its own role so a theme can separate them.
+    public var fieldBackground = Palette.surface
     public var fieldBorder = Palette.fieldBorder
-    public var fieldBorderFocused = Palette.emphasis
+    /// The brand blue in both appearances, so the ring is visible on the light field fill too.
+    public var fieldBorderFocused = Palette.accentFill
     public var fieldBorderInvalid = Palette.error
 
     public var textPrimary = Palette.textPrimary
@@ -31,6 +37,8 @@ public struct JackpotColors: Equatable, Sendable {
 
     public var accent = Palette.accent
     public var accentFill = Palette.accentFill
+    /// A primary button that cannot be tapped yet, under `textPrimary`.
+    public var accentFillDisabled = Palette.accentFillDisabled
 
     public var error = Palette.error
     public var warning = Palette.warning
@@ -42,23 +50,28 @@ public struct JackpotColors: Equatable, Sendable {
 /// Held as shared constants rather than inline literals so two separately built `JackpotColors`
 /// still compare equal — a dynamic `Color` compares by identity.
 ///
-/// Same hex is one entry. Android roles that shared a value (`background` = `fieldBackground`,
-/// `formBackground` = `surface`, `link` / selected shell = `accent`, track / divider =
-/// `fieldBorder`) are not given a second name.
+/// Same hex is one entry. A role gets its own name when it can diverge from the others on its
+/// pair: `surface` and `fieldBackground` are both `Palette.surface` today, but a theme may want a
+/// field to stand out on the shell. Roles that never diverge (`link` / selected shell =
+/// `accent`, track / divider = `fieldBorder`) are not given a second name.
 enum Palette {
-    /// #FFFFFF / #131316. Android `formBackground` (BG Layer 2 / BG Base).
-    static let surface = Color.adaptive(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x131316))
+    /// #FFFFFF / #131316. The base layer: screens and components draw on it, and controls on a
+    /// `surface` band fill with it. (Android names it `formBackground`, after its first
+    /// consumer; the role is wider than that.)
+    static let background = Color.adaptive(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x131316))
 
-    /// #F0F0F2 / #202126. Field fill, disabled primary, checklist. Android `fieldBackground`
-    /// and dialog `background` are this pair, so they share this token.
-    static let fieldBackground = Color.adaptive(light: Color(hex: 0xF0F0F2), dark: Color(hex: 0x202126))
+    /// #F0F0F2 / #202126. The raised layer: the sheet shell — the Sign Up header band with its
+    /// close button, the footer band, a presented picker — and, on the same pair, the field
+    /// fill and the checklist. (Android `surface`.)
+    static let surface = Color.adaptive(light: Color(hex: 0xF0F0F2), dark: Color(hex: 0x202126))
 
     /// #E1E2E6 / #3E3E48. Hairline, progress track, divider, secondary button.
     static let fieldBorder = Color.adaptive(light: Color(hex: 0xE1E2E6), dark: Color(hex: 0x3E3E48))
 
-    /// #E1E1E5. Android reused this for the focused border and every dark-mode text / icon.
-    /// Light-mode paste also dumped body copy, `primary`, `onPrimary` and `link` here — those
-    /// are unreadable on #F0F0F2, so only the focused border keeps it in light.
+    /// #E1E1E5. Android's dark-mode text / icon value; it once served as the focused border too,
+    /// but at 1.1:1 on the light field fill that ring was invisible, so focus now uses
+    /// `accentFill`. Light-mode paste also dumped body copy, `primary`, `onPrimary` and `link`
+    /// here — unreadable on #F0F0F2, so light text uses its own values.
     static let emphasis = Color(hex: 0xE1E1E5)
 
     /// #2F2F37 / #E1E1E5. Android `titleText` (Text Priority); dark body shares `emphasis`.
@@ -72,15 +85,22 @@ enum Palette {
     /// was #E1E1E5 on a #E1E1E5 fill — an unfinished placeholder.
     static let textOnAccent = Color.white
 
-    /// Accent as *text* and tint — tertiary labels, selected shell. This is the Android
-    /// `link` role; the token is not named `link`. Light #E1E1E5 is unreadable, so the
-    /// isolated brand blue stays. Dark stays the lighter blue so selected state does not
-    /// collapse into `textSecondary` (both would otherwise be #E1E1E5).
+    /// Accent as *text* and tint: the raised label of a focused field, ticked boxes, checklist
+    /// ticks and the system tint. This is the Android `link` role; the token is not named
+    /// `link`. Light #E1E1E5 is unreadable, so the isolated brand blue stays. Dark stays the
+    /// lighter blue so a ticked state does not collapse into `textSecondary` (both would
+    /// otherwise be #E1E1E5).
     static let accent = Color.adaptive(light: Color(hex: 0x0060EC), dark: Color(hex: 0x4D8FFF))
 
     /// #0060EC. Carries `textOnAccent` at 5.4:1 in both appearances. Android `primary` was
     /// the same unfinished #E1E1E5 as `onPrimary`.
     static let accentFill = Color(hex: 0x0060EC)
+
+    /// #D4E4F8 / #262B3B. How the app draws Next until the section validates: pale blue in
+    /// light, a muted slate in dark. Not the accent at an opacity — over the dark page that
+    /// lands on a saturated navy the app never shows. Both values are read from screenshots;
+    /// replace them with the Android pair.
+    static let accentFillDisabled = Color.adaptive(light: Color(hex: 0xD4E4F8), dark: Color(hex: 0x262B3B))
 
     /// Brand error #DF0000. Dark lightens to #FF6B6B so captions still clear 4.5:1 on
     /// #131316 / #202126 — #DF0000 itself reads at ~3.2:1 there.
@@ -140,8 +160,8 @@ public struct JackpotSizes: Equatable, Sendable {
     public var emphasizedBorderWidth: CGFloat = 2
     public var minimumHitTarget: CGFloat = 44
     public var progressBarHeight: CGFloat = JackpotSpacing.xxs.rawValue
-    public var textAreaMinHeight: CGFloat = 110
-    public var cardMinHeight: CGFloat = 140
+    /// The shell a feature is presented in (`JackpotPanel`).
+    public var panelCornerRadius: CGFloat = JackpotSpacing.lm.rawValue
 
     public static let standard = JackpotSizes()
 
@@ -153,6 +173,8 @@ public struct JackpotSizes: Equatable, Sendable {
 // MARK: - Typography
 
 public struct JackpotTypography: Equatable, Sendable {
+    /// A panel's title: Sign Up.
+    public var title = Font.title2.weight(.bold)
     public var fieldText = Font.body
     public var label = Font.footnote
     public var error = Font.caption

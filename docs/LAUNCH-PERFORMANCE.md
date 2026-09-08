@@ -114,13 +114,13 @@ Two behaviours worth knowing:
 
 12 tests, including offline, malformed cache, and beyond-`maxStale`.
 
-### `JackpotUI` — the skeleton
+### The launch skeleton — not implemented
 
-`JackpotLaunchSkeleton` draws the actual shell — header, verticals strip, content, bottom bar —
-as placeholders, so nothing shifts when config lands. A generic spinner is less work and worse:
-content jumping in from nothing reads as slower than it is.
-
-`.shimmering()` is slow and low-contrast on purpose, and holds still under Reduce Motion.
+`JackpotUI` has no launch skeleton yet; the package carries only what registration draws. When
+the app adopts `AppDataLoader`, draw the actual shell — header, verticals strip, content, bottom
+bar — as placeholders, so nothing shifts when config lands. A generic spinner is less work and
+worse: content jumping in from nothing reads as slower than it is. Keep any shimmer slow and
+low-contrast, and hold it still under Reduce Motion.
 
 ---
 

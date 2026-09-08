@@ -2,17 +2,18 @@ import SwiftUI
 
 public struct JackpotDateField: View {
     @Binding private var selection: Date?
-    private let placeholder: String
+    private let title: String
     private let range: PartialRangeThrough<Date>
 
     @Environment(\.jackpotTheme) private var theme
-    @Environment(\.jackpotFieldLabel) private var fieldLabel
     @State private var isPresented = false
 
-    public init(_ placeholder: String,
+    /// - Parameter title: the in-field label. It floats once a date is chosen and names the
+    ///   picker sheet.
+    public init(_ title: String,
                 selection: Binding<Date?>,
                 in range: PartialRangeThrough<Date> = ...Date()) {
-        self.placeholder = placeholder
+        self.title = title
         self._selection = selection
         self.range = range
     }
@@ -21,20 +22,21 @@ public struct JackpotDateField: View {
         Button {
             isPresented = true
         } label: {
-            HStack {
-                Text(displayedValue)
-                    .jackpotForegroundStyle(valueColor)
-                Spacer()
-                Image(systemName: "calendar").jackpotForegroundStyle(\.textPrimary)
+            HStack(spacing: 0) {
+                JackpotFloatingField(title, isFloating: selection != nil) {
+                    if let selection {
+                        Text(Self.formatted(selection)).jackpotTextStyle(\.fieldText)
+                    }
+                }
+                Image(systemName: "calendar")
+                    .jackpotForegroundStyle(\.textPrimary)
+                    .padding(.trailing, theme.sizes.contentPadding)
             }
-            .jackpotFont(\.fieldText)
-            .padding(.horizontal, theme.sizes.contentPadding)
-            .frame(height: theme.sizes.controlHeight)
             .jackpotFieldBackground()
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(fieldLabel ?? placeholder)
-        .accessibilityValue(selection == nil ? "None" : displayedValue)
+        .accessibilityLabel(title)
+        .accessibilityValue(selection.map(Self.formatted) ?? "None")
         .sheet(isPresented: $isPresented) {
             if #available(iOS 16.0, *) {
                 sheet
@@ -54,10 +56,11 @@ public struct JackpotDateField: View {
 
     private var sheet: some View {
         ZStack {
+            // A presented sheet is a shell, so it draws on `surface` like a header band would.
             theme.colors.surface.ignoresSafeArea()
 
             VStack(spacing: theme.sizes.spacing) {
-                Text(fieldLabel ?? placeholder)
+                Text(title)
                     .jackpotTextStyle(\.button)
                     .padding(.top, .lm)
 
@@ -85,12 +88,7 @@ public struct JackpotDateField: View {
         }
     }
 
-    private var displayedValue: String {
-        guard let selection else { return placeholder }
-        return selection.formatted(date: .abbreviated, time: .omitted)
-    }
-
-    private var valueColor: KeyPath<JackpotColors, Color> {
-        selection == nil ? \.textSecondary : \.textPrimary
+    private static func formatted(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .omitted)
     }
 }

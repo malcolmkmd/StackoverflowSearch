@@ -1,6 +1,4 @@
 import Foundation
-import JackpotNetworking
-import JackpotFormsDomain
 import JackpotForms
 
 /// What happens to the collected form values. The engine hands us a `FormSubmission`; this
@@ -77,8 +75,6 @@ public struct RemoteRegistrationService: RegistrationService {
     public func register(_ submission: FormSubmission) async throws -> RegistrationResult {
         do {
             return RegistrationResult(try await repository.submitForm(submission))
-        } catch let error as RegistrationError {
-            throw error
         } catch let error as FormLoadError {
             throw RegistrationError(error)
         }
@@ -91,18 +87,6 @@ public enum RegistrationError: LocalizedError, Equatable {
     case offline
     case server(message: String)
     case unexpected
-
-    init(_ apiError: APIError) {
-        if apiError.isOffline { self = .offline; return }
-        switch apiError {
-        case .badRequest(let problem) where problem?.code == 1042:   // TODO: confirm code
-            self = .mobileAlreadyRegistered
-        case .badRequest, .unauthorized, .server, .unexpectedStatus:
-            if let message = apiError.serverMessage { self = .server(message: message) } else { self = .unexpected }
-        default:
-            self = .unexpected
-        }
-    }
 
     init(_ error: FormLoadError) {
         switch error {

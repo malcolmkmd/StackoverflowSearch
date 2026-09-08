@@ -8,7 +8,11 @@ import SwiftUI
 /// `panelView` is there for containers that still expect a `UIView`.
 ///
 /// ```swift
-/// let controller = RegistrationPanelController(dependencies: .mock(localizer: legacyLocalizer)) { result in
+/// let controller = RegistrationPanelController(
+///     dependencies: .mock(localizer: legacyLocalizer),
+///     onClose: { popupContainer.dismiss() },
+///     onLogin: { popupContainer.dismiss(); presentLogin() }
+/// ) { result in
 ///     // route to OTP / login / home
 /// }
 /// addChild(controller)
@@ -17,14 +21,20 @@ import SwiftUI
 /// ```
 public final class RegistrationPanelController: UIHostingController<RegistrationView> {
 
-    public init(dependencies: RegistrationDependencies, onComplete: @escaping (RegistrationResult) -> Void) {
-        super.init(rootView: RegistrationView(dependencies: dependencies, onComplete: onComplete))
+    public init(dependencies: RegistrationDependencies,
+                onClose: @escaping () -> Void,
+                onLogin: @escaping () -> Void,
+                onComplete: @escaping (RegistrationResult) -> Void) {
+        super.init(rootView: RegistrationView(dependencies: dependencies,
+                                              onClose: onClose,
+                                              onLogin: onLogin,
+                                              onComplete: onComplete))
         view.backgroundColor = .clear
         if #available(iOS 16.0, *) { sizingOptions = [.intrinsicContentSize] }
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("Use init(dependencies:onComplete:)") }
+    required init?(coder: NSCoder) { fatalError("Use init(dependencies:onClose:onLogin:onComplete:)") }
 
     /// For legacy containers that take a `UIView`. The controller must still be added as a
     /// child of whatever presents it.

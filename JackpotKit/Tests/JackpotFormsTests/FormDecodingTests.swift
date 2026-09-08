@@ -1,13 +1,10 @@
 import XCTest
-@testable import JackpotFormsData
-import JackpotFormsDomain
-import JackpotFormsUI
+@testable import JackpotForms
 
 final class FormDecodingTests: XCTestCase {
 
     private func loadRegistration() throws -> FormSchema {
-        let url = try XCTUnwrap(Bundle.module.url(forResource: "registration", withExtension: "json"))
-        return try StubFormRepository.decode(try Data(contentsOf: url))
+        try StubFormRepository.decode(BundledForms.json(named: "registration"))
     }
 
     func testDecodesTheRealRegistrationSchema() throws {
@@ -27,11 +24,16 @@ final class FormDecodingTests: XCTestCase {
                        ["username", "password", "firstname", "lastname", "email", "referralCode"])
     }
 
+    /// The three types registration uses are the three this build renders.
     func testFieldTypesMapCorrectly() throws {
         let form = try loadRegistration()
+        XCTAssertEqual(Set(form.allFields.map(\.type)), [.input, .dropdown, .checkbox])
         XCTAssertEqual(form.field(identifiedBy: "username")?.type, .input)
         XCTAssertEqual(form.field(identifiedBy: "username")?.inputType, .number)
+        XCTAssertEqual(form.field(identifiedBy: "username")?.prefix, "+27")
         XCTAssertEqual(form.field(identifiedBy: "password")?.inputType, .password)
+        XCTAssertEqual(form.field(identifiedBy: "email")?.inputType, .email)
+        XCTAssertEqual(form.field(identifiedBy: "dateOfBirth")?.inputType, .calendar)
         XCTAssertEqual(form.field(identifiedBy: "idNumberType")?.type, .dropdown)
         XCTAssertEqual(form.field(identifiedBy: "terms")?.type, .checkbox)
     }
@@ -66,7 +68,6 @@ final class FormDecodingTests: XCTestCase {
         """.utf8)
         let field = try XCTUnwrap(StubFormRepository.decode(json).field(identifiedBy: "solo"))
         XCTAssertEqual(field.labelKey, "solo")
-        XCTAssertEqual(field.placeholderKey, "solo")
         XCTAssertEqual(field.validationMessageKey, "regex")
         XCTAssertFalse(field.isRequired)     // unspecified must not block submission
         XCTAssertTrue(field.isVisible)
@@ -81,20 +82,10 @@ final class FormDecodingTests: XCTestCase {
         XCTAssertEqual(options[0].regex, "idNumberRegex")
     }
 
-    func testKitchenSinkIsTheRegistrationFieldCatalog() throws {
-        let form = try StubFormRepository.decode(FormPreviewData.bundledJSON(named: FormName.kitchenSink.rawValue))
-        XCTAssertEqual(form.codeName, .kitchenSink)
-        XCTAssertEqual(form.allFields.count, 12)
-        XCTAssertEqual(Set(form.allFields.map(\.type)), [.input, .dropdown, .checkbox])
-        XCTAssertEqual(form.allFields.map(\.identifier), [
-            "username", "password", "firstname", "lastname", "email", "referralCode",
-            "idNumberType", "idNumber", "dateOfBirth", "sourceOfFunds",
-            "receivePromotionalInformation", "terms",
-        ])
-        XCTAssertEqual(form.field(identifiedBy: "username")?.inputType, .number)
-        XCTAssertEqual(form.field(identifiedBy: "password")?.inputType, .password)
-        XCTAssertEqual(form.field(identifiedBy: "email")?.inputType, .email)
-        XCTAssertEqual(form.field(identifiedBy: "dateOfBirth")?.inputType, .calendar)
+    func testTheBundledSchemaIsRegistration() throws {
+        XCTAssertEqual(Set(BundledForms.all.keys), [.registration])
+        let form = try StubFormRepository.decode(try XCTUnwrap(BundledForms.all[.registration]))
+        XCTAssertEqual(form.codeName, .registration)
     }
 }
 
@@ -102,7 +93,6 @@ final class FormNameTests: XCTestCase {
 
     func testKnownNamesMapToTheirCodeNames() {
         XCTAssertEqual(FormName.registration.rawValue, "registration")
-        XCTAssertEqual(FormName.kitchenSink.rawValue, "kitchenSink")
     }
 
     /// Forms are authored server-side, so a name this build has never heard of must still be
@@ -117,14 +107,10 @@ final class FormNameTests: XCTestCase {
         let forms: [FormName: Int] = [.registration: 1, FormName("deposit"): 2]
         XCTAssertEqual(forms[.registration], 1)
         XCTAssertEqual(forms[FormName("deposit")], 2)
-        XCTAssertNil(forms[.kitchenSink])
+        XCTAssertNil(forms[FormName("withdrawal")])
     }
 
     func testRoundTripsThroughRawValue() {
         XCTAssertEqual(FormName(rawValue: "registration"), .registration)
-    }
-
-    func testBundledListMatchesTheShippedResources() {
-        XCTAssertEqual(Set(FormName.bundled), [.registration, .kitchenSink])
     }
 }
