@@ -13,7 +13,7 @@ final class TranslationsAsFormLocalizerTests: XCTestCase {
         "terms": "I am over 18 years of age & I accept the Terms & Conditions",
     ], regionCode: "JZA")
 
-    private var localizer: any FormLocalizing { TranslationsLocalizer(translations) }
+    private var localizer: any FormLocalizing { translations.formLocalizer }
 
     func testFieldLabelKeyResolves() {
         XCTAssertEqual(localizer.display("username"), "Enter Mobile Number")

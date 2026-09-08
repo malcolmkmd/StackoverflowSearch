@@ -30,7 +30,7 @@ and its tests gain `JackpotNetworking` in the manifest.
 
 ```swift
 // Sources/Features/Registration/LegacyTranslationLocalizer.swift
-// Deleted at step 5, when the app adopts JackpotLocalization and TranslationsLocalizer takes over.
+// Deleted at step 5, when the app adopts JackpotLocalization and Translations.formLocalizer takes over.
 struct LegacyTranslationLocalizer: FormLocalizing {
     func string(forKey key: String) -> String? {
         let value = getTranslation(Key: key)
@@ -44,8 +44,7 @@ struct LegacyTranslationLocalizer: FormLocalizing {
 func presentRegistration() {
     let controller = RegistrationPanelController(
         dependencies: RegistrationDependencies(
-            forms: .live(baseURL: configBaseURL, localizer: LegacyTranslationLocalizer()),
-            service: MockRegistrationService()   // → RemoteRegistrationService once the endpoint is confirmed
+            forms: .live(baseURL: configBaseURL, localizer: LegacyTranslationLocalizer())
         ),
         onClose: { [weak self] in self?.popupContainer.dismiss() },
         onLogin: { [weak self] in self?.popupContainer.dismiss(); self?.presentLogin() }
@@ -81,11 +80,10 @@ It is the *only* new code that references the legacy world, and step 5 deletes t
 
 ## What's provisional
 
-`MockRegistrationService` is wired rather than `RemoteRegistrationService` because the
-registration POST's response shape is confirmed but not yet exercised end to end — see
-[OPEN-QUESTIONS.md](OPEN-QUESTIONS.md). `RemoteRegistrationService` exists, compiles and is one
-line to swap in; it posts through `FormRepository.submitForm`, whose envelope handling is
-tested against captured responses.
+The submit goes live with the fetch: `.live` posts through `RemoteFormRepository.submitForm`,
+whose envelope handling is tested against captured responses but not yet exercised end to end —
+see [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md). `.mock()` keeps the faked submit for a build
+without the backend.
 
 ---
 

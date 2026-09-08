@@ -1,12 +1,17 @@
 import Foundation
 
 /// What `POST /cron/forms/submit` returns. HTTP 200 is not success, and a created account can still need manual FICA.
-public struct FormSubmitResult: Equatable, Sendable {
+public struct FormSubmitResult: Decodable, Equatable, Sendable {
     public let accountId: String?
     public let message: String?
     public let status: String?
     public let partialRegistrationStatus: Int?
     public let compliance: FormComplianceResult?
+
+    enum CodingKeys: String, CodingKey {
+        case accountId, message, status, partialRegistrationStatus
+        case compliance = "complianceResponse"
+    }
 
     public init(accountId: String? = nil,
                 message: String? = nil,
@@ -20,25 +25,15 @@ public struct FormSubmitResult: Equatable, Sendable {
         self.compliance = compliance
     }
 
+    /// Account exists but auto-FICA didn't finish (`jpc-partially-complete-profile`).
     public var isPartial: Bool { (partialRegistrationStatus ?? 0) != 0 }
 }
 
-public struct FormComplianceResult: Equatable, Sendable {
+/// `accessToken` is the session token when the account was created; the app logs in with it.
+public struct FormComplianceResult: Decodable, Equatable, Sendable {
     public let complianceStatus: Int?
     public let requiredComplianceStatus: Int?
     public let isValidId: Bool?
     public let message: String?
     public let accessToken: String?
-
-    public init(complianceStatus: Int? = nil,
-                requiredComplianceStatus: Int? = nil,
-                isValidId: Bool? = nil,
-                message: String? = nil,
-                accessToken: String? = nil) {
-        self.complianceStatus = complianceStatus
-        self.requiredComplianceStatus = requiredComplianceStatus
-        self.isValidId = isValidId
-        self.message = message
-        self.accessToken = accessToken
-    }
 }

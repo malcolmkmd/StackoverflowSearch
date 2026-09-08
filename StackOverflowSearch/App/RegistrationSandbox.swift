@@ -1,9 +1,10 @@
 
 import SwiftUI
+import JackpotForms
 import JackpotRegistration
 import JackpotUI
 
-/// On-device harness for the Sign Up panel: bundled schema, mock service, the result shown in an alert.
+/// On-device harness for the Sign Up panel: bundled schema, faked submit, the result shown in an alert.
 struct RegistrationSandbox: View {
     let onClose: () -> Void
 

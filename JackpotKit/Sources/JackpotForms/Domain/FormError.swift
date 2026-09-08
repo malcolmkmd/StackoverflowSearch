@@ -1,7 +1,7 @@
 import Foundation
 
 /// Why a form operation failed, in words the UI can show. `server` keeps the server's wording.
-public enum FormLoadError: LocalizedError, Equatable {
+public enum FormError: LocalizedError, Equatable {
     case offline
     case notFound(FormName)
     case server(message: String)

@@ -5,8 +5,8 @@ Everything the registration work assumed rather than knew. Grouped by who can an
 Each entry says what we assumed, what breaks if the assumption is wrong, and — where it exists —
 the switch to flip once you have the answer.
 
-**Nothing currently blocks step 4, the app swap.** Q1, Q2 and Q4b are answered. `MockRegistrationService`
-can stay for previews; `RemoteRegistrationService` maps the real submit envelope.
+**Nothing currently blocks step 4, the app swap.** Q1, Q2 and Q4b are answered. `StubFormRepository`
+fakes the submit for previews; `RemoteFormRepository` maps the real envelope.
 
 ---
 
@@ -38,7 +38,7 @@ Path, request body shape, and response body shape.
   locale key `jpc-partially-complete-profile`.
 - **Failure is also HTTP 200:** `isSuccessful: false`, `error.code` / `displayCode` /
   `message`. Look up `jpc-reg-error.{code}` (e.g. 153008, 153006 invalid ID).
-- **Where:** `FormSubmitResult`, `RemoteFormRepository.submitForm`, `RegistrationResult`.
+- **Where:** `FormSubmitResult` (`RegistrationResult` to the app), `RemoteFormRepository.submitForm`.
 
 ### Q3 · Are the error `code` values a documented catalogue? ✅ answered (shape)
 
@@ -84,7 +84,7 @@ onto `idNumber` when Passport is selected.
 
 The 5–20 bounds are the ones we already used; say if the real min/max is tighter.
 
-- **Where:** `RegexCatalog.jpcDefaults` in `JackpotForms/Domain/RegexResolving.swift`.
+- **Where:** `FormDependencies.jpcPatterns` in `JackpotForms/UI/FormDependencies.swift`.
 
 ### Q5 · How is a validation message key composed?
 

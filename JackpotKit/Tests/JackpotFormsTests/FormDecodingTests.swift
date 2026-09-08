@@ -10,14 +10,13 @@ final class FormDecodingTests: XCTestCase {
         let form = try loadRegistration()
         XCTAssertEqual(form.id, 1052)
         XCTAssertEqual(form.codeName, .registration)
-        XCTAssertEqual(form.regionCode, "JZA")
         XCTAssertEqual(form.sections.count, 2)
         XCTAssertEqual(form.allFields.count, 12)
     }
 
     func testSectionsAndRowsAreOrdered() throws {
         let form = try loadRegistration()
-        XCTAssertEqual(form.sections.map(\.order), [1, 2])
+        XCTAssertEqual(form.sections.map(\.id), [45, 46])
         XCTAssertEqual(form.sections[0].rows.map(\.number), [1, 2, 3, 4, 5, 6])
         XCTAssertEqual(form.sections[0].fields.map(\.identifier),
                        ["username", "password", "firstname", "lastname", "email", "referralCode"])

@@ -5,22 +5,15 @@ enum FormMapper {
         FormSchema(
             id: dto.formId,
             codeName: FormName(dto.formCodeName),
-            title: dto.formTitle ?? dto.formCodeName,
-            subTitle: dto.formSubTitle ?? "",
-            regionCode: dto.regionCode ?? "",
             sections: (dto.sections ?? [])
+                .sorted { ($0.formSectionOrder ?? $0.formSectionId) < ($1.formSectionOrder ?? $1.formSectionId) }
                 .map(mapSection)
-                .sorted { $0.order < $1.order }
         )
     }
 
     private static func mapSection(_ dto: FormSectionDTO) -> FormSection {
         FormSection(
             id: dto.formSectionId,
-            codeName: dto.formSectionCodeName ?? "\(dto.formSectionId)",
-            title: dto.formSectionTitle ?? "",
-            subTitle: dto.formSectionSubTitle ?? "",
-            order: dto.formSectionOrder ?? dto.formSectionId,
             rows: (dto.rows ?? [])
                 .map(mapRow)
                 .sorted { $0.number < $1.number }

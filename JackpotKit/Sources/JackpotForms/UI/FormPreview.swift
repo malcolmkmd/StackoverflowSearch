@@ -16,9 +16,9 @@ enum FormPreview {
     }
 
     static func schema(_ fields: [FormField]) -> FormSchema {
-        FormSchema(id: 1, codeName: FormName("preview"), title: "", subTitle: "", regionCode: "JZA",
-                   sections: [FormSection(id: 1, codeName: "1", title: "", subTitle: "", order: 1,
-                                          rows: fields.enumerated().map { FormRow(number: $0.offset + 1, fields: [$0.element]) })])
+        FormSchema(id: 1, codeName: FormName("preview"), sections: [
+            FormSection(id: 1, rows: fields.enumerated().map { FormRow(number: $0.offset + 1, fields: [$0.element]) }),
+        ])
     }
 
     @MainActor

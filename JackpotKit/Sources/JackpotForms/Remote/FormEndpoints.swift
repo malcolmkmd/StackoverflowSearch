@@ -50,22 +50,20 @@ struct FormSubmitBody: Encodable {
     let formId: String
     let formName: String
     let submittedAt: Date
-    let fields: [String: FieldValue]
-    let metadata: [String: String]?
+    let fields: [String: FormValue]
 
     enum CodingKeys: String, CodingKey {
         case formId = "form_id"
         case formName = "form_name"
         case submittedAt = "submitted_at"
-        case fields, metadata
+        case fields
     }
 
     init(_ submission: FormSubmission) {
         formId = submission.formId
         formName = submission.formCodeName.rawValue
         submittedAt = submission.submittedAt
-        fields = submission.values.mapValues(\.fieldValue)
-        metadata = submission.metadata
+        fields = submission.values
     }
 
     /// ISO-8601 is an assumption; the production encoder wasn't visible.
@@ -76,62 +74,29 @@ struct FormSubmitBody: Encodable {
     }()
 }
 
-/// Untagged JSON value; synthesized `Codable` would emit `{"bool":true}`.
-enum FieldValue: Equatable, Sendable, Encodable {
-    case string(String)
-    case bool(Bool)
-    case null
-
-    func encode(to encoder: Encoder) throws {
+/// Untagged JSON: a string, a bare `true` / `false` for checkboxes, `null` for an empty value.
+extension FormValue: Encodable {
+    public func encode(to encoder: any Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
-        case .string(let value): try container.encode(value)
-        case .bool(let value):   try container.encode(value)
-        case .null:              try container.encodeNil()
-        }
-    }
-}
-
-extension FormValue {
-    var fieldValue: FieldValue {
-        switch self {
-        case .empty:         return .null
-        case .text(let s):   return .string(s)
-        case .bool(let b):   return .bool(b)
-        case .option(let s): return .string(s)
-        case .date(let d):   return .string(FormValue.iso8601.format(d))
+        case .empty:       try container.encodeNil()
+        case .bool(let b): try container.encode(b)
+        default:           try container.encode(stringValue)
         }
     }
 }
 
 /// HTTP 200 is not success: `isSuccessful` is.
 struct FormSubmitEnvelope: Decodable {
-    let data: FormSubmitDataDTO?
+    let data: FormSubmitResult?
     let isSuccessful: Bool?
-    let success: Bool?
     let error: FormSubmitErrorDTO?
-}
-
-struct FormSubmitDataDTO: Decodable {
-    let accountId: String?
-    let message: String?
-    let status: String?
-    let partialRegistrationStatus: Int?
-    let complianceResponse: FormComplianceDTO?
 }
 
 struct FormSubmitErrorDTO: Decodable {
     let code: Int?
     let displayCode: Int?
     let message: String?
-}
-
-struct FormComplianceDTO: Decodable {
-    let complianceStatus: Int?
-    let requiredComplianceStatus: Int?
-    let isValidId: Bool?
-    let message: String?
-    let accessToken: String?
 }
 
 enum FormSubmitParser {
@@ -148,42 +113,17 @@ enum FormSubmitParser {
             return .rejected(nil)
         }
         if envelope.failed { return .rejected(envelope.error) }
-        return .accepted(FormSubmitResult(envelope.data))
+        return .accepted(envelope.data ?? FormSubmitResult())
     }
 }
 
 private extension FormSubmitEnvelope {
     /// Every field is optional, so a body with none of them is some other document.
     var isEnvelope: Bool {
-        data != nil || isSuccessful != nil || success != nil || error != nil
+        data != nil || isSuccessful != nil || error != nil
     }
 
     var failed: Bool {
-        if isSuccessful == false || success == false { return true }
-        return error != nil && isSuccessful != true
-    }
-}
-
-extension FormSubmitResult {
-    init(_ data: FormSubmitDataDTO?) {
-        self.init(
-            accountId: data?.accountId,
-            message: data?.message,
-            status: data?.status,
-            partialRegistrationStatus: data?.partialRegistrationStatus,
-            compliance: data?.complianceResponse.map(FormComplianceResult.init)
-        )
-    }
-}
-
-extension FormComplianceResult {
-    init(_ dto: FormComplianceDTO) {
-        self.init(
-            complianceStatus: dto.complianceStatus,
-            requiredComplianceStatus: dto.requiredComplianceStatus,
-            isValidId: dto.isValidId,
-            message: dto.message,
-            accessToken: dto.accessToken
-        )
+        isSuccessful == false || (isSuccessful == nil && error != nil)
     }
 }

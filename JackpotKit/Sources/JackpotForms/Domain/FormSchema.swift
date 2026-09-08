@@ -4,18 +4,11 @@ import Foundation
 public struct FormSchema: Identifiable, Equatable, Sendable {
     public let id: Int
     public let codeName: FormName
-    public let title: String
-    public let subTitle: String
-    public let regionCode: String
     public let sections: [FormSection]
 
-    public init(id: Int, codeName: FormName, title: String, subTitle: String,
-                regionCode: String, sections: [FormSection]) {
+    public init(id: Int, codeName: FormName, sections: [FormSection]) {
         self.id = id
         self.codeName = codeName
-        self.title = title
-        self.subTitle = subTitle
-        self.regionCode = regionCode
         self.sections = sections
     }
 
@@ -30,18 +23,10 @@ public struct FormSchema: Identifiable, Equatable, Sendable {
 
 public struct FormSection: Identifiable, Equatable, Sendable {
     public let id: Int
-    public let codeName: String
-    public let title: String
-    public let subTitle: String
-    public let order: Int
     public let rows: [FormRow]
 
-    public init(id: Int, codeName: String, title: String, subTitle: String, order: Int, rows: [FormRow]) {
+    public init(id: Int, rows: [FormRow]) {
         self.id = id
-        self.codeName = codeName
-        self.title = title
-        self.subTitle = subTitle
-        self.order = order
         self.rows = rows
     }
 

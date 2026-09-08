@@ -14,24 +14,22 @@ enum FormErrorMapper {
             return CancellationError()
 
         case .transport where apiError.isOffline:
-            return FormLoadError.offline
+            return FormError.offline
 
         case .unexpectedStatus(404, _):
-            return FormLoadError.notFound(formName)
+            return FormError.notFound(formName)
 
         case .badRequest, .unauthorized, .server, .unexpectedStatus:
-            // Localised copy for the code, then the server's wording, then ours.
-            if let code = apiError.problem?.code,
-               let localized = localizer?.message(forErrorCode: code) {
-                return FormLoadError.server(message: localized)
-            }
-            if let message = apiError.serverMessage {
-                return FormLoadError.server(message: message)
-            }
-            return FormLoadError.unexpected
+            return message(code: apiError.problem?.code, server: apiError.serverMessage, localizer: localizer)
+                .map { FormError.server(message: $0) } ?? FormError.unexpected
 
         case .transport, .decoding, .invalidURL:
-            return FormLoadError.unexpected
+            return FormError.unexpected
         }
+    }
+
+    /// Localised copy for the code, then the server's wording.
+    static func message(code: Int?, server: String?, localizer: (any FormLocalizing)?) -> String? {
+        code.flatMap { localizer?.message(forErrorCode: $0) } ?? server
     }
 }

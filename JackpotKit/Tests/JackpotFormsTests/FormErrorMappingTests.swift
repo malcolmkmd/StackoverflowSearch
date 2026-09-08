@@ -25,24 +25,24 @@ final class FormErrorMappingTests: XCTestCase {
     func testServerMessageSurvivesToTheUserFacingString() {
         let apiError = APIError.badRequest(APIProblem(code: 1042, message: "Mobile number already registered"))
         let mapped = FormErrorMapper.map(apiError, formName: .registration)
-        XCTAssertEqual((mapped as? FormLoadError), .server(message: "Mobile number already registered"))
+        XCTAssertEqual((mapped as? FormError), .server(message: "Mobile number already registered"))
         XCTAssertEqual((mapped as? LocalizedError)?.errorDescription, "Mobile number already registered")
     }
 
     func testA400WithNoMessageFallsBackRatherThanShowingNothing() {
         let mapped = FormErrorMapper.map(APIError.badRequest(nil), formName: .registration)
-        XCTAssertEqual(mapped as? FormLoadError, .unexpected)
+        XCTAssertEqual(mapped as? FormError, .unexpected)
         XCTAssertNotNil((mapped as? LocalizedError)?.errorDescription)
     }
 
     func testOfflineGetsItsOwnMessage() {
         let mapped = FormErrorMapper.map(APIError.transport(.notConnectedToInternet), formName: .registration)
-        XCTAssertEqual(mapped as? FormLoadError, .offline)
+        XCTAssertEqual(mapped as? FormError, .offline)
     }
 
     func testUnknownFormBecomesNotFound() {
         let mapped = FormErrorMapper.map(APIError.unexpectedStatus(404, nil), formName: FormName("deposit"))
-        XCTAssertEqual(mapped as? FormLoadError, .notFound(FormName("deposit")))
+        XCTAssertEqual(mapped as? FormError, .notFound(FormName("deposit")))
     }
 
     /// A cancelled load is a navigation event, not a failure — it must never reach the user.
@@ -98,7 +98,7 @@ final class LocalizedErrorMappingTests: XCTestCase {
     func testNoCodeAndNoMessageFallsBackToOurs() {
         let mapped = FormErrorMapper.map(APIError.badRequest(nil), formName: .registration,
                                          localizer: localizer)
-        XCTAssertEqual(mapped as? FormLoadError, .unexpected)
+        XCTAssertEqual(mapped as? FormError, .unexpected)
     }
 
     /// With no table loaded yet — first launch, app-data still in flight — show whatever the

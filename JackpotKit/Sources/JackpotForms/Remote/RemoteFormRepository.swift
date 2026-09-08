@@ -34,18 +34,12 @@ public struct RemoteFormRepository: FormRepository {
             case .accepted(let result):
                 return result
             case .rejected(let error):
-                throw FormLoadError.server(message: localized(error))
+                let message = FormErrorMapper.message(code: error?.code ?? error?.displayCode,
+                                                      server: error?.message, localizer: localizer)
+                throw FormError.server(message: message ?? "We couldn't submit the form. Please try again.")
             }
         } catch {
             throw FormErrorMapper.map(error, formName: submission.formCodeName, localizer: localizer)
         }
-    }
-
-    private func localized(_ error: FormSubmitErrorDTO?) -> String {
-        if let code = error?.code ?? error?.displayCode,
-           let localized = localizer?.message(forErrorCode: code) {
-            return localized
-        }
-        return error?.message ?? "We couldn't submit the form. Please try again."
     }
 }

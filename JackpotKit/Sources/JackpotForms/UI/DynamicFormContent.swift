@@ -1,41 +1,8 @@
 import SwiftUI
 import JackpotUI
 
-/// Pages with the navigation bar beneath them. A host that wants the bar elsewhere owns a `DynamicFormModel`
-/// and places `DynamicFormContent` and `FormNavigationBar` itself.
-public struct DynamicFormView: View {
-    public typealias SubmitHandler = @MainActor (FormSubmission) async throws -> Void
-
-    private let onSubmit: SubmitHandler
-    @StateObject private var model: DynamicFormModel
-
-    public init(formName: FormName, dependencies: FormDependencies, onSubmit: @escaping SubmitHandler) {
-        self.onSubmit = onSubmit
-        _model = StateObject(wrappedValue: DynamicFormModel(formName: formName, dependencies: dependencies))
-    }
-
-    public var body: some View {
-        DynamicFormBody(model: model, onSubmit: onSubmit)
-            .task { await model.load() }
-    }
-}
-
-/// Pages and navigation stacked, for a seeded model.
-struct DynamicFormBody: View {
-    @ObservedObject var model: DynamicFormModel
-    let onSubmit: DynamicFormView.SubmitHandler
-
-    var body: some View {
-        VStack(spacing: 0) {
-            DynamicFormContent(model: model)
-            FormNavigationBar(model: model, onSubmit: onSubmit)
-                .padding(.horizontal, .m).padding(.vertical, .sm)
-        }
-        .jackpotBackground(\.background)
-    }
-}
-
 /// The pages: progress, the current section's rows, the submit error, and the loading and failure states.
+/// The host owns the `DynamicFormModel` and places `FormNavigationBar` wherever the design wants it.
 public struct DynamicFormContent: View {
     @ObservedObject private var model: DynamicFormModel
 
@@ -126,16 +93,16 @@ struct FormRowView: View {
     }
 }
 
-/// Previous / Next / Sign Up. Renders nothing until the form has loaded; place it wherever the design wants it.
+/// Previous / Next / Sign Up. Renders nothing until the form has loaded; `onComplete` receives what the repository returned.
 public struct FormNavigationBar: View {
     @ObservedObject private var model: DynamicFormModel
-    private let onSubmit: DynamicFormView.SubmitHandler
+    private let onComplete: (FormSubmitResult) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(model: DynamicFormModel, onSubmit: @escaping DynamicFormView.SubmitHandler) {
+    public init(model: DynamicFormModel, onComplete: @escaping (FormSubmitResult) -> Void) {
         _model = ObservedObject(wrappedValue: model)
-        self.onSubmit = onSubmit
+        self.onComplete = onComplete
     }
 
     public var body: some View {
@@ -146,12 +113,12 @@ public struct FormNavigationBar: View {
                         .buttonStyle(.jackpot(.secondary))
                 }
                 if model.isLastSection {
-                    Button("Sign Up") { Task { await model.submit(onSubmit) } }
+                    Button("Sign Up") { Task { if let result = await model.submit() { onComplete(result) } } }
                         .buttonStyle(.jackpot)
                         .disabled(!model.isFormValid)
                         .jackpotLoading(model.isSubmitting)
                 } else {
-                    Button("Next") { withAnimation(pagingAnimation) { _ = model.advance() } }
+                    Button("Next") { withAnimation(pagingAnimation) { model.advance() } }
                         .buttonStyle(.jackpot)
                         .disabled(!model.isCurrentSectionValid)
                 }
@@ -168,15 +135,20 @@ public struct FormNavigationBar: View {
 // MARK: - Previews
 
 #if DEBUG
-struct DynamicFormView_Previews: PreviewProvider {
+struct DynamicFormContent_Previews: PreviewProvider {
+    /// Pages with the bar beneath them, loading if the model has not been seeded.
     private struct Harness: View {
         let model: DynamicFormModel
-        var scheme: ColorScheme = .dark
         var body: some View {
-            DynamicFormBody(model: model) { _ in }
-                .frame(height: 620)
-                .background(JackpotTheme.jackpotCity.colors.background)
-                .preferredColorScheme(scheme)
+            VStack(spacing: 0) {
+                DynamicFormContent(model: model)
+                FormNavigationBar(model: model) { _ in }
+                    .padding(.horizontal, .m).padding(.vertical, .sm)
+            }
+            .frame(height: 620)
+            .jackpotBackground(\.background)
+            .preferredColorScheme(.dark)
+            .task { await model.load() }
         }
     }
 
@@ -184,38 +156,17 @@ struct DynamicFormView_Previews: PreviewProvider {
         Group {
             Harness(model: .preview(schema: FormPreview.registration))
                 .previewDisplayName("Section 1 — empty")
-            Harness(model: .preview(schema: FormPreview.registration), scheme: .light)
-                .previewDisplayName("Section 1 — light")
             Harness(model: .preview(schema: FormPreview.registration, values: FormPreview.validSectionOne))
                 .previewDisplayName("Section 1 — valid, Next enabled")
             Harness(model: .preview(schema: FormPreview.registration,
                                     touched: ["username", "password", "firstname", "lastname", "email"]))
                 .previewDisplayName("Section 1 — all errors shown")
-            Harness(model: .preview(schema: FormPreview.registration, values: FormPreview.validSectionOne, sectionIndex: 1))
-                .previewDisplayName("Section 2 — FICA")
-            Harness(model: .preview(schema: FormPreview.registration, values: FormPreview.validSectionOne,
-                                    touched: ["idNumber", "dateOfBirth", "sourceOfFunds", "terms"], sectionIndex: 1))
-                .previewDisplayName("Section 2 — all errors shown")
-            Harness(model: .previewLoading()).previewDisplayName("Loading")
-            Harness(model: .previewFailed()).previewDisplayName("Failed")
             Harness(model: .preview(schema: FormPreview.registration))
                 .environment(\.sizeCategory, .accessibilityLarge)
                 .previewDisplayName("Accessibility — XL text")
-
-            DynamicFormView(formName: .registration, dependencies: .mock(delay: 0)) { _ in }
-                .frame(height: 620)
-                .background(JackpotTheme.jackpotCity.colors.background)
-                .preferredColorScheme(.dark)
-                .previewDisplayName("Registration — from JSON")
-            DynamicFormView(formName: .registration, dependencies: .mock(delay: 0, error: FormLoadError.offline)) { _ in }
-                .frame(height: 620)
-                .background(JackpotTheme.jackpotCity.colors.background)
-                .preferredColorScheme(.dark)
+            Harness(model: DynamicFormModel(formName: .registration, dependencies: .mock(delay: 0, error: FormError.offline)))
                 .previewDisplayName("Offline")
-            DynamicFormView(formName: FormName("doesNotExist"), dependencies: .mock(delay: 0)) { _ in }
-                .frame(height: 620)
-                .background(JackpotTheme.jackpotCity.colors.background)
-                .preferredColorScheme(.dark)
+            Harness(model: DynamicFormModel(formName: FormName("doesNotExist"), dependencies: .mock(delay: 0)))
                 .previewDisplayName("Unknown form — 404")
         }
         .previewLayout(.sizeThatFits)

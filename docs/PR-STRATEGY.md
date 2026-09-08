@@ -75,18 +75,17 @@ The engine, with no network: one module, three folders pointing one way.
 
 | Folder | Holds |
 |---|---|
-| `Domain` | `FormSchema`, `FormField`, `FormName`, `FieldValidator`, `PasswordPolicy`, `FormLoadError`, `ClosureLocalizer`, the `FormRepository` / `FormLocalizing` protocols |
+| `Domain` | `FormSchema`, `FormField`, `FormName`, `FieldValidator`, `PasswordPolicy`, `FormError`, `ClosureLocalizer`, the `FormRepository` / `FormLocalizing` protocols |
 | `Data` | wire DTOs and the mapper (internal), `StubFormRepository`, `BundledForms` (the captured `registration.json`), the placeholder copy table |
-| `UI` | `DynamicFormModel`, `DynamicFormContent`, `FormNavigationBar`, `DynamicFormView` (the two stacked), `FormDependencies` (+ `.mock()`), one thin field view per type binding the model to a `JackpotUI` component |
+| `UI` | `DynamicFormModel`, `DynamicFormContent`, `FormNavigationBar`, `FormDependencies` (+ `.mock()`), one thin field view per type binding the model to a `JackpotUI` component |
 
 The engine's defaults are generic — no cross-field regex links, no date cap. Registration's
 rules come with the feature, in the same step:
 
 | File | Holds |
 |---|---|
-| `RegistrationFeature.swift` | `RegistrationDependencies` (`.mock(localizer:)` for demos; applies the ID-type link and the 18-year date cap), `RegistrationView` — the pages inside `JackpotPanel`, the login row and navigation in its footer, with `onClose` and `onLogin` |
+| `RegistrationFeature.swift` | `RegistrationDependencies` (`.mock(localizer:)` for demos; applies the ID-type link and the 18-year date cap), `RegistrationView` — the pages inside `JackpotPanel`, the login row and navigation in its footer, with `onClose`, `onLogin` and `onComplete`; `RegistrationResult` is `FormSubmitResult` under the app's name |
 | `RegistrationPanelController.swift` | a `UIHostingController` sized for the legacy popup container |
-| `RegistrationService.swift` | the protocol, `MockRegistrationService`, `RemoteRegistrationService`, `RegistrationError` |
 
 **Review:** `FieldRenderer.swift` (the CRM↔app contract), `FieldValidator.swift` (untrusted
 regexes), `DynamicFormModel.swift` (touched state, section gating, ID-type → ID-number), then
@@ -112,7 +111,7 @@ site. Then the only change to the app, in three parts:
 
 ```swift
 // Sources/Features/Registration/LegacyTranslationLocalizer.swift
-// Deleted at step 5, when TranslationsLocalizer takes its place.
+// Deleted at step 5, when Translations.formLocalizer takes its place.
 struct LegacyTranslationLocalizer: FormLocalizing {
     func string(forKey key: String) -> String? {
         let value = getTranslation(Key: key)
@@ -130,8 +129,7 @@ the feature touches `getTranslation`, which is what makes step 5 a one-file chan
 ```swift
 let controller = RegistrationPanelController(
     dependencies: RegistrationDependencies(
-        forms: .live(baseURL: configURL, localizer: LegacyTranslationLocalizer()),
-        service: MockRegistrationService()        // → RemoteRegistrationService once the endpoint is confirmed
+        forms: .live(baseURL: configURL, localizer: LegacyTranslationLocalizer())
     ),
     onClose: { popupContainer.dismiss() },
     onLogin: { popupContainer.dismiss(); presentLogin() }
@@ -154,10 +152,10 @@ Net negative. The diff is small enough to review in one sitting and revert in on
 
 ADR-0001 phase 2. `JackpotLocalization` — `Translations` (the table, normalised once;
 region-suffixed lookup; error codes as keys), `TranslationsRepository`, `TranslationsStore` —
-and `TranslationsLocalizer` in `JackpotRegistration`, the adapter that feeds the table to the
+and `Translations.formLocalizer` in `JackpotRegistration`, the adapter that feeds the table to the
 form engine. In the app: `getTranslation` becomes a shim over the store (app-wide performance
 fix, zero call-site changes, deprecation warnings as the burn-down list), and
-`LegacyTranslationLocalizer.swift` is deleted in favour of `TranslationsLocalizer`, at which
+`LegacyTranslationLocalizer.swift` is deleted in favour of `Translations.formLocalizer`, at which
 point error codes start resolving to localised copy. 26 tests.
 
 ## Step 6 · Fix app data

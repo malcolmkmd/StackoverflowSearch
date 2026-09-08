@@ -122,7 +122,7 @@ final class RemoteFormRepositoryTests: XCTestCase {
             _ = try await repo.submitForm(FormSubmission(formCodeName: .registration, values: [:]))
             XCTFail("expected a throw")
         } catch {
-            XCTAssertEqual(error as? FormLoadError, .server(message: "An Error Occurred."))
+            XCTAssertEqual(error as? FormError, .server(message: "An Error Occurred."))
         }
     }
 
@@ -139,7 +139,7 @@ final class RemoteFormRepositoryTests: XCTestCase {
             _ = try await repo.submitForm(FormSubmission(formCodeName: .registration, values: [:]))
             XCTFail("expected a throw")
         } catch {
-            XCTAssertEqual(error as? FormLoadError,
+            XCTAssertEqual(error as? FormError,
                            .server(message: "The ID or Passport Number Provided Is Invalid"))
         }
     }
@@ -152,7 +152,7 @@ final class RemoteFormRepositoryTests: XCTestCase {
             _ = try await repo.submitForm(FormSubmission(formCodeName: .registration, values: [:]))
             XCTFail("expected a throw")
         } catch {
-            XCTAssertEqual(error as? FormLoadError, .offline)
+            XCTAssertEqual(error as? FormError, .offline)
         }
     }
 }

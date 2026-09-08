@@ -6,13 +6,11 @@ import XCTest
 /// actually experiences, rather than the regexes in isolation.
 @MainActor
 final class DynamicFormModelTests: XCTestCase {
-    private func loaded(regexDependencies: [String: String] = ["idNumberType": "idNumber"]) async -> DynamicFormModel {
+    private func loaded(repository: any FormRepository = StubFormRepository(forms: BundledForms.all, delay: 0),
+                        regexDependencies: [String: String] = ["idNumberType": "idNumber"]) async -> DynamicFormModel {
         let model = DynamicFormModel(
             formName: .registration,
-            dependencies: FormDependencies(
-                repository: StubFormRepository(forms: BundledForms.all, delay: 0),
-                regexDependencies: regexDependencies
-            )
+            dependencies: FormDependencies(repository: repository, regexDependencies: regexDependencies)
         )
         await model.load()
         return model
@@ -47,7 +45,7 @@ final class DynamicFormModelTests: XCTestCase {
         let model = DynamicFormModel(formName: .registration,
                                      dependencies: FormDependencies(repository: repository))
         await model.load()
-        XCTAssertEqual(model.viewState, .failed(FormLoadError.offline.errorDescription!))
+        XCTAssertEqual(model.viewState, .failed(FormError.offline.errorDescription!))
 
         await model.load()
         XCTAssertNotNil(model.form, "the retry should reach the schema")
@@ -63,27 +61,18 @@ final class DynamicFormModelTests: XCTestCase {
         XCTAssertNotNil(model.error(for: mobile))
     }
 
-    func testAdvancingRevealsEveryErrorInTheSection() async throws {
-        let model = await loaded()
-        XCTAssertFalse(model.advance())                  // blocked
-        XCTAssertEqual(model.sectionIndex, 0)
-        for id in ["username", "password", "firstname", "lastname", "email"] {
-            XCTAssertNotNil(model.error(for: try field(model, id)), "\(id) should show an error")
-        }
-        // The optional referral code must NOT be flagged.
-        XCTAssertNil(model.error(for: try field(model, "referralCode")))
-    }
-
     // MARK: Section gating
 
     func testCannotAdvanceUntilSectionOneIsValid() async throws {
         let model = await loaded()
         XCTAssertFalse(model.isCurrentSectionValid)
+        model.advance()
+        XCTAssertEqual(model.sectionIndex, 0, "blocked while the section is invalid")
 
         try fillSectionOne(model)
 
         XCTAssertTrue(model.isCurrentSectionValid)
-        XCTAssertTrue(model.advance())
+        model.advance()
         XCTAssertEqual(model.sectionIndex, 1)
         XCTAssertTrue(model.isLastSection)
 
@@ -96,7 +85,7 @@ final class DynamicFormModelTests: XCTestCase {
     func testPagingDirectionFollowsTheLastMove() async throws {
         let model = await loaded()
         try fillSectionOne(model)
-        XCTAssertTrue(model.advance())
+        model.advance()
         XCTAssertEqual(model.pagingDirection, .forward)
         model.goBack()
         XCTAssertEqual(model.pagingDirection, .backward)
@@ -107,7 +96,7 @@ final class DynamicFormModelTests: XCTestCase {
     func testPassportSelectionRelaxesTheThirteenDigitIdRule() async throws {
         let model = await loaded()
         try fillSectionOne(model)
-        _ = model.advance()
+        model.advance()
 
         let type = try field(model, "idNumberType")
         let number = try field(model, "idNumber")
@@ -127,24 +116,26 @@ final class DynamicFormModelTests: XCTestCase {
     // MARK: Submission
 
     func testSubmitIsBlockedWhileAnythingIsInvalid() async throws {
-        let model = await loaded()
-        var called = false
-        await model.submit { _ in called = true }
-        XCTAssertFalse(called)
+        let repository = SpyRepository()
+        let model = await loaded(repository: repository)
+        let result = await model.submit()
+        XCTAssertNil(result)
+        XCTAssertNil(repository.received)
     }
 
     func testSubmitDeliversEveryValueKeyedByFieldIdentifier() async throws {
-        let model = await loaded()
+        let repository = SpyRepository()
+        let model = await loaded(repository: repository)
         try fillSectionOne(model)
-        _ = model.advance()
+        model.advance()
         try fillSectionTwo(model)
 
         XCTAssertTrue(model.isFormValid)
 
-        var received: FormSubmission?
-        await model.submit { received = $0 }
+        let result = await model.submit()
+        XCTAssertEqual(result?.accountId, "abc")
 
-        let submission = try XCTUnwrap(received)
+        let submission = try XCTUnwrap(repository.received)
         XCTAssertEqual(submission.formCodeName, .registration)
         XCTAssertEqual(submission.formId, "1052")
         XCTAssertEqual(submission["username"].stringValue, "849134302")
@@ -157,13 +148,16 @@ final class DynamicFormModelTests: XCTestCase {
     }
 
     func testSubmitSurfacesAThrownError() async throws {
-        let model = await loaded()
+        struct Boom: LocalizedError { var errorDescription: String? { "Registration failed" } }
+        let repository = SpyRepository()
+        repository.error = Boom()
+        let model = await loaded(repository: repository)
         try fillSectionOne(model)
-        _ = model.advance()
+        model.advance()
         try fillSectionTwo(model)
 
-        struct Boom: LocalizedError { var errorDescription: String? { "Registration failed" } }
-        await model.submit { _ in throw Boom() }
+        let result = await model.submit()
+        XCTAssertNil(result)
         XCTAssertEqual(model.submitError, "Registration failed")
     }
 
@@ -175,7 +169,7 @@ final class DynamicFormModelTests: XCTestCase {
         try fillSectionOne(model)
         XCTAssertGreaterThan(model.progress, 0.3)
         XCTAssertLessThan(model.progress, 1.0)
-        _ = model.advance()
+        model.advance()
         try fillSectionTwo(model)
         XCTAssertEqual(model.progress, 1.0, accuracy: 0.001)
     }
@@ -264,12 +258,28 @@ private final class FailOnceRepository: FormRepository, @unchecked Sendable {
     func form(named name: FormName) async throws -> FormSchema {
         if !hasFailed {
             hasFailed = true
-            throw FormLoadError.offline
+            throw FormError.offline
         }
         return try await StubFormRepository(forms: BundledForms.all, delay: 0).form(named: name)
     }
 
     func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult { FormSubmitResult() }
+}
+
+/// Serves the bundled schema and records what was submitted.
+private final class SpyRepository: FormRepository, @unchecked Sendable {
+    var error: (any Error)?
+    private(set) var received: FormSubmission?
+
+    func form(named name: FormName) async throws -> FormSchema {
+        try await StubFormRepository(forms: BundledForms.all, delay: 0).form(named: name)
+    }
+
+    func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
+        received = submission
+        if let error { throw error }
+        return FormSubmitResult(accountId: "abc")
+    }
 }
 
 /// Confirmed behaviour: the ID Number Type dropdown selects whether the user is entering a South

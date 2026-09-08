@@ -29,7 +29,7 @@ struct RegistrationView_Previews: PreviewProvider {
             .preferredColorScheme(.dark)
             .previewDisplayName("Sign Up — app localizer")
 
-            Page(dependencies: .init(forms: .mock(delay: 3600), service: MockRegistrationService()))
+            Page(dependencies: .init(forms: .mock(delay: 3600)))
                 .preferredColorScheme(.dark)
                 .previewDisplayName("Loading")
         }

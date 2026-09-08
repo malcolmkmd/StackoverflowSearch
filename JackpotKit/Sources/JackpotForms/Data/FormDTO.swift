@@ -5,17 +5,11 @@ import Foundation
 struct FormDTO: Decodable {
     let formId: Int
     let formCodeName: String
-    let formTitle: String?
-    let formSubTitle: String?
-    let regionCode: String?
     let sections: [FormSectionDTO]?
 }
 
 struct FormSectionDTO: Decodable {
     let formSectionId: Int
-    let formSectionCodeName: String?
-    let formSectionTitle: String?
-    let formSectionSubTitle: String?
     let formSectionOrder: Int?
     let rows: [FormRowDTO]?
 }

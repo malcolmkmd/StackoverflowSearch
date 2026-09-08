@@ -1,6 +1,6 @@
 import Foundation
 
-/// Serves bundled JSON, so the feature runs before the endpoint is reachable.
+/// Serves bundled JSON and fakes the submit, so the feature runs before the endpoint is reachable.
 public struct StubFormRepository: FormRepository {
     private let forms: [FormName: Data]
     private let delay: TimeInterval
@@ -14,13 +14,18 @@ public struct StubFormRepository: FormRepository {
 
     public func form(named name: FormName) async throws -> FormSchema {
         try await prepare()
-        guard let data = forms[name] else { throw FormLoadError.notFound(name) }
+        guard let data = forms[name] else { throw FormError.notFound(name) }
         return try Self.decode(data)
     }
 
+    /// Succeeds with a fake account; fails for mobile `"0000000000"`, so the error path can be demoed.
     public func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
         try await prepare()
-        return FormSubmitResult()
+        let mobile = submission["username"].stringValue
+        if mobile == "0000000000" {
+            throw FormError.server(message: "That mobile number is already registered. Try logging in instead.")
+        }
+        return FormSubmitResult(accountId: "27\(mobile)", message: "User Created Successfully.")
     }
 
     static func decode(_ data: Data) throws -> FormSchema {

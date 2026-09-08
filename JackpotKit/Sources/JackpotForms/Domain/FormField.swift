@@ -44,7 +44,7 @@ public enum InputType: Equatable, Hashable, Sendable {
 public struct DropdownOption: Identifiable, Equatable, Hashable, Sendable {
     public let value: String
     public let textKey: String
-    /// A pattern, or the name of one; see `RegexResolving`.
+    /// A pattern, or the name of one; see `FormDependencies.namedPatterns`.
     public let regex: String?
 
     public var id: String { value }

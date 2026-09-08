@@ -25,24 +25,6 @@ public extension FormLocalizing {
     }
 }
 
-/// An in-memory table, then a bundle's `.strings`.
-public struct ComposedKeyLocalizer: FormLocalizing {
-    private let table: [String: String]
-    private let bundle: Bundle?
-
-    public init(table: [String: String] = [:], bundle: Bundle? = nil) {
-        self.table = table
-        self.bundle = bundle
-    }
-
-    public func string(forKey key: String) -> String? {
-        if let value = table[key] { return value }
-        guard let bundle else { return nil }
-        let value = bundle.localizedString(forKey: key, value: "\u{0}", table: nil)
-        return value == "\u{0}" ? nil : value
-    }
-}
-
 public extension String {
     /// "jpc-reg-idnumber" → "Idnumber"; "dateOfBirth" → "Date Of Birth".
     var humanisedKey: String {
