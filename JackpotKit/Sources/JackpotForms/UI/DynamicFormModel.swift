@@ -6,14 +6,19 @@ import Combine
 /// computed from those rather than stored, so a dropdown that changes another field's rule needs no bookkeeping.
 /// `ObservableObject` rather than `@Observable` because the floor is iOS 15.
 public final class DynamicFormModel: ObservableObject {
+    public enum ViewState: Equatable {
+        case loading
+        case loaded(FormSchema)
+        case failed(String)
+    }
+
     public enum PagingDirection: Equatable, Sendable {
         case forward
         case backward
     }
 
     // MARK: Published state
-    @Published public private(set) var form: FormSchema?
-    @Published public private(set) var loadError: String?
+    @Published public private(set) var viewState: ViewState = .loading
     @Published public private(set) var values: [String: FormValue] = [:]
     @Published public private(set) var sectionIndex: Int = 0
     /// Set before `sectionIndex` changes, so the section transition slides the right way wherever the bar is.
@@ -33,6 +38,11 @@ public final class DynamicFormModel: ObservableObject {
     }
 
     // MARK: Derived
+
+    public var form: FormSchema? {
+        if case .loaded(let form) = viewState { return form }
+        return nil
+    }
 
     public var sections: [FormSection] { form?.sections ?? [] }
     public var currentSection: FormSection? {
@@ -78,17 +88,17 @@ public final class DynamicFormModel: ObservableObject {
 
     /// A no-op once loaded, so re-appearing cannot reset a half-filled form; a failed load runs again.
     public func load() async {
-        guard form == nil else { return }
-        loadError = nil
+        if case .loaded = viewState { return }
+        viewState = .loading
         do {
             let form = try await dependencies.repository.form(named: formName)
             values = Dictionary(uniqueKeysWithValues:
                 form.allFields.filter(\.isVisible).map { ($0.identifier, defaultValue(for: $0)) }
             )
-            self.form = form
+            viewState = .loaded(form)
         } catch is CancellationError {
         } catch {
-            loadError = Self.message(for: error)
+            viewState = .failed(Self.message(for: error))
         }
     }
 

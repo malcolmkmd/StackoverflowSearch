@@ -45,7 +45,7 @@ final class DynamicFormModelTests: XCTestCase {
         let model = DynamicFormModel(formName: .registration,
                                      dependencies: FormDependencies(repository: repository))
         await model.load()
-        XCTAssertEqual(model.loadError, FormError.offline.errorDescription)
+        XCTAssertEqual(model.viewState, .failed(FormError.offline.errorDescription!))
 
         await model.load()
         XCTAssertNotNil(model.form, "the retry should reach the schema")

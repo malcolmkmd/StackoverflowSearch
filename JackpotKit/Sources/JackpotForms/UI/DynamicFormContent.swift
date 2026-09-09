@@ -15,7 +15,17 @@ public struct DynamicFormContent: View {
     }
 
     public var body: some View {
-        if model.form != nil {
+        switch model.viewState {
+        case .loading:
+            ProgressView()
+                .frame(maxWidth: .infinity, minHeight: 220)
+                .accessibilityLabel("Loading form")
+
+        case .failed(let message):
+            JackpotErrorView(message, title: "Couldn't load this form")
+                .onRetry { Task { await model.load() } }
+
+        case .loaded:
             VStack(spacing: 0) {
                 if model.sections.count > 1 {
                     ProgressView(value: model.progress)
@@ -48,13 +58,6 @@ public struct DynamicFormContent: View {
                 focusedField = model.fieldAfter(current)
             }
             .onChange(of: model.sectionIndex) { _ in focusedField = nil }
-        } else if let error = model.loadError {
-            JackpotErrorView(error, title: "Couldn't load this form")
-                .onRetry { Task { await model.load() } }
-        } else {
-            ProgressView()
-                .frame(maxWidth: .infinity, minHeight: 220)
-                .accessibilityLabel("Loading form")
         }
     }
 
