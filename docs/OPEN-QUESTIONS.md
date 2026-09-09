@@ -70,7 +70,7 @@ and it is declared by the feature rather than the engine:
 
 ```swift
 // JackpotRegistration — applied by RegistrationDependencies on top of any FormDependencies
-rules.regexDependencies = ["idNumberType": "idNumber"]
+rules.regexDependencies = ["idNumber": "idNumberType"]
 ```
 
 The engine's default is no links at all; there is no positional fallback. Tests cover the
@@ -91,9 +91,9 @@ The 5–20 bounds are the ones we already used; say if the real min/max is tight
 Every field in the schema carries the **same** `"validationMessage": "regex"`, yet the web UI
 shows per-field copy ("Enter in a valid ID number", "Please select your source of income.").
 
-- **Assumed:** `jpc-reg-{fieldIdentifier}-{validationMessage}`, falling back to the bare key,
-  then to humanised copy.
-- **Why it matters:** wrong guess = every validation error shows a generic string.
+- **Assumed:** `jpc-reg-{fieldIdentifier}-{validationMessage}`; an untranslated key renders
+  as itself, visible in QA.
+- **Why it matters:** wrong guess = every validation error shows a raw key.
 - **Ask:** what key does web build to look these up?
 
 ### Q6 · Where do the password rules come from?
@@ -153,9 +153,9 @@ welcome offers (Q7), possibly other registration configuration.
 
 ### Q12 · Which `regionCode` is authoritative? ✅ answered (for forms)
 
-Production `buildFormURL` uses `AppSetupData.wmsNavigationRegionCode`. Pass that as
-`FormDependencies.live(region:)`. `WMSConfig.regionCode` is a different field; don't mix them
-for form URLs.
+Production `buildFormURL` uses `AppSetupData.wmsNavigationRegionCode`. Pass that as the
+`region:` argument of `FormDependencies.live(baseURL:brand:region:translate:)`.
+`WMSConfig.regionCode` is a different field; don't mix them for form URLs.
 
 ### Q13 · Where do the app-data URL parameters come from at runtime? ✅ answered
 

@@ -37,8 +37,8 @@ let package = Package(
             swiftSettings: strict
         ),
         .testTarget(name: "JackpotFormsTests", dependencies: ["JackpotForms", "JackpotNetworking"]),
-        .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms", "JackpotLocalization"], swiftSettings: strict),
-        .testTarget(name: "JackpotRegistrationTests", dependencies: ["JackpotRegistration", "JackpotForms", "JackpotLocalization"]),
+        .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
+        .testTarget(name: "JackpotRegistrationTests", dependencies: ["JackpotRegistration", "JackpotForms"]),
 
         .target(name: "JackpotNetworking", swiftSettings: strict),
         .testTarget(name: "JackpotNetworkingTests", dependencies: ["JackpotNetworking"]),

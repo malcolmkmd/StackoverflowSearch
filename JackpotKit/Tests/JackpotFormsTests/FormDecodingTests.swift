@@ -2,8 +2,12 @@ import XCTest
 @testable import JackpotForms
 
 final class FormDecodingTests: XCTestCase {
+    private func decode(_ data: Data) throws -> FormSchema {
+        try JSONDecoder().decode(FormDTO.self, from: data).schema
+    }
+
     private func loadRegistration() throws -> FormSchema {
-        try StubFormRepository.decode(BundledForms.json(named: "registration"))
+        try decode(StubFormRepository.registrationJSON)
     }
 
     func testDecodesTheRealRegistrationSchema() throws {
@@ -53,7 +57,7 @@ final class FormDecodingTests: XCTestCase {
           {"rowNumber":2,"fields":[{"fieldId":2,"fieldIdentifier":"b","fieldType":"Input"}]}
         ]}]}
         """.utf8)
-        let form = try StubFormRepository.decode(json)
+        let form = try decode(json)
         XCTAssertEqual(form.allFields.count, 2)
         XCTAssertEqual(form.field(identifiedBy: "a")?.type, .unknown("HolographicSlider"))
         XCTAssertEqual(form.field(identifiedBy: "b")?.type, .input)
@@ -64,7 +68,7 @@ final class FormDecodingTests: XCTestCase {
         {"formId":2,"formCodeName":"y","sections":[{"formSectionId":1,"rows":[
           {"rowNumber":1,"fields":[{"fieldId":9,"fieldIdentifier":"solo","fieldType":"Input"}]}]}]}
         """.utf8)
-        let field = try XCTUnwrap(StubFormRepository.decode(json).field(identifiedBy: "solo"))
+        let field = try XCTUnwrap(decode(json).field(identifiedBy: "solo"))
         XCTAssertEqual(field.labelKey, "solo")
         XCTAssertEqual(field.validationMessageKey, "regex")
         XCTAssertFalse(field.isRequired)     // unspecified must not block submission
@@ -78,12 +82,6 @@ final class FormDecodingTests: XCTestCase {
         XCTAssertEqual(options.map(\.value), ["idNumber", "passport"])
         XCTAssertEqual(options[0].textKey, "jpc-reg-idnumber")
         XCTAssertEqual(options[0].regex, "idNumberRegex")
-    }
-
-    func testTheBundledSchemaIsRegistration() throws {
-        XCTAssertEqual(Set(BundledForms.all.keys), [.registration])
-        let form = try StubFormRepository.decode(try XCTUnwrap(BundledForms.all[.registration]))
-        XCTAssertEqual(form.codeName, .registration)
     }
 }
 

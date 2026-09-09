@@ -65,29 +65,7 @@ final class TranslationsTests: XCTestCase {
         XCTAssertNil(Translations(["a": "b"], regionCode: "   ").regionSuffix)
     }
 
-    // MARK: Error codes
-
-    /// The table doubles as an error-code catalogue, which is what ties an API error envelope
-    /// (`{"code": 6000328, …}`) to a sentence in the player's language.
-    func testErrorCodeResolvesToItsMessage() {
-        XCTAssertEqual(sample.message(forErrorCode: 6000328),
-                       "Maximum OTP tries reached, Please contact support on +233 30 825 5838")
-    }
-
-    func testPrefixedRegistrationErrorCodeResolves() {
-        let table = Translations(["jpc-reg-error.153008": "An error occurred"], regionCode: "JZA")
-        XCTAssertEqual(table.message(forErrorCode: 153008), "An error occurred")
-    }
-
-    func testUnknownErrorCodeIsNil() {
-        XCTAssertNil(sample.message(forErrorCode: 999))
-    }
-
-    /// A numeric code must never pick up the region suffix — "6000328-jza" isn't a thing.
-    func testErrorCodeLookupIgnoresRegion() {
-        let table = Translations(["123": "plain", "123-jza": "regional"], regionCode: "JZA")
-        XCTAssertEqual(table.message(forErrorCode: 123), "plain")
-    }
+    // MARK: Housekeeping
 
     /// The app's existing key enums are `String`-backed, so `rawValue` is all the bridge needs.
     func testStringBackedEnumsResolveThroughTheirRawValue() {
@@ -98,8 +76,6 @@ final class TranslationsTests: XCTestCase {
         XCTAssertEqual(sample(FixedJackpotTranslationsKeys.startsIn.rawValue), "Starts in")
         XCTAssertEqual(sample(FixedJackpotTranslationsKeys.cityJackpots.rawValue), "City Jackpots")
     }
-
-    // MARK: Housekeeping
 
     func testEmptyTable() {
         let empty = Translations()

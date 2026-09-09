@@ -2,13 +2,12 @@ import SwiftUI
 import JackpotUI
 import JackpotForms
 
-/// What Sign Up hands back: the account id, the session token under `compliance`, and `isPartial` when FICA
-/// still needs a manual upload.
+/// What Sign Up hands back: the account id, the session token, and `isPartial` when FICA still needs a manual upload.
 public typealias RegistrationResult = FormSubmitResult
 
 /// Everything the feature needs, supplied by the app where it's presented.
 public struct RegistrationDependencies {
-    /// `.mock(localizer:)` until networking lands, `.live(baseURL:localizer:)` after; registration's rules are applied on top.
+    /// `.mock()` until networking lands, `.live(baseURL:translate:)` after; registration's rules are applied on top.
     public let forms: FormDependencies
     public let theme: JackpotTheme
 
@@ -18,8 +17,8 @@ public struct RegistrationDependencies {
     }
 
     /// Bundled schema and a faked submit: no backend, no app.
-    public static func mock(localizer: (any FormLocalizing)? = nil) -> RegistrationDependencies {
-        RegistrationDependencies(forms: .mock(localizer: localizer))
+    public static func mock() -> RegistrationDependencies {
+        RegistrationDependencies(forms: .mock())
     }
 }
 
@@ -27,7 +26,7 @@ extension FormDependencies {
     /// The ID-type dropdown decides the ID-number regex, and the date-of-birth picker cannot select an under-18 date.
     func applyingRegistrationRules(now: Date = Date()) -> FormDependencies {
         var rules = self
-        rules.regexDependencies = ["idNumberType": "idNumber"]
+        rules.regexDependencies = ["idNumber": "idNumberType"]
         rules.maximumDate = Calendar(identifier: .gregorian).date(byAdding: .year, value: -18, to: now)
         return rules
     }

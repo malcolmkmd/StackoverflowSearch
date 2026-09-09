@@ -1,7 +1,6 @@
 import Foundation
 
-/// `unknown` is load-bearing: the CRM edits the schema without an app release, so an unknown type is
-/// skipped and reported through `unsupportedFields`, never fatal.
+/// `unknown` is load-bearing: the CRM edits the schema without an app release, so an unknown type is skipped, never fatal.
 public enum FieldType: Equatable, Hashable, Sendable {
     case input
     case dropdown
@@ -67,7 +66,7 @@ public struct FormField: Identifiable, Equatable, Hashable, Sendable {
     /// Hidden fields are neither rendered, validated nor submitted.
     public let isVisible: Bool
     public let isReadOnly: Bool
-    /// Server-supplied, so possibly invalid; see `FieldValidator`.
+    /// Server-supplied, so possibly invalid; see `accepts(_:overrideRegex:)`.
     public let regex: String?
     public let prefix: String
     public let suffix: String
@@ -102,5 +101,15 @@ public struct FormField: Identifiable, Equatable, Hashable, Sendable {
         self.dropdownOptions = dropdownOptions
     }
 
-    public var isSecure: Bool { inputType == .password }
+    /// Regexes come from a server: one that will not compile is treated as no constraint.
+    /// - Parameter overrideRegex: replaces `regex` when a dropdown selection changes this field's rule.
+    public func accepts(_ value: FormValue, overrideRegex: String? = nil) -> Bool {
+        guard isVisible, !isReadOnly else { return true }
+        // Not every optional field's regex permits empty; this is what keeps optional optional.
+        if value.isEmpty { return !isRequired }
+        guard let pattern = overrideRegex ?? regex, !pattern.isEmpty,
+              let expression = try? NSRegularExpression(pattern: pattern) else { return true }
+        let subject = value.stringValue
+        return expression.firstMatch(in: subject, range: NSRange(subject.startIndex..., in: subject)) != nil
+    }
 }

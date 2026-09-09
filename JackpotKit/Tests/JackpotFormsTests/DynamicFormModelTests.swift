@@ -6,8 +6,8 @@ import XCTest
 /// actually experiences, rather than the regexes in isolation.
 @MainActor
 final class DynamicFormModelTests: XCTestCase {
-    private func loaded(repository: any FormRepository = StubFormRepository(forms: BundledForms.all, delay: 0),
-                        regexDependencies: [String: String] = ["idNumberType": "idNumber"]) async -> DynamicFormModel {
+    private func loaded(repository: any FormRepository = StubFormRepository(delay: 0),
+                        regexDependencies: [String: String] = ["idNumber": "idNumberType"]) async -> DynamicFormModel {
         let model = DynamicFormModel(
             formName: .registration,
             dependencies: FormDependencies(repository: repository, regexDependencies: regexDependencies)
@@ -45,7 +45,7 @@ final class DynamicFormModelTests: XCTestCase {
         let model = DynamicFormModel(formName: .registration,
                                      dependencies: FormDependencies(repository: repository))
         await model.load()
-        XCTAssertEqual(model.viewState, .failed(FormError.offline.errorDescription!))
+        XCTAssertEqual(model.loadError, FormError.offline.errorDescription)
 
         await model.load()
         XCTAssertNotNil(model.form, "the retry should reach the schema")
@@ -57,7 +57,7 @@ final class DynamicFormModelTests: XCTestCase {
         let model = await loaded()
         let mobile = try field(model, "username")
         XCTAssertNil(model.error(for: mobile))          // empty + required, but untouched
-        model.markTouched(mobile)
+        model.markTouched(mobile.identifier)
         XCTAssertNotNil(model.error(for: mobile))
     }
 
@@ -93,24 +93,71 @@ final class DynamicFormModelTests: XCTestCase {
 
     // MARK: The ID-type → ID-number dependency
 
-    func testPassportSelectionRelaxesTheThirteenDigitIdRule() async throws {
+    /// Confirmed behaviour: the ID Number Type dropdown selects whether the user is entering a South
+    /// African ID or a passport, and the ID Number field validates accordingly.
+    func testSouthAfricanIDRequiresThirteenDigits() async throws {
         let model = await loaded()
-        try fillSectionOne(model)
-        model.advance()
+        let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
 
-        let type = try field(model, "idNumberType")
-        let number = try field(model, "idNumber")
+        model.setValue(.text("idNumber"), for: type)
+        model.setValue(.text("9001015800089"), for: number)
+        model.markTouched(number.identifier)
+        XCTAssertNil(model.error(for: number))
 
-        model.setValue(.option("idNumber"), for: type)
         model.setValue(.text("A1234567"), for: number)
-        model.markTouched(number)
-        XCTAssertNotNil(model.error(for: number), "SA ID must be 13 digits")
+        XCTAssertNotNil(model.error(for: number), "a passport number is not a valid SA ID")
+    }
 
-        model.setValue(.option("passport"), for: type)
-        XCTAssertNil(model.error(for: number), "passport should accept an alphanumeric number")
+    func testPassportAcceptsAnAlphanumericNumber() async throws {
+        let model = await loaded()
+        let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
 
-        model.setValue(.option("idNumber"), for: type)
+        model.setValue(.text("passport"), for: type)
+        model.setValue(.text("A1234567"), for: number)
+        model.markTouched(number.identifier)
+        XCTAssertNil(model.error(for: number))
+    }
+
+    /// Switching type revalidates immediately — the user shouldn't have to re-type to see the
+    /// rule change.
+    func testSwitchingTypeRevalidatesWithoutRetyping() async throws {
+        let model = await loaded()
+        let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
+
+        model.setValue(.text("idNumber"), for: type)
+        model.setValue(.text("A1234567"), for: number)
+        model.markTouched(number.identifier)
+        XCTAssertNotNil(model.error(for: number))
+
+        model.setValue(.text("passport"), for: type)
+        XCTAssertNil(model.error(for: number), "switching to passport must clear the error")
+
+        model.setValue(.text("idNumber"), for: type)
         XCTAssertNotNil(model.error(for: number), "switching back must re-apply the 13-digit rule")
+    }
+
+    /// A literal pattern on a dropdown option describes the *selection*, not another field.
+    /// `sourceOfFunds` options carry `"[a-zA-Z]"`; that must never leak onto its neighbour.
+    func testLiteralOptionPatternsDoNotLeakOntoOtherFields() async throws {
+        let model = await loaded()
+        let source = try field(model, "sourceOfFunds")
+        let promo = try field(model, "receivePromotionalInformation")
+
+        model.setValue(.text("SalaryOrWages"), for: source)
+        model.setValue(.bool(true), for: promo)
+        model.markTouched(promo.identifier)
+        XCTAssertNil(model.error(for: promo))
+    }
+
+    /// The engine's default is no links at all: without one, the field's own regex always
+    /// applies, whatever the dropdown says.
+    func testNoLinkMeansTheFieldsOwnRuleApplies() async throws {
+        let model = await loaded(regexDependencies: [:])
+        let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
+        model.setValue(.text("passport"), for: type)
+        model.setValue(.text("A1234567"), for: number)
+        model.markTouched(number.identifier)
+        XCTAssertNotNil(model.error(for: number))
     }
 
     // MARK: Submission
@@ -185,9 +232,9 @@ final class DynamicFormModelTests: XCTestCase {
         let subscription = model.objectWillChange.sink { _ in renders += 1 }
         defer { subscription.cancel() }
 
-        model.markTouched(mobile)
+        model.markTouched(mobile.identifier)
         XCTAssertEqual(renders, 1)
-        model.markTouched(mobile)
+        model.markTouched(mobile.identifier)
         XCTAssertEqual(renders, 1)
     }
 
@@ -197,10 +244,10 @@ final class DynamicFormModelTests: XCTestCase {
         model.setValue(.text("123"), for: mobile)
         XCTAssertNil(model.error(for: mobile), "untouched, so still silent")
 
-        model.markTouched(identifiedBy: "username")
+        model.markTouched("username")
         XCTAssertNotNil(model.error(for: mobile))
 
-        model.markTouched(identifiedBy: "notAField")   // must not trap
+        model.markTouched("notAField")   // must not trap
     }
 
     // MARK: Return-key focus order
@@ -232,6 +279,32 @@ final class DynamicFormModelTests: XCTestCase {
         }
     }
 
+    // MARK: Translation
+
+    /// Every key goes through one closure shaped like the app's `getTranslation`: text back, or the key itself on a miss.
+    func testTranslateResolvesLabelsOptionsAndComposedValidationKeys() async throws {
+        let table = ["username": "Enter Mobile Number",
+                     "jpc-reg-passport": "Passport",
+                     "jpc-reg-username-regex": "Enter a valid mobile number"]
+        let model = DynamicFormModel(
+            formName: .registration,
+            dependencies: FormDependencies(repository: StubFormRepository(delay: 0), translate: { table[$0] ?? $0 })
+        )
+        await model.load()
+        let mobile = try field(model, "username")
+        XCTAssertEqual(model.translate(mobile.labelKey), "Enter Mobile Number")
+        XCTAssertEqual(model.options(for: try field(model, "idNumberType")).map(\.label), ["jpc-reg-idnumber", "Passport"])
+        model.markTouched(mobile.identifier)
+        XCTAssertEqual(model.error(for: mobile), "Enter a valid mobile number")
+    }
+
+    func testUntranslatedKeysRenderAsThemselves() async throws {
+        let model = await loaded()
+        let mobile = try field(model, "username")
+        model.markTouched(mobile.identifier)
+        XCTAssertEqual(model.error(for: mobile), "jpc-reg-username-regex")
+    }
+
     // MARK: Helpers
 
     private func fillSectionOne(_ model: DynamicFormModel) throws {
@@ -243,10 +316,10 @@ final class DynamicFormModelTests: XCTestCase {
     }
 
     private func fillSectionTwo(_ model: DynamicFormModel) throws {
-        model.setValue(.option("idNumber"), for: try field(model, "idNumberType"))
+        model.setValue(.text("idNumber"), for: try field(model, "idNumberType"))
         model.setValue(.text("9001015800089"), for: try field(model, "idNumber"))
         model.setValue(.date(Date(timeIntervalSince1970: 631152000)), for: try field(model, "dateOfBirth"))
-        model.setValue(.option("SalaryOrWages"), for: try field(model, "sourceOfFunds"))
+        model.setValue(.text("SalaryOrWages"), for: try field(model, "sourceOfFunds"))
         model.setValue(.bool(true), for: try field(model, "terms"))
     }
 }
@@ -260,7 +333,7 @@ private final class FailOnceRepository: FormRepository, @unchecked Sendable {
             hasFailed = true
             throw FormError.offline
         }
-        return try await StubFormRepository(forms: BundledForms.all, delay: 0).form(named: name)
+        return try await StubFormRepository(delay: 0).form(named: name)
     }
 
     func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult { FormSubmitResult() }
@@ -272,98 +345,12 @@ private final class SpyRepository: FormRepository, @unchecked Sendable {
     private(set) var received: FormSubmission?
 
     func form(named name: FormName) async throws -> FormSchema {
-        try await StubFormRepository(forms: BundledForms.all, delay: 0).form(named: name)
+        try await StubFormRepository(delay: 0).form(named: name)
     }
 
     func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
         received = submission
         if let error { throw error }
         return FormSubmitResult(accountId: "abc")
-    }
-}
-
-/// Confirmed behaviour: the ID Number Type dropdown selects whether the user is entering a South
-/// African ID or a passport, and the ID Number field validates accordingly.
-@MainActor
-final class IDTypeRegexDependencyTests: XCTestCase {
-    private func loadedSectionTwo(regexDependencies: [String: String] = ["idNumberType": "idNumber"]) async -> DynamicFormModel {
-        let model = DynamicFormModel(
-            formName: .registration,
-            dependencies: FormDependencies(
-                repository: StubFormRepository(forms: BundledForms.all, delay: 0),
-                regexDependencies: regexDependencies
-            )
-        )
-        await model.load()
-        return model
-    }
-
-    private func field(_ model: DynamicFormModel, _ id: String) throws -> FormField {
-        try XCTUnwrap(model.form?.field(identifiedBy: id))
-    }
-
-    func testSouthAfricanIDRequiresThirteenDigits() async throws {
-        let model = await loadedSectionTwo()
-        let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
-
-        model.setValue(.option("idNumber"), for: type)
-        model.setValue(.text("9001015800089"), for: number)
-        model.markTouched(number)
-        XCTAssertNil(model.error(for: number))
-
-        model.setValue(.text("A1234567"), for: number)
-        XCTAssertNotNil(model.error(for: number), "a passport number is not a valid SA ID")
-    }
-
-    func testPassportAcceptsAnAlphanumericNumber() async throws {
-        let model = await loadedSectionTwo()
-        let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
-
-        model.setValue(.option("passport"), for: type)
-        model.setValue(.text("A1234567"), for: number)
-        model.markTouched(number)
-        XCTAssertNil(model.error(for: number))
-    }
-
-    /// Switching type revalidates immediately — the user shouldn't have to re-type to see the
-    /// rule change.
-    func testSwitchingTypeRevalidatesWithoutRetyping() async throws {
-        let model = await loadedSectionTwo()
-        let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
-
-        model.setValue(.option("idNumber"), for: type)
-        model.setValue(.text("A1234567"), for: number)
-        model.markTouched(number)
-        XCTAssertNotNil(model.error(for: number))
-
-        model.setValue(.option("passport"), for: type)
-        XCTAssertNil(model.error(for: number), "switching to passport must clear the error")
-
-        model.setValue(.option("idNumber"), for: type)
-        XCTAssertNotNil(model.error(for: number), "switching back must re-apply the 13-digit rule")
-    }
-
-    /// A literal pattern on a dropdown option describes the *selection*, not another field.
-    /// `sourceOfFunds` options carry `"[a-zA-Z]"`; that must never leak onto its neighbour.
-    func testLiteralOptionPatternsDoNotLeakOntoOtherFields() async throws {
-        let model = await loadedSectionTwo()
-        let source = try field(model, "sourceOfFunds")
-        let promo = try field(model, "receivePromotionalInformation")
-
-        model.setValue(.option("SalaryOrWages"), for: source)
-        model.setValue(.bool(true), for: promo)
-        model.markTouched(promo)
-        XCTAssertNil(model.error(for: promo))
-    }
-
-    /// The engine's default is no links at all: without one, the field's own regex always
-    /// applies, whatever the dropdown says.
-    func testNoLinkMeansTheFieldsOwnRuleApplies() async throws {
-        let model = await loadedSectionTwo(regexDependencies: [:])
-        let type = try field(model, "idNumberType"), number = try field(model, "idNumber")
-        model.setValue(.option("passport"), for: type)
-        model.setValue(.text("A1234567"), for: number)
-        model.markTouched(number)
-        XCTAssertNotNil(model.error(for: number))
     }
 }

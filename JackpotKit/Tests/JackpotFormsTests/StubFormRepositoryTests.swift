@@ -3,7 +3,7 @@ import XCTest
 
 /// The bundled-JSON repository the sandbox, the previews and every mock run on.
 final class StubFormRepositoryTests: XCTestCase {
-    private let repo = StubFormRepository(forms: BundledForms.all, delay: 0)
+    private let repo = StubFormRepository(delay: 0)
 
     func testStubServesTheBundledForm() async throws {
         let form = try await repo.form(named: .registration)

@@ -6,19 +6,14 @@ import Combine
 /// computed from those rather than stored, so a dropdown that changes another field's rule needs no bookkeeping.
 /// `ObservableObject` rather than `@Observable` because the floor is iOS 15.
 public final class DynamicFormModel: ObservableObject {
-    public enum ViewState: Equatable {
-        case loading
-        case loaded(FormSchema)
-        case failed(String)
-    }
-
     public enum PagingDirection: Equatable, Sendable {
         case forward
         case backward
     }
 
     // MARK: Published state
-    @Published public private(set) var viewState: ViewState = .loading
+    @Published public private(set) var form: FormSchema?
+    @Published public private(set) var loadError: String?
     @Published public private(set) var values: [String: FormValue] = [:]
     @Published public private(set) var sectionIndex: Int = 0
     /// Set before `sectionIndex` changes, so the section transition slides the right way wherever the bar is.
@@ -31,7 +26,6 @@ public final class DynamicFormModel: ObservableObject {
 
     private let formName: FormName
     private let dependencies: FormDependencies
-    private let validator = FieldValidator()
 
     public init(formName: FormName, dependencies: FormDependencies) {
         self.formName = formName
@@ -40,25 +34,12 @@ public final class DynamicFormModel: ObservableObject {
 
     // MARK: Derived
 
-    public var form: FormSchema? {
-        if case .loaded(let form) = viewState { return form }
-        return nil
-    }
-
     public var sections: [FormSection] { form?.sections ?? [] }
     public var currentSection: FormSection? {
         sections.indices.contains(sectionIndex) ? sections[sectionIndex] : nil
     }
     public var isFirstSection: Bool { sectionIndex == 0 }
     public var isLastSection: Bool { sectionIndex >= sections.count - 1 }
-
-    /// Types the schema asked for that this build cannot render; non-fatal, surfaced for QA.
-    public var unsupportedFields: [String] {
-        (form?.allFields ?? []).compactMap {
-            if case .unknown(let raw) = $0.type { return "\($0.identifier) (\(raw))" }
-            return nil
-        }
-    }
 
     /// Fraction of required fields that validate; drives the progress bar.
     public var progress: Double {
@@ -82,13 +63,14 @@ public final class DynamicFormModel: ObservableObject {
         values[field.identifier] ?? defaultValue(for: field)
     }
 
-    /// Nil while the field is untouched.
+    /// Nil while the field is untouched. Every field carries `validationMessage: "regex"`, so the key is composed:
+    /// `jpc-reg-{identifier}-{key}`.
     public func error(for field: FormField) -> String? {
         guard touched.contains(field.identifier), !isValid(field) else { return nil }
-        return dependencies.localizer.validationMessage(for: field)
+        return translate("jpc-reg-\(field.identifier)-\(field.validationMessageKey)")
     }
 
-    public func localized(_ key: String) -> String { dependencies.localizer.display(key) }
+    public var translate: @Sendable (String) -> String { dependencies.translate }
 
     public var maximumDate: Date { dependencies.maximumDate ?? Date() }
 
@@ -96,30 +78,24 @@ public final class DynamicFormModel: ObservableObject {
 
     /// A no-op once loaded, so re-appearing cannot reset a half-filled form; a failed load runs again.
     public func load() async {
-        if case .loaded = viewState { return }
-        viewState = .loading
+        guard form == nil else { return }
+        loadError = nil
         do {
-            apply(try await dependencies.repository.form(named: formName))
+            let form = try await dependencies.repository.form(named: formName)
+            values = Dictionary(uniqueKeysWithValues:
+                form.allFields.filter(\.isVisible).map { ($0.identifier, defaultValue(for: $0)) }
+            )
+            self.form = form
         } catch is CancellationError {
         } catch {
-            viewState = .failed(Self.message(for: error))
+            loadError = Self.message(for: error)
         }
-    }
-
-    private func apply(_ form: FormSchema) {
-        viewState = .loaded(form)
-        sectionIndex = 0
-        touched = []
-        values = Dictionary(uniqueKeysWithValues:
-            form.allFields.filter(\.isVisible).map { ($0.identifier, defaultValue(for: $0)) }
-        )
     }
 
     private func defaultValue(for field: FormField) -> FormValue {
         switch field.type {
-        case .checkbox:        return .bool(false)
-        case .dropdown:        return .option("")
-        case .input, .unknown: return field.inputType == .calendar ? .empty : .text("")
+        case .checkbox:                   return .bool(false)
+        case .input, .dropdown, .unknown: return field.inputType == .calendar ? .empty : .text("")
         }
     }
 
@@ -130,11 +106,7 @@ public final class DynamicFormModel: ObservableObject {
     }
 
     /// Call on blur. Re-touching is a no-op rather than another render.
-    public func markTouched(_ field: FormField) {
-        markTouched(identifiedBy: field.identifier)
-    }
-
-    public func markTouched(identifiedBy identifier: String) {
+    public func markTouched(_ identifier: String) {
         guard !touched.contains(identifier) else { return }
         touched.insert(identifier)
     }
@@ -142,17 +114,14 @@ public final class DynamicFormModel: ObservableObject {
     // MARK: Validation
 
     private func isValid(_ field: FormField) -> Bool {
-        validator.validate(value(for: field), against: field, overrideRegex: overrideRegex(for: field))
+        field.accepts(value(for: field), overrideRegex: overrideRegex(for: field))
     }
 
     /// The rule a dropdown imposes on `field` when `regexDependencies` links them and the chosen option names a
     /// pattern. ID type → ID number: Passport relaxes the thirteen-digit rule.
     private func overrideRegex(for field: FormField) -> String? {
-        guard let form,
-              let driverIdentifier = dependencies.regexDependencies.first(where: { $0.value == field.identifier })?.key,
-              let driver = form.field(identifiedBy: driverIdentifier),
-              case .option(let selected) = value(for: driver),
-              let option = driver.dropdownOptions.first(where: { $0.value == selected }),
+        guard let driver = dependencies.regexDependencies[field.identifier].flatMap({ form?.field(identifiedBy: $0) }),
+              let option = driver.dropdownOptions.first(where: { $0.value == value(for: driver).stringValue }),
               let name = option.regex
         else { return nil }
         return dependencies.namedPatterns[name]
@@ -194,29 +163,6 @@ public final class DynamicFormModel: ObservableObject {
     }
 
     private static func message(for error: any Error) -> String {
-        if let localized = (error as? LocalizedError)?.errorDescription { return localized }
-        return "Something went wrong. Please try again."
+        (error as? LocalizedError)?.errorDescription ?? "Something went wrong. Please try again."
     }
 }
-
-#if DEBUG
-// Here because `private` is file-scoped, so previews can call `apply(_:)`.
-public extension DynamicFormModel {
-    /// A model already holding `schema`, so previews render without a fetch.
-    static func preview(schema: FormSchema,
-                        dependencies: FormDependencies = .mock(delay: 0),
-                        values: [String: FormValue] = [:],
-                        touched: [String] = []) -> DynamicFormModel {
-        let model = DynamicFormModel(formName: schema.codeName, dependencies: dependencies)
-        model.apply(schema)
-        for (identifier, value) in values {
-            guard let field = schema.field(identifiedBy: identifier) else { continue }
-            model.setValue(value, for: field)
-        }
-        for identifier in touched {
-            model.markTouched(identifiedBy: identifier)
-        }
-        return model
-    }
-}
-#endif

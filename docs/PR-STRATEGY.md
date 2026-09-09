@@ -16,7 +16,7 @@ not wait for them. No feature flags; the app has none and this plan doesn't intr
 - **The app is touched once.** Steps 1 to 3 are additive package code nobody calls. Step 4 is
   a swap plus a delete.
 - **Localisation last.** The feature ships on the existing `getTranslation`, wrapped. The
-  migration off it is step 5, and it changes nothing about registration but the localizer.
+  migration off it is step 5, and it changes nothing about registration.
 
 The build order, file by file, is [BUILD-PLAYBOOK.md](BUILD-PLAYBOOK.md).
 
@@ -27,17 +27,17 @@ The build order, file by file, is [BUILD-PLAYBOOK.md](BUILD-PLAYBOOK.md).
 | # | Step | Modules | Demoable as | Tests |
 |---|---|---|---|---|
 | 1 | **`JackpotUI`** — design system | JackpotUI | the gallery preview: every component, every state | 20 |
-| 2 | **`JackpotForms` on the bundled schema** + **`JackpotRegistration`** | JackpotForms, JackpotRegistration | the Sign Up sheet, both pages, mock service | 64 |
+| 2 | **`JackpotForms` on the bundled schema** + **`JackpotRegistration`** | JackpotForms, JackpotRegistration | the Sign Up sheet, both pages, mock service | 55 |
 | 3 | **`JackpotNetworking`** | JackpotNetworking | `RemoteApiClient` against a stubbed transport | 34 |
-| 4 | **Connect forms to the network; replace the flow in the app** | JackpotForms/Remote + app | registration live in the app, copy from `getTranslation` | 26 |
-| 5 | **Fix translations** | JackpotLocalization, JackpotRegistration | error codes in the player's language; `getTranslation` becomes a shim | 26 |
+| 4 | **Connect forms to the network; replace the flow in the app** | JackpotForms/Remote + app | registration live in the app, copy from `getTranslation` | 21 |
+| 5 | **Fix translations** | JackpotLocalization | `getTranslation` becomes a shim over the store; registration untouched | 18 |
 | 6 | **Fix app data** | JackpotAppData | config served from disk on launch, revalidated behind it | 23 |
 
 ```
 JackpotUI ──► JackpotForms + JackpotRegistration (stub) ──► JackpotNetworking ──► live + app swap ──► translations ──► app data
 ```
 
-193 tests through step 6. Everything lives in one local package, `JackpotKit`; each row above
+171 tests through step 6. Everything lives in one local package, `JackpotKit`; each row above
 is a module inside it, not a package of its own. The manifest is built up step by step in the
 playbook, and the generator checks its final step against `Package.swift`.
 
@@ -75,22 +75,22 @@ The engine, with no network: one module, three folders pointing one way.
 
 | Folder | Holds |
 |---|---|
-| `Domain` | `FormSchema`, `FormField`, `FormName`, `FieldValidator`, `PasswordPolicy`, `FormError`, `ClosureLocalizer`, the `FormRepository` / `FormLocalizing` protocols |
-| `Data` | wire DTOs and the mapper (internal), `StubFormRepository`, `BundledForms` (the captured `registration.json`), the placeholder copy table |
-| `UI` | `DynamicFormModel`, `DynamicFormContent`, `FormNavigationBar`, `FormDependencies` (+ `.mock()`), one thin field view per type binding the model to a `JackpotUI` component |
+| `Domain` | `FormSchema`, `FormField` (with `accepts(_:overrideRegex:)`), `FormName`, `FormValue`, `FormSubmitResult`, `FormError`, the `FormRepository` protocol |
+| `Data` | the wire DTOs, each mapping to its domain value (internal); `StubFormRepository`, serving the captured `registration.json` |
+| `UI` | `DynamicFormModel`, `DynamicFormContent`, `FormNavigationBar`, `FormDependencies` (+ `.mock()` and the placeholder copy), `FieldRenderer` binding the model to the `JackpotUI` components, `InputFieldView` for text entry |
 
 The engine's defaults are generic — no cross-field regex links, no date cap. Registration's
 rules come with the feature, in the same step:
 
 | File | Holds |
 |---|---|
-| `RegistrationFeature.swift` | `RegistrationDependencies` (`.mock(localizer:)` for demos; applies the ID-type link and the 18-year date cap), `RegistrationView` — the pages inside `JackpotPanel`, the login row and navigation in its footer, with `onClose`, `onLogin` and `onComplete`; `RegistrationResult` is `FormSubmitResult` under the app's name |
+| `RegistrationFeature.swift` | `RegistrationDependencies` (`.mock()` for demos; applies the ID-type link and the 18-year date cap), `RegistrationView` — the pages inside `JackpotPanel`, the login row and navigation in its footer, with `onClose`, `onLogin` and `onComplete`; `RegistrationResult` is `FormSubmitResult` under the app's name |
 | `RegistrationPanelController.swift` | a `UIHostingController` sized for the legacy popup container |
 
-**Review:** `FieldRenderer.swift` (the CRM↔app contract), `FieldValidator.swift` (untrusted
+**Review:** `FieldRenderer.swift` (the CRM↔app contract), `FormField.swift` (`accepts`, untrusted
 regexes), `DynamicFormModel.swift` (touched state, section gating, ID-type → ID-number), then
 the previews in `JackpotRegistration/Previews.swift`: the full flow, both pages, success and
-the duplicate-mobile failure path, with no app and no backend. 64 tests.
+the duplicate-mobile failure path, with no app and no backend. 55 tests.
 
 ## Step 3 · `JackpotNetworking`
 
@@ -103,33 +103,18 @@ the app keeps `getTranslation`.
 
 ## Step 4 · Connect the forms to the network, and replace the flow in the app
 
-`JackpotForms/Remote` — `RemoteFormRepository`, endpoints, `FormErrorMapper`, `.live()`. The
-engine and the sheet are untouched; `.mock()` becomes `.live(baseURL:localizer:)` at one call
-site. Then the only change to the app, in three parts:
+`JackpotForms/Remote` — `RemoteFormRepository` (fetch, submit, the error boundary, `.live()`)
+and the endpoints. The engine and the sheet are untouched; `.mock()` becomes
+`.live(baseURL:translate:)` at one call site, and `translate` is the app's existing
+`getTranslation` passed as a closure: a key in, its text out, the key itself on a miss. No
+adapter type. Then the only change to the app, in two parts:
 
-**1. Put the existing translation function behind one named type** (~10 lines, its own file):
-
-```swift
-// Sources/Features/Registration/LegacyTranslationLocalizer.swift
-// Deleted at step 5, when Translations.formLocalizer takes its place.
-struct LegacyTranslationLocalizer: FormLocalizing {
-    func string(forKey key: String) -> String? {
-        let value = getTranslation(Key: key)
-        return value == key ? nil : value      // getTranslation returns the key on a miss
-    }
-}
-```
-
-That last line matters: the engine uses `nil` to mean "unresolved" so it can fall back to
-humanised copy. Without it a missing string renders as `username`. This file is the only place
-the feature touches `getTranslation`, which is what makes step 5 a one-file change.
-
-**2. Present the package where the old popup was** (~14 lines):
+**1. Present the package where the old popup was** (~14 lines):
 
 ```swift
 let controller = RegistrationPanelController(
     dependencies: RegistrationDependencies(
-        forms: .live(baseURL: configURL, localizer: LegacyTranslationLocalizer())
+        forms: .live(baseURL: configURL, translate: { getTranslation(Key: $0) })
     ),
     onClose: { popupContainer.dismiss() },
     onLogin: { popupContainer.dismiss(); presentLogin() }
@@ -141,22 +126,20 @@ popupContainer.show(controller.view)
 controller.didMove(toParent: self)
 ```
 
-**3. Delete the old flow:** `registrationPopup`, `flowOneViewController`, `flowTwoViewController`,
+**2. Delete the old flow:** `registrationPopup`, `flowOneViewController`, `flowTwoViewController`,
 their nibs, their `GlobalData` handles.
 
 Net negative. The diff is small enough to review in one sitting and revert in one commit.
 
-**Review:** `FormEndpoints.swift` (HTTP 200 is not success) and the app diff. 26 tests.
+**Review:** `RemoteFormRepository.swift` (HTTP 200 is not success; `userFacing`) and the app diff. 21 tests.
 
 ## Step 5 · Fix translations
 
 ADR-0001 phase 2. `JackpotLocalization` — `Translations` (the table, normalised once;
-region-suffixed lookup; error codes as keys), `TranslationsRepository`, `TranslationsStore` —
-and `Translations.formLocalizer` in `JackpotRegistration`, the adapter that feeds the table to the
-form engine. In the app: `getTranslation` becomes a shim over the store (app-wide performance
-fix, zero call-site changes, deprecation warnings as the burn-down list), and
-`LegacyTranslationLocalizer.swift` is deleted in favour of `Translations.formLocalizer`, at which
-point error codes start resolving to localised copy. 26 tests.
+region-suffixed lookup), `TranslationsRepository`, `TranslationsStore`.
+In the app: `getTranslation` becomes a shim over the store (app-wide performance fix, zero
+call-site changes, deprecation warnings as the burn-down list). Registration needs no change:
+the closure it was given at step 4 now reads the store. 18 tests.
 
 ## Step 6 · Fix app data
 

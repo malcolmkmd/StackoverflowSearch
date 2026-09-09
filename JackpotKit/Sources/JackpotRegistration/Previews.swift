@@ -3,7 +3,7 @@ import SwiftUI
 import JackpotUI
 import JackpotForms
 
-/// The Sign Up sheet over the page, as the app presents it.
+/// The Sign Up sheet over the page, as the app presents it: the whole form, both pages, faked submit.
 struct RegistrationView_Previews: PreviewProvider {
     private struct Page: View {
         var dependencies: RegistrationDependencies = .mock()
@@ -22,13 +22,6 @@ struct RegistrationView_Previews: PreviewProvider {
                 .previewDisplayName("Sign Up — dark")
             Page().preferredColorScheme(.light)
                 .previewDisplayName("Sign Up — light")
-
-            Page(dependencies: .mock(localizer: ClosureLocalizer { key in
-                ["username": "Enter Mobile Number", "password": "Password", "email": "Email"][key]
-            }))
-            .preferredColorScheme(.dark)
-            .previewDisplayName("Sign Up — app localizer")
-
             Page(dependencies: .init(forms: .mock(delay: 3600)))
                 .preferredColorScheme(.dark)
                 .previewDisplayName("Loading")

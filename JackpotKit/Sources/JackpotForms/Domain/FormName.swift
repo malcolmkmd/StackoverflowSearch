@@ -3,7 +3,7 @@ import Foundation
 /// The `formCodeName` in the schema and the last path component of the fetch URL. A struct rather than an
 /// enum because forms are authored server-side, so `FormName("deposit")` must be constructible; not
 /// `ExpressibleByStringLiteral`, so a typo cannot compile into a 404.
-public struct FormName: RawRepresentable, Hashable, Sendable {
+public struct FormName: RawRepresentable, Hashable, Sendable, Encodable {
     public let rawValue: String
 
     public init(rawValue: String) {

@@ -29,10 +29,4 @@ public struct Translations: Sendable, Equatable {
     public func callAsFunction(_ key: String, regional: Bool = true) -> String {
         string(forKey: key, regional: regional) ?? key
     }
-
-    /// The table doubles as an error-code catalogue: `jpc-reg-error.{code}`, then the bare number.
-    public func message(forErrorCode code: Int) -> String? {
-        string(forKey: "jpc-reg-error.\(code)", regional: false)
-            ?? string(forKey: String(code), regional: false)
-    }
 }

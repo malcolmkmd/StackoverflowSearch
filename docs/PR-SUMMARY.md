@@ -18,33 +18,22 @@ Part of a sequence — see [PR-STRATEGY.md](PR-STRATEGY.md). Steps 1 to 3 landed
 
 ## What changes in the package
 
-`Remote/` joins `JackpotForms`: `FormEndpoints` (the cron URLs, the submit body, and
-`FormSubmitParser`, which treats HTTP 200 with `isSuccessful: false` as a failure and a body
-that is not the envelope as a rejection), `FormErrorMapper` (the boundary that keeps the
-server's wording), `RemoteFormRepository`, and `.live(baseURL:localizer:)`. `JackpotForms`
+`Remote/` joins `JackpotForms`: `FormEndpoints` (the cron paths, the submit request and the
+envelope) and `RemoteFormRepository` (the fetch; the submit, which treats HTTP 200 with
+`isSuccessful: false` as a failure and a body that is not the envelope as a rejection; the
+boundary that keeps the server's wording; and `.live(baseURL:translate:)`). `JackpotForms`
 and its tests gain `JackpotNetworking` in the manifest.
 
 ## What changes in the app
 
-**Added** (~35 lines, two files):
-
-```swift
-// Sources/Features/Registration/LegacyTranslationLocalizer.swift
-// Deleted at step 5, when the app adopts JackpotLocalization and Translations.formLocalizer takes over.
-struct LegacyTranslationLocalizer: FormLocalizing {
-    func string(forKey key: String) -> String? {
-        let value = getTranslation(Key: key)
-        return value == key ? nil : value      // getTranslation returns the key on a miss
-    }
-}
-```
+**Added** (~25 lines, one file):
 
 ```swift
 // Sources/Features/Registration/RegistrationPresenter.swift
 func presentRegistration() {
     let controller = RegistrationPanelController(
         dependencies: RegistrationDependencies(
-            forms: .live(baseURL: configBaseURL, localizer: LegacyTranslationLocalizer())
+            forms: .live(baseURL: configBaseURL, translate: { getTranslation(Key: $0) })
         ),
         onClose: { [weak self] in self?.popupContainer.dismiss() },
         onLogin: { [weak self] in self?.popupContainer.dismiss(); self?.presentLogin() }
@@ -68,15 +57,16 @@ func presentRegistration() {
 
 ---
 
-## Why `LegacyTranslationLocalizer` looks like that
+## Why `translate` is a bare closure
 
-`getTranslation` returns the **key itself** when it has no translation. The form engine's
-`FormLocalizing` uses `nil` to mean "unresolved", so it can fall back to humanised copy
-(`"dateOfBirth"` → `"Date Of Birth"`). Without mapping key-on-miss back to `nil`, a missing
-string renders as the raw key. `testKeyOnMissMappedToNilFallsBackToHumanisedCopy` in
-`JackpotRegistrationTests` pins that contract.
+`getTranslation` returns the **key itself** when it has no translation, and so does the form
+engine's `translate`: a key in, its text out, the key on a miss. The two contracts match, so
+the app passes `{ getTranslation(Key: $0) }` and nothing adapts anything. A missing string
+renders as its key, visible in QA. `testUntranslatedKeysRenderAsThemselves` in
+`JackpotFormsTests` pins that contract.
 
-It is the *only* new code that references the legacy world, and step 5 deletes the file.
+The presenter is the *only* new code that references the legacy world, and it stays as it is
+at step 5, when `getTranslation` becomes a shim over the store.
 
 ## What's provisional
 
@@ -89,25 +79,25 @@ without the backend.
 
 ## Testing
 
-The package suites are green — 193 tests:
+The package suites are green — 171 tests:
 
 ```bash
 cd JackpotKit
 xcodebuild -scheme JackpotKit-Package -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
 
-`JackpotUITests` 20 · `JackpotFormsTests` 79 · `JackpotNetworkingTests` 34 ·
-`JackpotLocalizationTests` 22 · `JackpotRegistrationTests` 15 · `JackpotAppDataTests` 23
+`JackpotUITests` 20 · `JackpotFormsTests` 73 · `JackpotNetworkingTests` 34 ·
+`JackpotLocalizationTests` 18 · `JackpotRegistrationTests` 3 · `JackpotAppDataTests` 23
 
 Manual, on a device: open sign-up from the header and from the bottom bar; complete both pages;
 confirm section gating, the ID-type → ID-number rule change, the password checklist, and that
 the duplicate-mobile failure (`0000000000` against the mock) surfaces under the fields
-without clearing the form. Confirm every label reads as it did — that's
-`LegacyTranslationLocalizer` doing its job.
+without clearing the form. Confirm every label reads as it did — that's `getTranslation`
+plugged straight in.
 
 ## Review guide
 
-1. The two new files. `LegacyTranslationLocalizer.swift` is the only one that references
-   `getTranslation`; the presenter references nothing but `JackpotRegistration`.
+1. The new file. The presenter references nothing but `JackpotRegistration` and, in one
+   closure, `getTranslation`.
 2. The deletions. Grep for `registrationPopup`, `flowOne`, `flowTwo` — zero hits expected.
 3. Nothing else in the app diff. If there is, it belongs in another step.

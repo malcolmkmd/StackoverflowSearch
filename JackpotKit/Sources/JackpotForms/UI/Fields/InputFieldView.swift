@@ -8,49 +8,43 @@ struct InputFieldView: View {
     @State private var isEditing = false
 
     var body: some View {
-        if field.inputType == .calendar {
-            DateFieldView(field: field, model: model)
-        } else {
-            VStack(spacing: .xs) {
-                JackpotTextField(model.localized(field.labelKey),
-                                 text: model.text(for: field),
-                                 kind: kind,
-                                 prefix: field.prefix,
-                                 suffix: field.suffix)
-                    .onEditingEnded { model.markTouched(field) }
-                    .onFocusChange { isEditing = $0 }
-                    .jackpotFieldIdentity(field.identifier)
-                    .submitLabel(isLastFocusable ? .done : .next)
-                    .disabled(field.isReadOnly)
+        VStack(spacing: .xs) {
+            JackpotTextField(model.translate(field.labelKey),
+                             text: model.text(for: field),
+                             kind: kind,
+                             prefix: field.prefix,
+                             suffix: field.suffix)
+                .onEditingEnded { model.markTouched(field.identifier) }
+                .onFocusChange { isEditing = $0 }
+                .jackpotFieldIdentity(field.identifier)
+                .submitLabel(model.focusableIdentifiers.last == field.identifier ? .done : .next)
 
-                // The rules are guidance while composing; once the field is left, the error line carries the verdict.
-                if field.isSecure, isEditing {
-                    JackpotChecklist("Password Validity", items: passwordItems)
-                        .transition(.scale(scale: 0.97, anchor: .top).combined(with: .opacity))
-                }
+            // The rules are guidance while composing; once the field is left, the error line carries the verdict.
+            if field.inputType == .password, isEditing {
+                JackpotChecklist("Password Validity", items: passwordRules)
+                    .transition(.scale(scale: 0.97, anchor: .top).combined(with: .opacity))
             }
-            .animation(.spring(response: 0.35, dampingFraction: 0.9), value: isEditing)
-            .jackpotFieldError(model.error(for: field))
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: isEditing)
     }
 
-    private var isLastFocusable: Bool {
-        model.focusableIdentifiers.last == field.identifier
-    }
-
-    private var passwordItems: [JackpotChecklistItem] {
-        PasswordPolicy.rules(for: field, password: model.value(for: field).stringValue).map {
-            JackpotChecklistItem(id: $0.description, text: $0.description, isSatisfied: $0.isSatisfied)
-        }
+    /// The schema gives password one regex, `^(.){8,20}$`, and the design shows two rules, so the `{min,max}` quantifier is parsed.
+    private var passwordRules: [JackpotChecklistItem] {
+        guard let bounds = field.regex?.lengthQuantifier else { return [] }
+        let count = model.value(for: field).stringValue.count
+        return [
+            JackpotChecklistItem(id: "min", text: "Minimum of \(bounds.lowerBound) characters", isSatisfied: count >= bounds.lowerBound),
+            JackpotChecklistItem(id: "max", text: "Maximum of \(bounds.upperBound) characters", isSatisfied: count > 0 && count <= bounds.upperBound),
+        ]
     }
 
     private var kind: JackpotFieldKind {
-        if field.isSecure { return .newPassword }
         switch field.inputType {
-        case .email:  return .email
-        case .phone:  return .phoneNumber
-        case .number: return .number
-        default:      break
+        case .password: return .newPassword
+        case .email:    return .email
+        case .phone:    return .phoneNumber
+        case .number:   return .number
+        default:        break
         }
         // The schema's `inputType` is coarser than iOS autofill: `username` is a mobile number typed as Number.
         switch field.identifier.lowercased() {
@@ -63,27 +57,12 @@ struct InputFieldView: View {
     }
 }
 
-#if DEBUG
-struct InputFieldView_Previews: PreviewProvider {
-    static var previews: some View {
-        Group {
-            JackpotPreviewPanel("Empty · untouched") {
-                InputFieldView(field: FormPreview.field("username"), model: FormPreview.model([FormPreview.field("username")]))
-            }.previewDisplayName("Mobile — empty")
-            JackpotPreviewPanel("Invalid · touched") {
-                InputFieldView(field: FormPreview.field("username"),
-                               model: FormPreview.model([FormPreview.field("username")], values: ["username": .text("123")], touched: ["username"]))
-            }.previewDisplayName("Mobile — invalid")
-            JackpotPreviewPanel("Password · 7 chars · unfocused") {
-                InputFieldView(field: FormPreview.field("password"),
-                               model: FormPreview.model([FormPreview.field("password")], values: ["password": .text("Passwo1")], touched: ["password"]))
-            }.previewDisplayName("Password — rules hidden")
-            JackpotPreviewPanel("Optional · empty is fine") {
-                InputFieldView(field: FormPreview.field("referralCode"),
-                               model: FormPreview.model([FormPreview.field("referralCode")], touched: ["referralCode"]))
-            }.previewDisplayName("Referral — optional")
-        }
-        .previewLayout(.sizeThatFits)
+extension String {
+    /// `8...20` from `^(.){8,20}$`.
+    var lengthQuantifier: ClosedRange<Int>? {
+        guard let open = lastIndex(of: "{"), let close = self[open...].firstIndex(of: "}") else { return nil }
+        let bounds = self[index(after: open)..<close].split(separator: ",").map { Int($0) }
+        guard bounds.count == 2, let minimum = bounds[0], let maximum = bounds[1], minimum <= maximum else { return nil }
+        return minimum...maximum
     }
 }
-#endif

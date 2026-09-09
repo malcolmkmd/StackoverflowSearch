@@ -2,11 +2,22 @@ import XCTest
 @testable import JackpotForms
 import JackpotNetworking
 
-final class FormSubmitEndpointTests: XCTestCase {
-    private let cron = URL(string: "https://config.jpc.africa/cron")!
+final class FormEndpointTests: XCTestCase {
+    private let host = APIEnvironment(baseURL: URL(string: "https://config.jpc.africa")!)
+
+    func testFetchByNameMatchesProductionBuildFormURL() throws {
+        let request = try FormRequest(brand: "jackpotcity", region: "JZA", formName: .registration).urlRequest(in: host)
+        XCTAssertEqual(request.url?.absoluteString,
+                       "https://config.jpc.africa/cron/forms/jackpotcity/JZA/registration?api-version=2.0")
+    }
+
+    func testServerAuthoredFormNameLandsInThePath() throws {
+        let request = try FormRequest(brand: "jackpotcity", region: "JZA", formName: FormName("deposit")).urlRequest(in: host)
+        XCTAssertTrue(request.url?.path.hasSuffix("/deposit") == true)
+    }
 
     func testSubmitURLMatchesProduction() throws {
-        let request = try FormSubmitRequest(Self.sample).urlRequest(in: .cron(baseURL: cron))
+        let request = try FormSubmitRequest(Self.sample).urlRequest(in: host)
         XCTAssertEqual(request.url?.absoluteString, "https://config.jpc.africa/cron/forms/submit")
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
@@ -14,30 +25,8 @@ final class FormSubmitEndpointTests: XCTestCase {
         XCTAssertNil(request.url?.query, "submit has no api-version query item")
     }
 
-    func testCronBaseURLIsDerivedFromTheCRMBase() {
-        XCTAssertEqual(
-            APIEnvironment.cronBaseURL(fromCRM: URL(string: "https://config.jpc.africa/crm")!).absoluteString,
-            "https://config.jpc.africa/cron"
-        )
-        XCTAssertEqual(
-            APIEnvironment.cronBaseURL(fromCRM: cron).absoluteString,
-            "https://config.jpc.africa/cron"
-        )
-        XCTAssertEqual(
-            APIEnvironment.cronBaseURL(fromCRM: URL(string: "https://config.jpc.africa")!).absoluteString,
-            "https://config.jpc.africa/cron"
-        )
-    }
-
-    func testFetchByNameMatchesProductionBuildFormURL() throws {
-        let request = try FormRequest(brand: "jackpotcity", region: "JZA", formName: .registration)
-            .urlRequest(in: .cron(baseURL: cron))
-        XCTAssertEqual(request.url?.absoluteString,
-                       "https://config.jpc.africa/cron/forms/jackpotcity/JZA/registration?api-version=2.0")
-    }
-
     func testSubmitBodyUsesSnakeCaseKeysAndTypedFields() throws {
-        let data = try FormSubmitBody.encoder.encode(FormSubmitBody(Self.sample))
+        let data = try FormSubmitRequest(Self.sample).bodyData
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertEqual(json["form_id"] as? String, "1052")
         XCTAssertEqual(json["form_name"] as? String, "registration")
@@ -46,52 +35,7 @@ final class FormSubmitEndpointTests: XCTestCase {
         XCTAssertEqual(fields["username"] as? String, "849134302")
         XCTAssertEqual(fields["terms"] as? Bool, true)
         XCTAssertTrue(fields["referralCode"] is NSNull)
-        XCTAssertNil(json["metadata"] as? [String: String])
-    }
-
-    func testEmptyBodyIsAnAcceptedSubmit() {
-        if case .accepted(let result) = FormSubmitParser.parse(Data()) {
-            XCTAssertNil(result.accountId)
-        } else {
-            XCTFail("empty body should be success")
-        }
-    }
-
-    func testEnvelopeSuccessCarriesAccountAndToken() throws {
-        let data = Data("""
-        {"data":{"accountId":"32212b00-54d0-449e-877a-f712f0976823","message":"User Created Successfully.","status":"Success.","partialRegistrationStatus":1,"complianceResponse":{"complianceStatus":512,"requiredComplianceStatus":1,"isValidId":true,"message":"Auto FICA Verification Failed","accessToken":"act-jwt-x"}},"isSuccessful":true,"error":null,"metadata":null,"httpStatusCode":200}
-        """.utf8)
-        guard case .accepted(let result) = FormSubmitParser.parse(data) else {
-            return XCTFail("expected accepted")
-        }
-        XCTAssertEqual(result.accountId, "32212b00-54d0-449e-877a-f712f0976823")
-        XCTAssertEqual(result.message, "User Created Successfully.")
-        XCTAssertEqual(result.partialRegistrationStatus, 1)
-        XCTAssertTrue(result.isPartial)
-        XCTAssertEqual(result.compliance?.accessToken, "act-jwt-x")
-        XCTAssertEqual(result.compliance?.isValidId, true)
-    }
-
-    func testHTTP200WithIsSuccessfulFalseIsARejection() {
-        let data = Data("""
-        {"data":null,"isSuccessful":false,"error":{"code":153008,"displayCode":153008,"message":"An Error Occurred.","remediation":null,"additionalInformation":null,"properties":null},"metadata":null,"httpStatusCode":200}
-        """.utf8)
-        guard case .rejected(let error) = FormSubmitParser.parse(data) else {
-            return XCTFail("HTTP 200 with isSuccessful false must not be treated as success")
-        }
-        XCTAssertEqual(error?.code, 153008)
-        XCTAssertEqual(error?.message, "An Error Occurred.")
-    }
-
-    /// A gateway page served with status 200, or JSON of some other shape, is not a
-    /// registered account.
-    func testABodyThatIsNotTheEnvelopeIsARejection() {
-        for body in ["<html>Access denied</html>", "{}", "[]", #"{"httpStatusCode":200}"#] {
-            guard case .rejected(let error) = FormSubmitParser.parse(Data(body.utf8)) else {
-                return XCTFail("\(body) must not read as success")
-            }
-            XCTAssertNil(error, body)
-        }
+        XCTAssertEqual(Set(json.keys), ["form_id", "form_name", "submitted_at", "fields"])
     }
 
     private static let sample = FormSubmission(
@@ -107,49 +51,73 @@ final class FormSubmitEndpointTests: XCTestCase {
 }
 
 final class RemoteFormRepositoryTests: XCTestCase {
-    func testRemoteSubmitPostsToCronAndReadsTheEnvelope() async throws {
-        let client = ScriptedApiClient(data: Data(#"{"isSuccessful":true,"data":{"accountId":"abc"}}"#.utf8))
-        let repo = RemoteFormRepository(apiClient: client)
-        let result = try await repo.submitForm(FormSubmission(formCodeName: .registration, values: [:], formId: "1"))
-        XCTAssertEqual(result.accountId, "abc")
-        XCTAssertEqual(client.lastPath, "forms/submit")
+    private let submission = FormSubmission(formCodeName: .registration, values: [:], formId: "1")
+
+    private func submit(_ body: String, translate: @escaping @Sendable (String) -> String = { $0 }) async throws -> FormSubmitResult {
+        try await RemoteFormRepository(apiClient: ScriptedApiClient(data: Data(body.utf8)), translate: translate)
+            .submitForm(submission)
     }
 
-    func testRemoteSubmitThrowsOnLogicalFailureDespiteHTTP200() async {
-        let body = #"{"isSuccessful":false,"error":{"code":153008,"message":"An Error Occurred."}}"#
-        let repo = RemoteFormRepository(apiClient: ScriptedApiClient(data: Data(body.utf8)))
+    func testRemoteSubmitPostsToCronAndReadsTheEnvelope() async throws {
+        let client = ScriptedApiClient(data: Data(#"{"isSuccessful":true,"data":{"accountId":"abc"}}"#.utf8))
+        let result = try await RemoteFormRepository(apiClient: client).submitForm(submission)
+        XCTAssertEqual(result.accountId, "abc")
+        XCTAssertEqual(client.lastPath, "cron/forms/submit")
+    }
+
+    /// An empty 2xx is taken as accepted.
+    func testEmptyBodyIsAnAcceptedSubmit() async throws {
+        let result = try await submit("")
+        XCTAssertNil(result.accountId)
+    }
+
+    func testEnvelopeSuccessCarriesAccountTokenAndPartialStatus() async throws {
+        let result = try await submit("""
+        {"data":{"accountId":"32212b00-54d0-449e-877a-f712f0976823","message":"User Created Successfully.","status":"Success.","partialRegistrationStatus":1,"complianceResponse":{"complianceStatus":512,"requiredComplianceStatus":1,"isValidId":true,"message":"Auto FICA Verification Failed","accessToken":"act-jwt-x"}},"isSuccessful":true,"error":null,"metadata":null,"httpStatusCode":200}
+        """)
+        XCTAssertEqual(result.accountId, "32212b00-54d0-449e-877a-f712f0976823")
+        XCTAssertEqual(result.message, "User Created Successfully.")
+        XCTAssertTrue(result.isPartial)
+        XCTAssertEqual(result.accessToken, "act-jwt-x")
+    }
+
+    func testHTTP200WithIsSuccessfulFalseIsARejection() async {
         do {
-            _ = try await repo.submitForm(FormSubmission(formCodeName: .registration, values: [:]))
-            XCTFail("expected a throw")
+            _ = try await submit(#"{"data":null,"isSuccessful":false,"error":{"code":153008,"displayCode":153008,"message":"An Error Occurred.","remediation":null},"httpStatusCode":200}"#)
+            XCTFail("HTTP 200 with isSuccessful false must not be treated as success")
         } catch {
             XCTAssertEqual(error as? FormError, .server(message: "An Error Occurred."))
         }
     }
 
+    /// A gateway page served with status 200, or JSON of some other shape, is not a registered account.
+    func testABodyThatIsNotTheEnvelopeIsARejection() async {
+        for body in ["<html>Access denied</html>", "{}", "[]", #"{"httpStatusCode":200}"#, #"{"data":{"accountId":"abc"}}"#] {
+            do {
+                _ = try await submit(body)
+                XCTFail("\(body) must not read as success")
+            } catch {
+                XCTAssertEqual(error as? FormError, .server(message: "We couldn't submit the form. Please try again."), body)
+            }
+        }
+    }
+
+    /// `displayCode` stands in when `code` is absent, and both are translation keys.
     func testRemoteSubmitLocalisesErrorCodes() async {
-        let localizer = ClosureLocalizer({ _ in nil }, errorCode: { code in
-            code == 153008 ? "The ID or Passport Number Provided Is Invalid" : nil
-        })
-        let body = #"{"isSuccessful":false,"error":{"code":153008,"message":"An Error Occurred."}}"#
-        let repo = RemoteFormRepository(
-            apiClient: ScriptedApiClient(data: Data(body.utf8)),
-            localizer: localizer
-        )
         do {
-            _ = try await repo.submitForm(FormSubmission(formCodeName: .registration, values: [:]))
+            _ = try await submit(#"{"isSuccessful":false,"error":{"displayCode":153008,"message":"An Error Occurred."}}"#) {
+                $0 == "jpc-reg-error.153008" ? "The ID or Passport Number Provided Is Invalid" : $0
+            }
             XCTFail("expected a throw")
         } catch {
-            XCTAssertEqual(error as? FormError,
-                           .server(message: "The ID or Passport Number Provided Is Invalid"))
+            XCTAssertEqual(error as? FormError, .server(message: "The ID or Passport Number Provided Is Invalid"))
         }
     }
 
     func testRemoteSubmitMapsTransportErrors() async {
-        let repo = RemoteFormRepository(
-            apiClient: ScriptedApiClient(error: APIError.transport(.notConnectedToInternet))
-        )
+        let repo = RemoteFormRepository(apiClient: ScriptedApiClient(error: APIError.transport(.notConnectedToInternet)))
         do {
-            _ = try await repo.submitForm(FormSubmission(formCodeName: .registration, values: [:]))
+            _ = try await repo.submitForm(submission)
             XCTFail("expected a throw")
         } catch {
             XCTAssertEqual(error as? FormError, .offline)

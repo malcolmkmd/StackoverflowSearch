@@ -15,17 +15,7 @@ public struct DynamicFormContent: View {
     }
 
     public var body: some View {
-        switch model.viewState {
-        case .loading:
-            ProgressView()
-                .frame(maxWidth: .infinity, minHeight: 220)
-                .accessibilityLabel("Loading form")
-
-        case .failed(let message):
-            JackpotErrorView(message, title: "Couldn't load this form")
-                .onRetry { Task { await model.load() } }
-
-        case .loaded:
+        if model.form != nil {
             VStack(spacing: 0) {
                 if model.sections.count > 1 {
                     ProgressView(value: model.progress)
@@ -43,12 +33,6 @@ public struct DynamicFormContent: View {
                             Text(error).font(.footnote).jackpotForegroundStyle(\.error)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        #if DEBUG
-                        if !model.unsupportedFields.isEmpty {
-                            Text("Unsupported field types skipped: \(model.unsupportedFields.joined(separator: ", "))")
-                                .font(.caption2).foregroundStyle(.orange)
-                        }
-                        #endif
                     }
                     .padding(.m)
                     // A new identity per section is what lets the transition run.
@@ -60,10 +44,17 @@ public struct DynamicFormContent: View {
             // Validate before moving focus, so the error and the new focus land in one update.
             .onSubmit {
                 guard let current = focusedField else { return }
-                model.markTouched(identifiedBy: current)
+                model.markTouched(current)
                 focusedField = model.fieldAfter(current)
             }
             .onChange(of: model.sectionIndex) { _ in focusedField = nil }
+        } else if let error = model.loadError {
+            JackpotErrorView(error, title: "Couldn't load this form")
+                .onRetry { Task { await model.load() } }
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity, minHeight: 220)
+                .accessibilityLabel("Loading form")
         }
     }
 
@@ -82,10 +73,12 @@ struct FormRowView: View {
     @ObservedObject var model: DynamicFormModel
 
     var body: some View {
-        let visible = row.fields.filter(\.isVisible)
-        if visible.count == 1 {
-            FieldRenderer(field: visible[0], model: model)
-        } else if !visible.isEmpty {
+        // An unknown type stays off the stack: even empty, the error row would take a spacing slot.
+        let visible = row.fields.filter { field in
+            if case .unknown = field.type { return false }
+            return field.isVisible
+        }
+        if !visible.isEmpty {
             HStack(alignment: .top, spacing: .s) {
                 ForEach(visible) { FieldRenderer(field: $0, model: model) }
             }
@@ -131,45 +124,3 @@ public struct FormNavigationBar: View {
                      : .spring(response: 0.42, dampingFraction: 0.86)
     }
 }
-
-// MARK: - Previews
-
-#if DEBUG
-struct DynamicFormContent_Previews: PreviewProvider {
-    /// Pages with the bar beneath them, loading if the model has not been seeded.
-    private struct Harness: View {
-        let model: DynamicFormModel
-        var body: some View {
-            VStack(spacing: 0) {
-                DynamicFormContent(model: model)
-                FormNavigationBar(model: model) { _ in }
-                    .padding(.horizontal, .m).padding(.vertical, .sm)
-            }
-            .frame(height: 620)
-            .jackpotBackground(\.background)
-            .preferredColorScheme(.dark)
-            .task { await model.load() }
-        }
-    }
-
-    static var previews: some View {
-        Group {
-            Harness(model: .preview(schema: FormPreview.registration))
-                .previewDisplayName("Section 1 — empty")
-            Harness(model: .preview(schema: FormPreview.registration, values: FormPreview.validSectionOne))
-                .previewDisplayName("Section 1 — valid, Next enabled")
-            Harness(model: .preview(schema: FormPreview.registration,
-                                    touched: ["username", "password", "firstname", "lastname", "email"]))
-                .previewDisplayName("Section 1 — all errors shown")
-            Harness(model: .preview(schema: FormPreview.registration))
-                .environment(\.sizeCategory, .accessibilityLarge)
-                .previewDisplayName("Accessibility — XL text")
-            Harness(model: DynamicFormModel(formName: .registration, dependencies: .mock(delay: 0, error: FormError.offline)))
-                .previewDisplayName("Offline")
-            Harness(model: DynamicFormModel(formName: FormName("doesNotExist"), dependencies: .mock(delay: 0)))
-                .previewDisplayName("Unknown form — 404")
-        }
-        .previewLayout(.sizeThatFits)
-    }
-}
-#endif
