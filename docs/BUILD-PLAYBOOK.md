@@ -117,7 +117,9 @@ result to `onComplete`. A progress bar (`.jackpotBar`) sits above the scroll vie
 
 ---
 
-## Step 1 — JackpotUI
+<details>
+<summary>Step 1 — JackpotUI</summary>
+
 
 The design system, with no knowledge of forms. Components take a title, a binding and their
 own configuration; the theme travels through the environment. Every component previews
@@ -1625,7 +1627,11 @@ both appearances.
 
 ---
 
-## Step 2 — JackpotNetworking
+</details>
+
+<details open>
+<summary>Step 2 — JackpotNetworking</summary>
+
 
 The transport, before anything that needs it. `HTTPClient` is the seam — one method, and the
 only place bytes come from — `APIEndpoint` is one request shape, and `RemoteApiClient` is the
@@ -2174,7 +2180,11 @@ public struct BundledHTTPClient: HTTPClient {
 
 ---
 
-## Step 3 — JackpotForms and the registration sheet
+</details>
+
+<details>
+<summary>Step 3 — JackpotForms and the registration sheet</summary>
+
 
 The engine, wired to the client from its first line. One module, folders pointing one way:
 `Domain` (types and rules, no I/O), `Data` (wire shapes), `Password`, `Remote` (endpoints,
@@ -3869,7 +3879,11 @@ no app and no backend. The submit that succeeds and the submit that fails both g
 
 ---
 
-## Step 4 — Replace the flow in the app
+</details>
+
+<details>
+<summary>Step 4 — Replace the flow in the app</summary>
+
 
 No package change: registration is already composed against the real client, so going live is
 one swap of the transport at the composition root — `.bundled()` becomes `.live(...)`, and
@@ -3973,7 +3987,11 @@ Every label reads as it did — that is `getTranslation` plugged straight in.
 
 ---
 
-## Step 5 — Fix translations
+</details>
+
+<details>
+<summary>Step 5 — Fix translations</summary>
+
 
 [ADR-0001](adr/0001-app-data-decoding-and-configuration-decomposition.md) phase 2.
 `Translations` is the session's table, normalised once at construction instead of on every
@@ -4198,7 +4216,11 @@ Every label and error reads as before; the table is built once instead of per lo
 
 ---
 
-## Step 6 — Fix app data
+</details>
+
+<details>
+<summary>Step 6 — Fix app data</summary>
+
 
 [ADR-0001](adr/0001-app-data-decoding-and-configuration-decomposition.md) phase 1 and
 [LAUNCH-PERFORMANCE](LAUNCH-PERFORMANCE.md). `AppDataResponse` splits the bootstrap payload
@@ -4603,3 +4625,6 @@ func apply(_ response: AppDataResponse) {
 Log `AppDataSnapshot.origin` at launch; a low `.cache` rate means `maxStale` is too tight.
 
 ---
+
+</details>
+
