@@ -5,7 +5,7 @@ then swaps the nib-backed sign-up popup for `JackpotRegistration` and deletes th
 only step in the sequence that touches the app target.
 
 Part of a sequence — see [PR-STRATEGY.md](PR-STRATEGY.md). Steps 1 to 3 landed `JackpotUI`,
-`JackpotForms` on the bundled schema, `JackpotRegistration` and `JackpotNetworking` inside
+`JackpotForms`, `JackpotRegistration` and `JackpotNetworking` inside
 `JackpotKit`, called by nobody. This step calls them.
 
 | | |
@@ -72,8 +72,7 @@ at step 5, when `getTranslation` becomes a shim over the store.
 
 The submit goes live with the fetch: `.live` posts through `RemoteFormRepository.submitForm`,
 whose envelope handling is tested against captured responses but not yet exercised end to end —
-see [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md). `.bundled()` is the same composition over
-`BundledHTTPClient`, so a build without the backend still runs that envelope handling.
+see [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md).
 
 ---
 
@@ -91,9 +90,8 @@ xcodebuild -scheme JackpotKit-Package -destination 'platform=iOS Simulator,name=
 
 Manual, on a device: open sign-up from the header and from the bottom bar; complete both pages;
 confirm section gating, the ID-type → ID-number rule change, the password checklist, and that
-the CRM's rejection (`0000000000000` as the ID number against the bundled transport) surfaces
-under the fields without clearing the form. Confirm every label reads as it did — that's
-`getTranslation` plugged straight in.
+the CRM's rejection surfaces under the fields without clearing the form. Confirm every label
+reads as it did — that's `getTranslation` plugged straight in.
 
 ## Review guide
 

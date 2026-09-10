@@ -6,11 +6,11 @@ marked. Every code block is the file exactly as it is in the repository, and eve
 
 Six steps. The transport lands before the engine, so the registration sheet is wired to the
 real client from its first line — one repository, one composition, no second code path to
-keep in step. Where there is no backend yet the *bytes* are bundled, not the repository
-faked: `BundledHTTPClient` answers from JSON in the package, and everything above it is the
-shipping path. The sheet runs from step 3 that way and goes live in the app at step 4, on the
-app's existing translation function. Steps 5 and 6 are the localisation and app-data
-migrations from
+keep in step. Registration is `FormDependencies.live(...)` over `RemoteFormRepository`:
+schema and copy come from the host (app-data / `getTranslation`), `baseURL` from
+`APIEnvironment` at the app composition root, and the default transport is `URLSessionHTTPClient`
+(or a host-injected `HTTPClient`). The sheet is composed that way from step 3 and presented
+in the app at step 4. Steps 5 and 6 are the localisation and app-data migrations from
 [ADR-0001](adr/0001-app-data-decoding-and-configuration-decomposition.md); registration
 does not wait for them.
 
@@ -18,7 +18,7 @@ does not wait for them.
 | --- | --- | --- |
 | 1 | `JackpotUI` | the gallery: every component, every state |
 | 2 | `JackpotNetworking` | `RemoteApiClient` against a stubbed transport |
-| 3 | `JackpotForms`, `JackpotRegistration` | the Sign Up sheet, both pages, submitted over bundled JSON |
+| 3 | `JackpotForms`, `JackpotRegistration` | the Sign Up sheet, both pages, submitted through `RemoteFormRepository` |
 | 4 | the app swap | registration live in the app, copy from `getTranslation` |
 | 5 | `JackpotLocalization` | the same copy from a table built once; `getTranslation` becomes a shim |
 | 6 | `JackpotAppData` | config served from disk on launch, revalidated behind it |
@@ -50,8 +50,7 @@ validated. Submit asks the app for a v3 token and encodes it beside `fields`.
 | 2.5 | `receivePromotionalInformation` | Checkbox | Text | `Toggle` · `.jackpotCheckbox` |
 | 2.6 | `terms` | Checkbox | Text | `Toggle` · `.jackpotCheckbox` · required `^true$` |
 
-The bundled capture ships `username.prefix = "+27"`; the live payload currently leaves
-prefix empty (the view still maps `username` to `.phoneNumber`).
+The live payload currently leaves prefix empty (the view still maps `username` to `.phoneNumber`).
 
 Every field keeps its label **inside** the control: it sits where a placeholder would and
 floats to the top edge on focus or once there is a value (`JackpotFloatingField`). Error
@@ -65,8 +64,8 @@ through the environment.
 The buttons at the bottom of registration are `FormNavigationBar` in `DynamicFormContent.swift`,
 which registration places in the panel's footer under the login row. `RegistrationView`
 owns a `DynamicFormModel` and composes `DynamicFormContent` (the pages) and
-`FormNavigationBar` around it. The bundled schema and the live CRM schema are the same twelve
-fields above — paging is not a field.
+`FormNavigationBar` around it. The live CRM schema is the twelve fields above — paging is
+not a field.
 
 | Visible control | Style | When | Action |
 | --- | --- | --- | --- |
@@ -81,39 +80,31 @@ until `isFormValid`, then `submit()` posts through `FormRepository.submitForm` a
 result to `onComplete`. A progress bar (`.jackpotBar`) sits above the scroll view when
 `sections.count > 1`.
 
-### Registration rules and the offline path
+### Registration rules and composition
 
-1. **Schema.** `Resources/registration.json` is the CRM's response saved verbatim, decoded by
-   `FormSchema(json:)` — the same mapper the app runs on the blob it injects. There is no
-   hand-written schema anywhere: the fixture *is* a captured payload, so a preview and
-   production cannot disagree about the twelve fields.
-2. **One transport seam.** `FormDependencies.bundled()` is `.live(...)` with
-   `BundledHTTPClient` in place of `URLSessionHTTPClient`. Endpoint building, status handling,
-   envelope decoding and the error boundary are all the shipping code; only the bytes are
-   local. `RemoteFormRepository` is the only `FormRepository` in the package.
-3. **Both outcomes, offline.** Submitting `idNumber` `0000000000000` returns
-   `submit-rejected.json`, the captured `isSuccessful: false` envelope, so the failure path is
-   reachable without a backend — and reachable at all: thirteen digits clear the field's own
-   rule, which is what lets **Sign Up** enable. Anything else returns `submit-accepted.json`.
-4. **Copy.** `Resources/locales.json` is the `locales` slice of the same payload, read through
-   the engine's one translation seam: `translate`, a `(String) -> String` closure shaped like
-   the app's `getTranslation`, the key back on a miss. No copy table lives in Swift.
-5. **Registration's rules.** The engine ships with no cross-field regex links and no date
+1. **Schema.** The host injects the registration blob it already has from app-data.
+   `FormSchema(json:)` is the mapper the engine runs — there is no hand-written schema in
+   the package, so the twelve fields cannot drift from the CRM.
+2. **One composition.** `FormDependencies.live(...)` builds `RemoteFormRepository` over
+   `RemoteApiClient` and `URLSessionHTTPClient` (or a host-injected `HTTPClient`).
+   `baseURL` comes from `APIEnvironment` at the app composition root. Endpoint building,
+   status handling, envelope decoding and the error boundary are the shipping code.
+   `RemoteFormRepository` is the only `FormRepository` in the package.
+3. **Copy.** The engine's one translation seam is `translate`, a `(String) -> String`
+   closure shaped like the app's `getTranslation`, the key back on a miss. No copy table
+   lives in Swift.
+4. **Registration's rules.** The engine ships with no cross-field regex links and no date
    cap. `RegistrationDependencies` adds `regexDependencies: ["idNumber": "idNumberType"]`,
    an 18-years-ago `maximumDate`, and `passwordConfig` from injected `AppSettings` — the
    `appsettings` slice of app-data, mapped from `devConfig.regionPasswordSuggestions` with
    `passwordLength` as the fallback. JackpotKit never reads `GlobalData`.
-6. **Sandbox.** In this repository the app's `SearchView` presents `RegistrationSandbox` with
-   `.jackpotPopup`, the way the app presents its panels; the sandbox hosts
-   `RegistrationView(dependencies: .bundled())` and shows the `RegistrationResult` it gets
-   back, so the whole panel runs on a device with no backend.
-7. **The sheet.** `RegistrationView` is the form inside `JackpotPanel`: title and close
+5. **The sheet.** `RegistrationView` is the form inside `JackpotPanel`: title and close
    button on `surface`, the pages on `background`, and in the footer band `JackpotLinkRow`
    with `FormNavigationBar` beneath it.
-8. **Previews.** One file, `JackpotRegistration/Previews.swift`: the sheet on `.bundled()`,
-   dark and light. `JackpotPreviewPanel.swift` is the component gallery. There is no loading
-   preview: the schema is injected rather than fetched, so `.loading` lasts one frame in
-   production and previewing it would mean previewing a fake.
+6. **Previews.** One file, `JackpotRegistration/Previews.swift`. `JackpotPreviewPanel.swift`
+   is the component gallery. There is no loading preview: the schema is injected rather than
+   fetched, so `.loading` lasts one frame in production and previewing it would mean
+   previewing a fake.
 
 ---
 
@@ -1636,10 +1627,9 @@ both appearances.
 The transport, before anything that needs it. `HTTPClient` is the seam — one method, and the
 only place bytes come from — `APIEndpoint` is one request shape, and `RemoteApiClient` is the
 pipeline. 200 / 400 / 401 / 500 are the contract; `unexpectedStatus` carries anything
-infrastructure returns. `BundledHTTPClient` implements that same seam from JSON in a bundle,
-which is what lets step 3 wire registration to the real client with nothing behind it: the
-bytes are local, the pipeline above them is not. Nothing here knows about forms, and nothing
-here needs translations: the app keeps `getTranslation`.
+infrastructure returns. The shipping client is `URLSessionHTTPClient`; the host can inject
+another `HTTPClient`. Nothing here knows about forms, and nothing here needs translations:
+the app keeps `getTranslation`.
 
 **20.**
 
@@ -2108,71 +2098,7 @@ public struct RemoteApiClient: ApiClient {
 }
 ```
 
-**30.** `JackpotKit/Sources/JackpotNetworking/BundledHTTPClient.swift`
-
-The other implementation of the seam: bundled JSON in, an `HTTPURLResponse` out. It is not
-a mock of the client — the client, the endpoints, the status handling and the decoding are
-all still the shipping ones. `latency` makes in-flight states visible, and routing is a
-closure so a fixture can depend on what was posted.
-
-```swift
-import Foundation
-
-/// Answers requests from JSON that ships in a bundle, at the one seam the real client already has.
-/// Everything above it — endpoint building, status handling, retries, decoding, error mapping — is
-/// the shipping path, so a preview or a demo exercises that code rather than a parallel fake.
-public struct BundledHTTPClient: HTTPClient {
-    /// The bytes a request is answered with. Loaded up front so routing stays free of file I/O.
-    public struct Fixture: Sendable {
-        public let data: Data
-        public let statusCode: Int
-
-        public init(_ data: Data, statusCode: Int = 200) {
-            self.data = data
-            self.statusCode = statusCode
-        }
-
-        /// A `.json` file in `bundle`. Nil when the resource is missing, which is a wiring mistake
-        /// rather than a server condition — let the caller decide how loud that should be.
-        public init?(resource: String, in bundle: Bundle, statusCode: Int = 200) {
-            guard let url = bundle.url(forResource: resource, withExtension: "json"),
-                  let data = try? Data(contentsOf: url) else { return nil }
-            self.init(data, statusCode: statusCode)
-        }
-    }
-
-    private let latency: TimeInterval
-    private let route: @Sendable (URLRequest) -> Fixture?
-
-    /// - Parameters:
-    ///   - latency: Artificial delay, so in-flight states are visible in a preview.
-    ///   - route: The fixture that answers a request; nil is served as a 404.
-    public init(latency: TimeInterval = 0,
-                route: @escaping @Sendable (URLRequest) -> Fixture?) {
-        self.latency = latency
-        self.route = route
-    }
-
-    /// Every request is answered by the same fixture.
-    public init(_ fixture: Fixture, latency: TimeInterval = 0) {
-        self.init(latency: latency) { _ in fixture }
-    }
-
-    public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        if latency > 0 {
-            try await Task.sleep(nanoseconds: UInt64(latency * 1_000_000_000))
-        }
-        let fixture = route(request)
-        let response = HTTPURLResponse(
-            url: request.url ?? URL(fileURLWithPath: "/"),
-            statusCode: fixture?.statusCode ?? 404,
-            httpVersion: nil,
-            headerFields: ["Content-Type": "application/json"]
-        )!
-        return (fixture?.data ?? Data(), response)
-    }
-}
-```
+`BundledHTTPClient` remains in the module for tests. It is out of playbook scope.
 
 ---
 
@@ -2187,26 +2113,25 @@ public struct BundledHTTPClient: HTTPClient {
 
 
 The engine, wired to the client from its first line. One module, folders pointing one way:
-`Domain` (types and rules, no I/O), `Data` (wire shapes), `Password`, `Remote` (endpoints,
-the repository, and the bundled composition) and `UI` (the model and the renderer). The engine
-only ever sees `FormRepository`, and there is exactly one implementation of it —
-`RemoteFormRepository`. Running without a backend is a transport choice, not a second
-repository: `.bundled()` is `.live()` with `BundledHTTPClient` under it, so the whole sheet
-runs on captured payloads while every line above the transport is the one that ships.
-`JackpotRegistration` is the feature on top: the sheet, registration's own rules, and the
-`DevConfig` mapping.
+`Domain` (types and rules, no I/O), `Data` (wire shapes), `Password`, `Remote` (endpoints
+and the repository) and `UI` (the model and the renderer). The engine only ever sees
+`FormRepository`, and there is exactly one implementation of it — `RemoteFormRepository`.
+Composition is `FormDependencies.live(...)`: schema, `translate` and `baseURL` come from the
+host. `JackpotRegistration` is the feature on top: the sheet, registration's own rules, and
+the `DevConfig` mapping.
 
-**31.**
+**30.**
 
 ```bash
-mkdir -p JackpotKit/Sources/JackpotForms/{Domain,Data,Password,Remote,Resources,UI/Fields}
+mkdir -p JackpotKit/Sources/JackpotForms/{Domain,Data,Password,Remote,UI/Fields}
 mkdir -p JackpotKit/Sources/JackpotRegistration
 ```
 
-**32.** `JackpotKit/Package.swift` — the whole file after this step
+**31.** `JackpotKit/Package.swift` — the whole file after this step
 
-`JackpotForms` takes `JackpotUI` and `JackpotNetworking`, and processes `Resources` —
-the captured payloads the bundled transport serves. Wire types are `internal`.
+`JackpotForms` takes `JackpotUI` and `JackpotNetworking`. Wire types are `internal`.
+The target still processes `Resources` (captured payloads used by tests); those files
+are out of playbook scope.
 
 ```swift
 // swift-tools-version: 5.10
@@ -2251,7 +2176,7 @@ let package = Package(
 )
 ```
 
-**33.** `JackpotKit/Sources/JackpotForms/Domain/FormName.swift`
+**32.** `JackpotKit/Sources/JackpotForms/Domain/FormName.swift`
 
 `.registration` is the live form.
 
@@ -2285,7 +2210,7 @@ public extension FormName {
 }
 ```
 
-**34.** `JackpotKit/Sources/JackpotForms/Domain/FormValue.swift`
+**33.** `JackpotKit/Sources/JackpotForms/Domain/FormValue.swift`
 
 ```swift
 import Foundation
@@ -2382,7 +2307,7 @@ public struct FormSubmission: Equatable, Sendable, Encodable {
 }
 ```
 
-**35.** `JackpotKit/Sources/JackpotForms/Domain/FormField.swift`
+**34.** `JackpotKit/Sources/JackpotForms/Domain/FormField.swift`
 
 `FieldType` is Input, Dropdown, Checkbox and recaptchaV3 — plus `unknown`, which is what
 keeps the form usable when the CRM adds a type this build cannot draw. WMS spells recaptcha
@@ -2509,7 +2434,7 @@ public struct FormField: Identifiable, Equatable, Hashable, Sendable {
 }
 ```
 
-**36.** `JackpotKit/Sources/JackpotForms/Domain/FormSchema.swift`
+**35.** `JackpotKit/Sources/JackpotForms/Domain/FormSchema.swift`
 
 ```swift
 import Foundation
@@ -2562,7 +2487,7 @@ public struct FormRow: Identifiable, Equatable, Sendable {
 }
 ```
 
-**37.** `JackpotKit/Sources/JackpotForms/Domain/FormSubmitResult.swift`
+**36.** `JackpotKit/Sources/JackpotForms/Domain/FormSubmitResult.swift`
 
 ```swift
 import Foundation
@@ -2592,7 +2517,7 @@ public struct FormSubmitResult: Decodable, Equatable, Sendable {
 }
 ```
 
-**38.** `JackpotKit/Sources/JackpotForms/Domain/FormError.swift`
+**37.** `JackpotKit/Sources/JackpotForms/Domain/FormError.swift`
 
 ```swift
 import Foundation
@@ -2618,7 +2543,7 @@ public enum FormError: LocalizedError, Equatable {
 }
 ```
 
-**39.** `JackpotKit/Sources/JackpotForms/Domain/FormRepository.swift`
+**38.** `JackpotKit/Sources/JackpotForms/Domain/FormRepository.swift`
 
 ```swift
 import Foundation
@@ -2629,7 +2554,7 @@ public protocol FormRepository: Sendable {
 }
 ```
 
-**40.** `JackpotKit/Sources/JackpotForms/Data/FormDTO.swift`
+**39.** `JackpotKit/Sources/JackpotForms/Data/FormDTO.swift`
 
 The wire shapes. A recaptcha row is dropped here and `hasRecaptcha` is set, so `allFields`
 never sees it — the same as the web's `processSection`. `FormSchema(json:)` is how the host
@@ -2731,7 +2656,7 @@ struct FieldDropdownDTO: Decodable {
 }
 ```
 
-**41.** `JackpotKit/Sources/JackpotForms/Password/PasswordSuggestions.swift`
+**40.** `JackpotKit/Sources/JackpotForms/Password/PasswordSuggestions.swift`
 
 The checklist rows, keyed the same way as the web (`min-N-char`, `password-is-vulnerable`).
 
@@ -2821,25 +2746,12 @@ extension PasswordCharacterClass {
 ```
 
 Then `Remote`, in the same step — there is no stage at which the engine is wired to something
-else. Two of the four resources are captured payloads rather than authored files, so they are
-copied in rather than printed:
+else:
 
-**42.**
-
-```bash
-cp registration.json JackpotKit/Sources/JackpotForms/Resources/registration.json
-cp locales.json     JackpotKit/Sources/JackpotForms/Resources/locales.json
-```
-
-`registration.json` is the CRM's response saved verbatim — the twelve fields over two
-sections in the catalog above. `locales.json` is the `locales` slice of the app-data payload,
-trimmed to the keys registration asks for. Both are data the CMS owns: nothing in the package
-restates them in Swift, so a preview and production cannot drift apart.
-
-**43.** `JackpotKit/Sources/JackpotForms/Remote/FormEndpoints.swift`
+**41.** `JackpotKit/Sources/JackpotForms/Remote/FormEndpoints.swift`
 
 The submit path and the envelope it comes back in. The form GET is not used: the schema is
-injected, here from `registration.json` and in the app from the bootstrap payload.
+injected from the bootstrap payload the host already has.
 
 ```swift
 import Foundation
@@ -2886,12 +2798,14 @@ struct FormSubmitEnvelope: Decodable {
 }
 ```
 
-**44.** `JackpotKit/Sources/JackpotForms/Remote/RemoteFormRepository.swift`
+**42.** `JackpotKit/Sources/JackpotForms/Remote/RemoteFormRepository.swift`
 
 The only `FormRepository`. Submit only — HTTP 200 is not success, the envelope's
 `isSuccessful` is, and a body that is not the envelope is a rejection. The engine cannot see
 `APIError`, so anything not translated in `userFacing` becomes a generic failure on screen.
-`.live(...)` is at the bottom, and its `httpClient` parameter is the whole offline story.
+`.live(...)` is at the bottom: the host passes the schema (or `formJSON`), `baseURL` (via
+`APIEnvironment`), `translate`, and optionally an `HTTPClient` — `URLSessionHTTPClient` is
+the default.
 
 ```swift
 import Foundation
@@ -2991,121 +2905,7 @@ public extension FormDependencies {
 }
 ```
 
-**45.** `JackpotKit/Sources/JackpotForms/Resources/submit-accepted.json`
-
-The captured success envelope: an account id, the FICA block, and the JWT the app logs in with.
-
-```json
-{
-  "data": {
-    "accountId": "32212b00-54d0-449e-877a-f712f0976823",
-    "message": "User Created Successfully.",
-    "status": "Success.",
-    "partialRegistrationStatus": 0,
-    "complianceResponse": {
-      "complianceStatus": 1,
-      "requiredComplianceStatus": 1,
-      "isValidId": true,
-      "message": null,
-      "accessToken": "_act-jwt-bundled-fixture"
-    }
-  },
-  "isSuccessful": true,
-  "error": null,
-  "metadata": null,
-  "httpStatusCode": 200
-}
-```
-
-**46.** `JackpotKit/Sources/JackpotForms/Resources/submit-rejected.json`
-
-The captured rejection — HTTP 200 with `isSuccessful: false`. `error.code` is a translation key,
-`jpc-reg-error.153008`, which `locales.json` carries; an untranslated code falls back to
-`error.message`.
-
-```json
-{
-  "data": null,
-  "isSuccessful": false,
-  "error": {
-    "code": 153008,
-    "displayCode": 153008,
-    "message": "An Error Occurred.",
-    "remediation": null
-  },
-  "metadata": null,
-  "httpStatusCode": 200
-}
-```
-
-**47.** `JackpotKit/Sources/JackpotForms/Remote/BundledForms.swift`
-
-Where the four resources become a `FormDependencies`. `.bundled()` calls `.live()` — same
-repository, same endpoints, same decoding — and passes `BundledHTTPClient` as the transport.
-The rejection is keyed on an `idNumber` of thirteen zeros because it has to clear the field's
-own `^[0-9]{13}$` rule before **Sign Up** will enable; a value the form rejects could never
-reach the wire, so it could never demo the wire's failure.
-
-```swift
-import Foundation
-import JackpotNetworking
-
-/// The captured CRM payloads that ship with the package: the `registration` schema, the `locales`
-/// slice that labels it, and the two submit envelopes. Previews, the sandbox and any build without
-/// a backend run on these — through the shipping repository, never a second implementation.
-public enum FormFixtures {
-    /// The schema blob exactly as the CRM returned it. In the app this same shape arrives on
-    /// app-data; here it is a file, which is the only difference.
-    public static let registrationJSON: Data = json("registration")
-
-    /// Empty only if the resource is missing or malformed, which `BundledFormsTests` rules out.
-    public static let registrationSchema: FormSchema =
-        (try? FormSchema(json: registrationJSON)) ?? FormSchema(id: 0, codeName: .registration, sections: [])
-
-    /// Stands in for the app's `getTranslation`: same contract, the key back on a miss.
-    public static let translate: @Sendable (String) -> String = { locales[$0.lowercased()] ?? $0 }
-
-    /// The `idNumber` the bundled CRM rejects. Thirteen digits, so it clears the field's own rule
-    /// and the form can actually be submitted — which is what makes the failure path reachable.
-    public static let rejectedIdNumber = "0000000000000"
-
-    static let locales: [String: String] =
-        (try? JSONDecoder().decode([String: String].self, from: json("locales"))) ?? [:]
-
-    static func json(_ resource: String) -> Data {
-        guard let url = Bundle.module.url(forResource: resource, withExtension: "json"),
-              let data = try? Data(contentsOf: url) else { return Data() }
-        return data
-    }
-}
-
-public extension FormDependencies {
-    /// The live composition over bundled bytes: real endpoints, real envelope decoding, real error
-    /// mapping, with `BundledHTTPClient` in place of the network. Submitting
-    /// `FormFixtures.rejectedIdNumber` returns the CRM's rejection envelope, so both outcomes are
-    /// demoable offline.
-    ///
-    /// - Parameter delay: Latency on submit, so the button's in-flight state is visible.
-    static func bundled(delay: TimeInterval = 0.35) -> FormDependencies {
-        let accepted = BundledHTTPClient.Fixture(resource: "submit-accepted", in: .module)
-        let rejected = BundledHTTPClient.Fixture(resource: "submit-rejected", in: .module)
-        let transport = BundledHTTPClient(latency: delay) { request in
-            let body = request.httpBody.map { String(decoding: $0, as: UTF8.self) } ?? ""
-            return body.contains("\"idNumber\":\"\(FormFixtures.rejectedIdNumber)\"") ? rejected : accepted
-        }
-        return live(
-            form: FormFixtures.registrationSchema,
-            baseURL: URL(string: "https://config.jpc.africa")!,
-            httpClient: transport,
-            translate: FormFixtures.translate,
-            // The captured schema carries no recaptcha row, so nothing asks for a token.
-            recaptcha: { _ in nil }
-        )
-    }
-}
-```
-
-**48.** `JackpotKit/Sources/JackpotForms/UI/FormDependencies.swift`
+**43.** `JackpotKit/Sources/JackpotForms/UI/FormDependencies.swift`
 
 The engine's dependencies. `translate` is the one translation seam: a key
 in, its text out, the key itself on a miss, so the app's `getTranslation` plugs in as it is.
@@ -3154,7 +2954,7 @@ public struct FormDependencies {
 }
 ```
 
-**49.** `JackpotKit/Sources/JackpotForms/UI/DynamicFormModel.swift`
+**44.** `JackpotKit/Sources/JackpotForms/UI/DynamicFormModel.swift`
 
 The engine. Its state is `values` and `touched`; validity, errors and progress are computed
 from those on every read, so nothing has to be re-validated when a dropdown changes
@@ -3336,7 +3136,7 @@ public final class DynamicFormModel: ObservableObject {
 }
 ```
 
-**50.** `JackpotKit/Sources/JackpotForms/UI/Fields/FieldRenderer.swift`
+**45.** `JackpotKit/Sources/JackpotForms/UI/Fields/FieldRenderer.swift`
 
 The switch is the whole contract. Recaptcha never lands here — it is stripped in the mapper.
 
@@ -3418,7 +3218,7 @@ extension DynamicFormModel {
 }
 ```
 
-**51.** `JackpotKit/Sources/JackpotForms/UI/Fields/InputFieldView.swift`
+**46.** `JackpotKit/Sources/JackpotForms/UI/Fields/InputFieldView.swift`
 
 The text field, with the password checklist from `PasswordSuggestions` while focused.
 
@@ -3477,7 +3277,7 @@ struct InputFieldView: View {
 }
 ```
 
-**52.** `JackpotKit/Sources/JackpotForms/UI/DynamicFormContent.swift`
+**47.** `JackpotKit/Sources/JackpotForms/UI/DynamicFormContent.swift`
 
 Two views over one model. `DynamicFormContent` is the pages; `FormNavigationBar` is
 Previous / Next / Sign Up — that is how step 1 becomes step 2 — and slides the pages
@@ -3613,10 +3413,9 @@ public struct FormNavigationBar: View {
 }
 ```
 
-At this point the engine renders the captured schema end to end and submits over the bundled
-transport. Now the feature that presents it:
+At this point the engine is wired to `RemoteFormRepository`. Now the feature that presents it:
 
-**53.** `JackpotKit/Sources/JackpotRegistration/DevConfig.swift`
+**48.** `JackpotKit/Sources/JackpotRegistration/DevConfig.swift`
 
 The `appsettings` app-data section. The host injects the decoded slice; this package maps
 `devConfig` into `PasswordSuggestions.Config` (`regionPasswordSuggestions` first, then `passwordLength`).
@@ -3713,10 +3512,8 @@ public extension PasswordSuggestions.Config {
 }
 ```
 
-**54.** `JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift`
+**49.** `JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift`
 
-`.bundled()` is the whole demo path: the bundled forms composition plus the captured
-`devConfig`, so the password checklist is driven by the same mapping production uses.
 `RegistrationDependencies` applies `applyingRegistrationRules()` — the ID-type link, the
 18-year date cap, and `passwordConfig` from injected `AppSettings` — to whatever `forms` it is given.
 `RegistrationView` is the Sign Up sheet: it owns the `DynamicFormModel`, puts
@@ -3804,7 +3601,7 @@ public struct RegistrationView: View {
 }
 ```
 
-**55.** `JackpotKit/Sources/JackpotRegistration/RegistrationPanelController.swift`
+**50.** `JackpotKit/Sources/JackpotRegistration/RegistrationPanelController.swift`
 
 A drop-in for the view controller step 4 deletes: same `addChild`/`popupContainer` call
 site, SwiftUI behind it.
@@ -3835,47 +3632,15 @@ public final class RegistrationPanelController: UIHostingController<Registration
 }
 ```
 
-**56.** `JackpotKit/Sources/JackpotRegistration/Previews.swift`
-
-```swift
-#if DEBUG
-import SwiftUI
-import JackpotUI
-import JackpotForms
-
-struct RegistrationView_Previews: PreviewProvider {
-    private struct Page: View {
-        var dependencies: RegistrationDependencies = .bundled()
-        var body: some View {
-            RegistrationView(dependencies: dependencies, onClose: {}, onLogin: {}) { _ in }
-                .padding(.m)
-                .frame(width: 390, height: 780)
-                .jackpotTheme(.jackpotCity)
-                .jackpotBackground(\.background)
-        }
-    }
-
-    static var previews: some View {
-        Group {
-            Page().preferredColorScheme(.dark)
-                .previewDisplayName("Sign Up — dark")
-            Page().preferredColorScheme(.light)
-                .previewDisplayName("Sign Up — light")
-        }
-        .previewLayout(.sizeThatFits)
-    }
-}
-#endif
-```
+`JackpotRegistration/Previews.swift` stays in the package. It is out of playbook scope.
 
 ---
 
-### ▶ Create PR — JackpotForms + JackpotRegistration, on the bundled payloads
+### ▶ Create PR — JackpotForms + JackpotRegistration
 
-Open `JackpotRegistration/Previews.swift` and resume **Sign Up — dark**: the whole flow,
-both pages, and — by entering `0000000000000` as the ID number — the CRM's rejection, with
-no app and no backend. The submit that succeeds and the submit that fails both go through
-`RemoteFormRepository`, so what you are reviewing is the shipping path.
+Review `FieldRenderer.swift`, `RemoteFormRepository.swift` and `RegistrationView`:
+the sheet is composed through `FormDependencies.live(...)` and submits through the
+only `FormRepository`.
 
 ---
 
@@ -3885,25 +3650,24 @@ no app and no backend. The submit that succeeds and the submit that fails both g
 <summary>Step 4 — Replace the flow in the app</summary>
 
 
-No package change: registration is already composed against the real client, so going live is
-one swap of the transport at the composition root — `.bundled()` becomes `.live(...)`, and
-`URLSessionHTTPClient` is the default. The host injects the registration JSON, `appSettings`
-and `translate` from the bootstrap payload it already fetched into `GlobalData` — JackpotKit
-does not fetch app-data, devConfig or the form schema. The only new request is submit (plus
-recaptcha). After step 6 the same blobs come from `AppDataResponse` that *replaced* the
-GlobalData load, not a second GET. `recaptcha` is a closure over a `RecaptchaClient` the
-composition root created with `Recaptcha.fetchClient(withSiteKey:)` — RecaptchaEnterprise is an
-app-target dependency, not JackpotKit's. Throw to fail the submit; return nil to post without a
-token.
+No package change: registration is already `FormDependencies.live(...)` over
+`RemoteFormRepository`. The host injects the registration JSON, `appSettings` and
+`translate` from the bootstrap payload it already fetched into `GlobalData`, and `baseURL`
+from `APIEnvironment` — JackpotKit does not fetch app-data, devConfig or the form schema.
+`URLSessionHTTPClient` is the default transport; the host can inject another `HTTPClient`.
+The only new request is submit (plus recaptcha). After step 6 the same blobs come from
+`AppDataResponse` that *replaced* the GlobalData load, not a second GET. `recaptcha` is a
+closure over a `RecaptchaClient` the composition root created with
+`Recaptcha.fetchClient(withSiteKey:)` — RecaptchaEnterprise is an app-target dependency, not
+JackpotKit's. Throw to fail the submit; return nil to post without a token.
 
 **In Xcode:** File → Add Package Dependencies → Add Local… → `JackpotKit`, then add
 **JackpotRegistration** to the app target's frameworks.
 
-**57.** `Sources/Features/Registration/RegistrationPresenter.swift`
+**51.** `Sources/Features/Registration/RegistrationPresenter.swift`
 
 `.live` posts submit; the schema, copy and password rules are injected from the bootstrap
-the app already loaded. The only difference from `.bundled()` is which `HTTPClient` is under it,
-so `.bundled()` remains the build without a backend.
+the app already loaded. `baseURL` is an `APIEnvironment` the composition root owns.
 
 ```swift
 import UIKit
@@ -3944,14 +3708,14 @@ extension MainViewController {
 }
 ```
 
-**58.** Point every existing entry point at `presentRegistration()`:
+**52.** Point every existing entry point at `presentRegistration()`:
 
 - the header **SIGN UP** button
 - the bottom bar **Sign Up** item
 - `NavigationHandler` — the `registration` sitemap branch
 - the Login panel's **Sign Up ›** link
 
-**59.** Delete:
+**53.** Delete:
 
 ```
 RegistrationViewController.swift
@@ -3970,7 +3734,7 @@ flowOneViewController
 flowTwoViewController
 ```
 
-**60.**
+**54.**
 
 ```bash
 grep -rn "registrationPopup\|flowOneViewController\|flowTwoViewController" --include=*.swift .
@@ -3999,13 +3763,13 @@ lookup; `TranslationsStore` owns it for the session. `getTranslation` becomes a 
 store, which fixes the per-lookup rebuild for the whole app with no call-site changes —
 registration included, since it only ever held the function.
 
-**61.**
+**55.**
 
 ```bash
 mkdir -p JackpotKit/Sources/JackpotLocalization
 ```
 
-**62.** `JackpotKit/Package.swift` — the whole file after this step
+**56.** `JackpotKit/Package.swift` — the whole file after this step
 
 `JackpotLocalization` arrives with no dependencies; nothing depends on it until step 6.
 
@@ -4055,7 +3819,7 @@ let package = Package(
 )
 ```
 
-**63.** `JackpotKit/Sources/JackpotLocalization/Translations.swift`
+**57.** `JackpotKit/Sources/JackpotLocalization/Translations.swift`
 
 Keys are tried region-suffixed first (`terms-jza` before `terms`), and a miss returns the
 key, the same contract as `getTranslation` — which is what lets `translations(_:)` stand
@@ -4096,7 +3860,7 @@ public struct Translations: Sendable, Equatable {
 }
 ```
 
-**64.** `JackpotKit/Sources/JackpotLocalization/TranslationsRepository.swift`
+**58.** `JackpotKit/Sources/JackpotLocalization/TranslationsRepository.swift`
 
 The protocol and the fixed-table stub. Do not fetch app-data to fill it — `adopt` the
 `locales` the host already has. `RemoteTranslationsRepository` is only the replacement for
@@ -4123,7 +3887,7 @@ public struct StubTranslationsRepository: TranslationsRepository {
 }
 ```
 
-**65.** `JackpotKit/Sources/JackpotLocalization/TranslationsStore.swift`
+**59.** `JackpotKit/Sources/JackpotLocalization/TranslationsStore.swift`
 
 ```swift
 import Foundation
@@ -4185,7 +3949,7 @@ public final class TranslationsStore: ObservableObject {
 }
 ```
 
-**66.** `the app` — two changes and a non-change
+**60.** `the app` — two changes and a non-change
 
 ```swift
 // 1. The store is created once, at the composition root, and injected.
@@ -4230,13 +3994,13 @@ last good payload; `AppDataLoader` serves it at zero latency and revalidates beh
 `DevConfig` lives on `JackpotRegistration`; the host injects `appsettings` from the snapshot.
 Registration does not fetch app-data.
 
-**67.**
+**61.**
 
 ```bash
 mkdir -p JackpotKit/Sources/JackpotAppData
 ```
 
-**68.** `JackpotKit/Package.swift` — the whole file after this step
+**62.** `JackpotKit/Package.swift` — the whole file after this step
 
 The last module. The manifest in the repository, less its test targets.
 
@@ -4289,7 +4053,7 @@ let package = Package(
 )
 ```
 
-**69.** `JackpotKit/Sources/JackpotAppData/AppData.swift`
+**63.** `JackpotKit/Sources/JackpotAppData/AppData.swift`
 
 ```swift
 import Foundation
@@ -4356,7 +4120,7 @@ public enum AppDataError: Error, Equatable {
 }
 ```
 
-**70.** `JackpotKit/Sources/JackpotAppData/AppDataCache.swift`
+**64.** `JackpotKit/Sources/JackpotAppData/AppDataCache.swift`
 
 ```swift
 import Foundation
@@ -4462,7 +4226,7 @@ public final class InMemoryAppDataCache: AppDataCaching, @unchecked Sendable {
 }
 ```
 
-**71.** `JackpotKit/Sources/JackpotAppData/AppDataLoader.swift`
+**65.** `JackpotKit/Sources/JackpotAppData/AppDataLoader.swift`
 
 ```swift
 import Foundation
@@ -4573,7 +4337,7 @@ public actor AppDataLoader {
 }
 ```
 
-**72.** `JackpotKit/Sources/JackpotAppData/RemoteTranslationsRepository.swift`
+**66.** `JackpotKit/Sources/JackpotAppData/RemoteTranslationsRepository.swift`
 
 ```swift
 import Foundation
@@ -4595,7 +4359,7 @@ public struct RemoteTranslationsRepository: TranslationsRepository {
 }
 ```
 
-**73.** `the app — bootstrap`
+**67.** `the app — bootstrap`
 
 ```swift
 let loader = AppDataLoader(apiClient: client, cache: FileAppDataCache(), policy: .default)
@@ -4627,4 +4391,3 @@ Log `AppDataSnapshot.origin` at launch; a low `.cache` rate means `maxStale` is 
 ---
 
 </details>
-
