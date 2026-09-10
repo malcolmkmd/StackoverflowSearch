@@ -5,7 +5,7 @@ import JackpotForms
 
 struct RegistrationView_Previews: PreviewProvider {
     private struct Page: View {
-        var dependencies: RegistrationDependencies = .mock()
+        var dependencies: RegistrationDependencies = .bundled()
         var body: some View {
             RegistrationView(dependencies: dependencies, onClose: {}, onLogin: {}) { _ in }
                 .padding(.m)
@@ -21,9 +21,6 @@ struct RegistrationView_Previews: PreviewProvider {
                 .previewDisplayName("Sign Up — dark")
             Page().preferredColorScheme(.light)
                 .previewDisplayName("Sign Up — light")
-            Page(dependencies: .init(forms: .mock(delay: 3600)))
-                .preferredColorScheme(.dark)
-                .previewDisplayName("Loading")
         }
         .previewLayout(.sizeThatFits)
     }

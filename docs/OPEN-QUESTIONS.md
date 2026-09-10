@@ -5,8 +5,9 @@ Everything the registration work assumed rather than knew. Grouped by who can an
 Each entry says what we assumed, what breaks if the assumption is wrong, and — where it exists —
 the switch to flip once you have the answer.
 
-**Nothing currently blocks step 4, the app swap.** Q1, Q2 and Q4b are answered. `StubFormRepository`
-fakes the submit for previews; `RemoteFormRepository` maps the real envelope.
+**Nothing currently blocks step 4, the app swap.** Q1, Q2 and Q4b are answered.
+`RemoteFormRepository` maps the real envelope in previews too — `BundledHTTPClient` serves the
+captured responses, so only the bytes are local.
 
 ---
 

@@ -69,11 +69,14 @@ public struct RemoteFormRepository: FormRepository {
 }
 
 public extension FormDependencies {
+    /// - Parameter httpClient: The transport. Swap it for a `BundledHTTPClient` to run this exact
+    ///   composition — same endpoints, same decoding, same error mapping — without a backend.
     static func live(form: FormSchema,
                      baseURL: URL,
+                     httpClient: any HTTPClient = URLSessionHTTPClient(),
                      translate: @escaping @Sendable (String) -> String,
                      recaptcha: @escaping @Sendable (String) async throws -> String?) -> FormDependencies {
-        let client = RemoteApiClient(environment: APIEnvironment(baseURL: baseURL))
+        let client = RemoteApiClient(environment: APIEnvironment(baseURL: baseURL), httpClient: httpClient)
         return FormDependencies(
             repository: RemoteFormRepository(form: form, apiClient: client, translate: translate),
             translate: translate,
@@ -83,8 +86,10 @@ public extension FormDependencies {
 
     static func live(formJSON: Data,
                      baseURL: URL,
+                     httpClient: any HTTPClient = URLSessionHTTPClient(),
                      translate: @escaping @Sendable (String) -> String,
                      recaptcha: @escaping @Sendable (String) async throws -> String?) throws -> FormDependencies {
-        try live(form: FormSchema(json: formJSON), baseURL: baseURL, translate: translate, recaptcha: recaptcha)
+        try live(form: FormSchema(json: formJSON), baseURL: baseURL, httpClient: httpClient,
+                 translate: translate, recaptcha: recaptcha)
     }
 }

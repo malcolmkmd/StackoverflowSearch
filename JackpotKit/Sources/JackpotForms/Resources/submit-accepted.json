@@ -1,0 +1,19 @@
+{
+  "data": {
+    "accountId": "32212b00-54d0-449e-877a-f712f0976823",
+    "message": "User Created Successfully.",
+    "status": "Success.",
+    "partialRegistrationStatus": 0,
+    "complianceResponse": {
+      "complianceStatus": 1,
+      "requiredComplianceStatus": 1,
+      "isValidId": true,
+      "message": null,
+      "accessToken": "_act-jwt-bundled-fixture"
+    }
+  },
+  "isSuccessful": true,
+  "error": null,
+  "metadata": null,
+  "httpStatusCode": 200
+}

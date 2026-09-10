@@ -16,13 +16,13 @@ let package = Package(
     products: [
         .library(
             name: "JackpotKit",
-            targets: ["JackpotUI", "JackpotForms", "JackpotRegistration",
-                      "JackpotNetworking", "JackpotLocalization", "JackpotAppData"]
+            targets: ["JackpotUI", "JackpotNetworking", "JackpotForms",
+                      "JackpotRegistration", "JackpotLocalization", "JackpotAppData"]
         ),
         .library(name: "JackpotUI", targets: ["JackpotUI"]),
+        .library(name: "JackpotNetworking", targets: ["JackpotNetworking"]),
         .library(name: "JackpotForms", targets: ["JackpotForms"]),
         .library(name: "JackpotRegistration", targets: ["JackpotRegistration"]),
-        .library(name: "JackpotNetworking", targets: ["JackpotNetworking"]),
         .library(name: "JackpotLocalization", targets: ["JackpotLocalization"]),
         .library(name: "JackpotAppData", targets: ["JackpotAppData"]),
     ],
@@ -30,12 +30,17 @@ let package = Package(
         .target(name: "JackpotUI", swiftSettings: strict),
         .testTarget(name: "JackpotUITests", dependencies: ["JackpotUI"]),
 
-        .target(name: "JackpotForms", dependencies: ["JackpotUI", "JackpotNetworking"], swiftSettings: strict),
-        .testTarget(name: "JackpotFormsTests", dependencies: ["JackpotForms", "JackpotNetworking"]),
-        .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
-
         .target(name: "JackpotNetworking", swiftSettings: strict),
         .testTarget(name: "JackpotNetworkingTests", dependencies: ["JackpotNetworking"]),
+
+        .target(
+            name: "JackpotForms",
+            dependencies: ["JackpotUI", "JackpotNetworking"],
+            resources: [.process("Resources")],
+            swiftSettings: strict
+        ),
+        .testTarget(name: "JackpotFormsTests", dependencies: ["JackpotForms", "JackpotNetworking"]),
+        .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
 
         .target(name: "JackpotLocalization", swiftSettings: strict),
         .testTarget(name: "JackpotLocalizationTests", dependencies: ["JackpotLocalization"]),

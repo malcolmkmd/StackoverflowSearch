@@ -4,18 +4,22 @@ Create the files in the order given. Run the commands where they appear. Open a 
 marked. Every code block is the file exactly as it is in the repository, and every
 `Package.swift` block is the manifest as it stands after that step.
 
-Six steps. The registration sheet runs from step 2 with no backend. It goes live in the app
-at step 4, on the app's existing translation function. Steps 5 and 6 are the localisation
-and app-data migrations from
+Six steps. The transport lands before the engine, so the registration sheet is wired to the
+real client from its first line — one repository, one composition, no second code path to
+keep in step. Where there is no backend yet the *bytes* are bundled, not the repository
+faked: `BundledHTTPClient` answers from JSON in the package, and everything above it is the
+shipping path. The sheet runs from step 3 that way and goes live in the app at step 4, on the
+app's existing translation function. Steps 5 and 6 are the localisation and app-data
+migrations from
 [ADR-0001](adr/0001-app-data-decoding-and-configuration-decomposition.md); registration
 does not wait for them.
 
 | Step | Adds | Demoable as |
 | --- | --- | --- |
 | 1 | `JackpotUI` | the gallery: every component, every state |
-| 2 | `JackpotForms` on an in-memory schema, `JackpotRegistration` | the Sign Up sheet, both pages, faked submit |
-| 3 | `JackpotNetworking` | `RemoteApiClient` against a stubbed transport |
-| 4 | `JackpotForms/Remote`, `.live()`, the app swap | registration live in the app, copy from `getTranslation` |
+| 2 | `JackpotNetworking` | `RemoteApiClient` against a stubbed transport |
+| 3 | `JackpotForms`, `JackpotRegistration` | the Sign Up sheet, both pages, submitted over bundled JSON |
+| 4 | the app swap | registration live in the app, copy from `getTranslation` |
 | 5 | `JackpotLocalization` | the same copy from a table built once; `getTranslation` becomes a shim |
 | 6 | `JackpotAppData` | config served from disk on launch, revalidated behind it |
 
@@ -46,7 +50,7 @@ validated. Submit asks the app for a v3 token and encodes it beside `fields`.
 | 2.5 | `receivePromotionalInformation` | Checkbox | Text | `Toggle` · `.jackpotCheckbox` |
 | 2.6 | `terms` | Checkbox | Text | `Toggle` · `.jackpotCheckbox` · required `^true$` |
 
-The mock schema ships `username.prefix = "+27"`; the live payload currently leaves
+The bundled capture ships `username.prefix = "+27"`; the live payload currently leaves
 prefix empty (the view still maps `username` to `.phoneNumber`).
 
 Every field keeps its label **inside** the control: it sits where a placeholder would and
@@ -61,7 +65,7 @@ through the environment.
 The buttons at the bottom of registration are `FormNavigationBar` in `DynamicFormContent.swift`,
 which registration places in the panel's footer under the login row. `RegistrationView`
 owns a `DynamicFormModel` and composes `DynamicFormContent` (the pages) and
-`FormNavigationBar` around it. The mock schema and the live CRM schema are the twelve
+`FormNavigationBar` around it. The bundled schema and the live CRM schema are the same twelve
 fields above — paging is not a field.
 
 | Visible control | Style | When | Action |
@@ -77,30 +81,39 @@ until `isFormValid`, then `submit()` posts through `FormRepository.submitForm` a
 result to `onComplete`. A progress bar (`.jackpotBar`) sits above the scroll view when
 `sections.count > 1`.
 
-### Registration rules and the preview path
+### Registration rules and the offline path
 
-1. **Schema.** `MockFormRepository` serves an in-memory `FormSchema` and fakes the submit.
-   The password checklist is a `PasswordSuggestions.Config` (`min` 8, `max` 20, `vulnerable`);
-   every row's copy is a translation key. The host injects `AppSettings` (the `appsettings` slice
-   of app-data); `RegistrationDependencies` maps `devConfig` into that config (`regionPasswordSuggestions`,
-   or `passwordLength` as fallback). JackpotKit never reads `GlobalData`.
-2. **Mock wiring.** `FormDependencies.mock()` is the in-memory repository plus a small copy
-   table, behind the engine's one translation seam: `translate`, a `(String) -> String` closure
-   shaped like the app's `getTranslation`, the key back on a miss. `.live(formJSON:...)` posts
-   submit and uses the injected schema; recaptcha is a second seam, SDK-agnostic like `translate`.
-   `.mock()` returns `"mock-recaptcha-token"` so the sandbox completes.
-3. **Registration's rules.** The engine ships with no cross-field regex links and no date
+1. **Schema.** `Resources/registration.json` is the CRM's response saved verbatim, decoded by
+   `FormSchema(json:)` — the same mapper the app runs on the blob it injects. There is no
+   hand-written schema anywhere: the fixture *is* a captured payload, so a preview and
+   production cannot disagree about the twelve fields.
+2. **One transport seam.** `FormDependencies.bundled()` is `.live(...)` with
+   `BundledHTTPClient` in place of `URLSessionHTTPClient`. Endpoint building, status handling,
+   envelope decoding and the error boundary are all the shipping code; only the bytes are
+   local. `RemoteFormRepository` is the only `FormRepository` in the package.
+3. **Both outcomes, offline.** Submitting `idNumber` `0000000000000` returns
+   `submit-rejected.json`, the captured `isSuccessful: false` envelope, so the failure path is
+   reachable without a backend — and reachable at all: thirteen digits clear the field's own
+   rule, which is what lets **Sign Up** enable. Anything else returns `submit-accepted.json`.
+4. **Copy.** `Resources/locales.json` is the `locales` slice of the same payload, read through
+   the engine's one translation seam: `translate`, a `(String) -> String` closure shaped like
+   the app's `getTranslation`, the key back on a miss. No copy table lives in Swift.
+5. **Registration's rules.** The engine ships with no cross-field regex links and no date
    cap. `RegistrationDependencies` adds `regexDependencies: ["idNumber": "idNumberType"]`,
-   an 18-years-ago `maximumDate`, and (when given) `passwordConfig` from injected `AppSettings`.
-4. **Sandbox.** In this repository the app's `SearchView` presents `RegistrationSandbox` with
+   an 18-years-ago `maximumDate`, and `passwordConfig` from injected `AppSettings` — the
+   `appsettings` slice of app-data, mapped from `devConfig.regionPasswordSuggestions` with
+   `passwordLength` as the fallback. JackpotKit never reads `GlobalData`.
+6. **Sandbox.** In this repository the app's `SearchView` presents `RegistrationSandbox` with
    `.jackpotPopup`, the way the app presents its panels; the sandbox hosts
-   `RegistrationView(dependencies: .mock())` and shows the `RegistrationResult` it gets
+   `RegistrationView(dependencies: .bundled())` and shows the `RegistrationResult` it gets
    back, so the whole panel runs on a device with no backend.
-5. **The sheet.** `RegistrationView` is the form inside `JackpotPanel`: title and close
+7. **The sheet.** `RegistrationView` is the form inside `JackpotPanel`: title and close
    button on `surface`, the pages on `background`, and in the footer band `JackpotLinkRow`
    with `FormNavigationBar` beneath it.
-6. **Previews.** One file, `JackpotRegistration/Previews.swift`: the sheet on `.mock()`, dark
-   and light, plus the loading state. `JackpotPreviewPanel.swift` is the component gallery.
+8. **Previews.** One file, `JackpotRegistration/Previews.swift`: the sheet on `.bundled()`,
+   dark and light. `JackpotPreviewPanel.swift` is the component gallery. There is no loading
+   preview: the schema is injected rather than fetched, so `.loading` lasts one frame in
+   production and previewing it would mean previewing a fake.
 
 ---
 
@@ -1612,26 +1625,25 @@ both appearances.
 
 ---
 
-## Step 2 — JackpotForms on an in-memory schema, and the registration sheet
+## Step 2 — JackpotNetworking
 
-The engine, with no network. One module, three folders pointing one way: `Domain` (types
-and rules, no I/O), `Data` (wire shapes and the mock repository) and `UI` (the model
-and the renderer). The engine only ever sees `FormRepository`; `MockFormRepository` serves
-an in-memory schema and fakes the submit, which is what lets the whole sheet run before any
-endpoint exists. `JackpotRegistration` is the feature on top: the sheet, registration's own
-rules, and the `DevConfig` mapping.
+The transport, before anything that needs it. `HTTPClient` is the seam — one method, and the
+only place bytes come from — `APIEndpoint` is one request shape, and `RemoteApiClient` is the
+pipeline. 200 / 400 / 401 / 500 are the contract; `unexpectedStatus` carries anything
+infrastructure returns. `BundledHTTPClient` implements that same seam from JSON in a bundle,
+which is what lets step 3 wire registration to the real client with nothing behind it: the
+bytes are local, the pipeline above them is not. Nothing here knows about forms, and nothing
+here needs translations: the app keeps `getTranslation`.
 
 **20.**
 
 ```bash
-mkdir -p JackpotKit/Sources/JackpotForms/{Domain,Data,UI/Fields,Password}
-mkdir -p JackpotKit/Sources/JackpotRegistration
+mkdir -p JackpotKit/Sources/JackpotNetworking
 ```
 
 **21.** `JackpotKit/Package.swift` — the whole file after this step
 
-`JackpotForms` depends on `JackpotUI` alone at this step; the network joins it at step 4.
-Wire types are `internal`.
+A standalone module; nothing depends on it yet.
 
 ```swift
 // swift-tools-version: 5.10
@@ -1652,22 +1664,584 @@ let package = Package(
     products: [
         .library(
             name: "JackpotKit",
-            targets: ["JackpotUI", "JackpotForms", "JackpotRegistration"]
+            targets: ["JackpotUI", "JackpotNetworking"]
         ),
         .library(name: "JackpotUI", targets: ["JackpotUI"]),
+        .library(name: "JackpotNetworking", targets: ["JackpotNetworking"]),
+    ],
+    targets: [
+        .target(name: "JackpotUI", swiftSettings: strict),
+
+        .target(name: "JackpotNetworking", swiftSettings: strict),
+    ]
+)
+```
+
+**22.** `JackpotKit/Sources/JackpotNetworking/HTTPMethod.swift`
+
+```swift
+import Foundation
+
+public enum HTTPMethod: String, Sendable {
+    case GET, POST, PUT, PATCH, DELETE
+}
+```
+
+**23.** `JackpotKit/Sources/JackpotNetworking/HTTPClient.swift`
+
+The seam. Each client owns a `URLSession`; nothing here reaches for `.shared`.
+
+```swift
+import Foundation
+
+public protocol HTTPClient: Sendable {
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse)
+}
+
+public struct URLSessionHTTPClient: HTTPClient {
+    private let session: URLSession
+
+    public init(session: URLSession) {
+        self.session = session
+    }
+
+    public init(timeout: TimeInterval = 60, waitsForConnectivity: Bool = false) {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = timeout
+        configuration.waitsForConnectivity = waitsForConnectivity
+        self.session = URLSession(configuration: configuration)
+    }
+
+    public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        return (data, http)
+    }
+}
+```
+
+**24.** `JackpotKit/Sources/JackpotNetworking/APIEnvironment.swift`
+
+```swift
+import Foundation
+
+public struct APIEnvironment: Sendable {
+    public let baseURL: URL
+    public let defaultHeaders: [String: String]
+    public let defaultQueryItems: [URLQueryItem]
+
+    public init(baseURL: URL,
+                defaultHeaders: [String: String] = ["Accept": "application/json"],
+                defaultQueryItems: [URLQueryItem] = []) {
+        self.baseURL = baseURL
+        self.defaultHeaders = defaultHeaders
+        self.defaultQueryItems = defaultQueryItems
+    }
+}
+```
+
+**25.** `JackpotKit/Sources/JackpotNetworking/APIEndpoint.swift`
+
+```swift
+import Foundation
+
+public enum RequestBody: Sendable {
+    case json(Data)
+    case form([String: String])
+}
+
+public protocol APIEndpoint: Sendable {
+    var path: String { get }
+    var method: HTTPMethod { get }
+    var queryItems: [URLQueryItem] { get }
+    var headers: [String: String] { get }
+    var body: RequestBody? { get }
+    /// False for login and refresh, so an auth interceptor skips them.
+    var requiresAuth: Bool { get }
+    /// Safe to retry on 5xx / timeout.
+    var isIdempotent: Bool { get }
+}
+
+public extension APIEndpoint {
+    var method: HTTPMethod { .GET }
+    var queryItems: [URLQueryItem] { [] }
+    var headers: [String: String] { [:] }
+    var body: RequestBody? { nil }
+    var requiresAuth: Bool { true }
+    var isIdempotent: Bool { method == .GET }
+
+    func urlRequest(in environment: APIEnvironment) throws -> URLRequest {
+        let trimmed = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        guard var components = URLComponents(
+            url: environment.baseURL.appendingPathComponent(trimmed),
+            resolvingAgainstBaseURL: false
+        ) else {
+            throw APIError.invalidURL(path)
+        }
+
+        let allQuery = environment.defaultQueryItems + queryItems
+        if !allQuery.isEmpty { components.queryItems = allQuery }
+
+        guard let url = components.url else { throw APIError.invalidURL(path) }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method.rawValue
+        for (key, value) in environment.defaultHeaders { request.setValue(value, forHTTPHeaderField: key) }
+        for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
+
+        switch body {
+        case .json(let data):
+            request.httpBody = data
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        case .form(let fields):
+            var form = URLComponents()
+            form.queryItems = fields.map { URLQueryItem(name: $0.key, value: $0.value) }
+            request.httpBody = form.percentEncodedQuery?.data(using: .utf8)
+            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        case nil:
+            break
+        }
+        return request
+    }
+}
+```
+
+**26.** `JackpotKit/Sources/JackpotNetworking/APIError.swift`
+
+```swift
+import Foundation
+
+/// The error envelope on a non-2xx: `{ "code": 0, "message": "…" }`. `code` decodes from number or string;
+/// a body with neither field throws, so `try?` at the call site yields nil rather than an empty complaint.
+public struct APIProblem: Decodable, Sendable, Equatable {
+    public let code: Int?
+    public let message: String?
+
+    public init(code: Int?, message: String?) {
+        self.code = code
+        self.message = message
+    }
+
+    private enum CodingKeys: String, CodingKey { case code, message }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        let decodedCode: Int?
+        if let number = try? container.decodeIfPresent(Int.self, forKey: .code) {
+            decodedCode = number
+        } else {
+            decodedCode = (try? container.decodeIfPresent(String.self, forKey: .code)).flatMap { $0.flatMap(Int.init) }
+        }
+        let decodedMessage = (try? container.decodeIfPresent(String.self, forKey: .message))?.flatMap {
+            $0.isEmpty ? nil : $0
+        }
+
+        guard decodedCode != nil || decodedMessage != nil else {
+            throw DecodingError.dataCorrupted(.init(
+                codingPath: decoder.codingPath,
+                debugDescription: "Not a problem envelope: neither `code` nor `message` present"
+            ))
+        }
+
+        code = decodedCode
+        message = decodedMessage
+    }
+}
+
+/// The contract is 200, 400, 401, 500; `unexpectedStatus` carries anything a proxy or WAF returns.
+public enum APIError: Error, Sendable, Equatable {
+    case invalidURL(String)
+    case transport(URLError.Code)
+    case badRequest(APIProblem?)
+    case unauthorized(APIProblem?)
+    case server(APIProblem?)
+    case unexpectedStatus(Int, APIProblem?)
+    case decoding(String)
+    case cancelled
+
+    public var problem: APIProblem? {
+        switch self {
+        case .badRequest(let p), .unauthorized(let p), .server(let p), .unexpectedStatus(_, let p):
+            return p
+        case .invalidURL, .transport, .decoding, .cancelled:
+            return nil
+        }
+    }
+
+    public var serverMessage: String? {
+        problem?.message.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    public var isOffline: Bool {
+        guard case .transport(let code) = self else { return false }
+        return [.notConnectedToInternet, .networkConnectionLost, .dataNotAllowed, .timedOut].contains(code)
+    }
+}
+```
+
+**27.** `JackpotKit/Sources/JackpotNetworking/RequestInterceptor.swift`
+
+```swift
+import Foundation
+
+/// Auth headers, token refresh, logging: once, instead of in every endpoint.
+public protocol RequestInterceptor: Sendable {
+    func adapt(_ request: URLRequest, for endpoint: any APIEndpoint) async throws -> URLRequest
+    /// An adapted request to retry with, or nil. Called at most once.
+    func retry(_ request: URLRequest,
+               for endpoint: any APIEndpoint,
+               response: HTTPURLResponse,
+               data: Data) async -> URLRequest?
+}
+
+public extension RequestInterceptor {
+    func adapt(_ request: URLRequest, for endpoint: any APIEndpoint) async throws -> URLRequest { request }
+    func retry(_ request: URLRequest,
+               for endpoint: any APIEndpoint,
+               response: HTTPURLResponse,
+               data: Data) async -> URLRequest? { nil }
+}
+
+/// The token arrives through a closure, so this module never imports a session type.
+public struct BearerTokenInterceptor: RequestInterceptor {
+    private let token: @Sendable () async -> String?
+
+    public init(token: @escaping @Sendable () async -> String?) {
+        self.token = token
+    }
+
+    public func adapt(_ request: URLRequest, for endpoint: any APIEndpoint) async throws -> URLRequest {
+        guard endpoint.requiresAuth, let token = await token() else { return request }
+        var request = request
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return request
+    }
+}
+```
+
+**28.** `JackpotKit/Sources/JackpotNetworking/ConditionalRequest.swift`
+
+Registration never sends a conditional request; `RemoteApiClient` still implements the
+protocol method, so the types have to exist. Step 6 uses them.
+
+```swift
+import Foundation
+
+/// The validators a response came back with; sending them back turns a revalidation into a 304.
+/// `Codable` because `AppDataCaching` stores them beside the payload.
+public struct HTTPValidators: Sendable, Equatable, Codable {
+    public let etag: String?
+    public let lastModified: String?
+
+    public init(etag: String?, lastModified: String?) {
+        self.etag = etag
+        self.lastModified = lastModified
+    }
+
+    public init?(_ response: HTTPURLResponse) {
+        let etag = response.value(forHTTPHeaderField: "ETag")
+        let lastModified = response.value(forHTTPHeaderField: "Last-Modified")
+        guard etag != nil || lastModified != nil else { return nil }
+        self.etag = etag
+        self.lastModified = lastModified
+    }
+
+    var conditionalHeaders: [String: String] {
+        var headers: [String: String] = [:]
+        if let etag { headers["If-None-Match"] = etag }
+        if let lastModified { headers["If-Modified-Since"] = lastModified }
+        return headers
+    }
+}
+
+public enum ConditionalResponse: Sendable, Equatable {
+    case notModified
+    case fresh(Data, HTTPValidators?)
+}
+```
+
+**29.** `JackpotKit/Sources/JackpotNetworking/RemoteApiClient.swift`
+
+The retry policy is the part to read: a 5xx or a dropped connection is retried, a 4xx never
+is, and a non-idempotent request is retried only when the transport failed before the
+server could have seen it.
+
+```swift
+import Foundation
+
+public protocol ApiClient: Sendable {
+    func request<Response: Decodable & Sendable>(_ endpoint: some APIEndpoint) async throws -> Response
+    func request(_ endpoint: some APIEndpoint) async throws
+    /// The response body, undecoded.
+    func data(for endpoint: some APIEndpoint) async throws -> Data
+    /// Returns `.notModified` on a 304.
+    func revalidate(_ endpoint: some APIEndpoint,
+                    validators: HTTPValidators?) async throws -> ConditionalResponse
+}
+
+public struct RemoteApiClient: ApiClient {
+    private let environment: APIEnvironment
+    private let httpClient: any HTTPClient
+    private let interceptors: [any RequestInterceptor]
+    private let decoder: JSONDecoder
+    private let maxTransientRetries: Int
+
+    public init(environment: APIEnvironment,
+                httpClient: any HTTPClient = URLSessionHTTPClient(),
+                interceptors: [any RequestInterceptor] = [],
+                decoder: JSONDecoder = JSONDecoder(),
+                maxTransientRetries: Int = 1) {
+        self.environment = environment
+        self.httpClient = httpClient
+        self.interceptors = interceptors
+        self.decoder = decoder
+        self.maxTransientRetries = maxTransientRetries
+    }
+
+    public func request<Response: Decodable & Sendable>(_ endpoint: some APIEndpoint) async throws -> Response {
+        let (data, _) = try await perform(endpoint)
+        do {
+            return try decoder.decode(Response.self, from: data)
+        } catch {
+            // The full description names the failing key path.
+            throw APIError.decoding("\(Response.self): \(error)")
+        }
+    }
+
+    public func request(_ endpoint: some APIEndpoint) async throws {
+        _ = try await perform(endpoint)
+    }
+
+    public func data(for endpoint: some APIEndpoint) async throws -> Data {
+        try await perform(endpoint).0
+    }
+
+    public func revalidate(_ endpoint: some APIEndpoint,
+                           validators: HTTPValidators?) async throws -> ConditionalResponse {
+        let (data, response) = try await perform(endpoint, extraHeaders: validators?.conditionalHeaders ?? [:])
+        if response.statusCode == 304 { return .notModified }
+        return .fresh(data, HTTPValidators(response))
+    }
+
+    // MARK: - Pipeline
+
+    private func perform(_ endpoint: some APIEndpoint,
+                         extraHeaders: [String: String] = [:]) async throws -> (Data, HTTPURLResponse) {
+        var request = try endpoint.urlRequest(in: environment)
+        for (key, value) in extraHeaders {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        for interceptor in interceptors {
+            request = try await interceptor.adapt(request, for: endpoint)
+        }
+        return try await send(request, for: endpoint, didRetryAuth: false, transientRetries: 0)
+    }
+
+    private func send(_ request: URLRequest,
+                      for endpoint: some APIEndpoint,
+                      didRetryAuth: Bool,
+                      transientRetries: Int) async throws -> (Data, HTTPURLResponse) {
+        let (data, response) = try await transport(request)
+
+        switch response.statusCode {
+        case 200..<300:
+            return (data, response)
+
+        case 304:
+            return (data, response)
+
+        // `didRetryAuth` is a parameter, not state, so a second 401 cannot loop.
+        case 401:
+            if !didRetryAuth {
+                for interceptor in interceptors {
+                    if let retry = await interceptor.retry(request, for: endpoint, response: response, data: data) {
+                        return try await send(retry, for: endpoint, didRetryAuth: true, transientRetries: transientRetries)
+                    }
+                }
+            }
+            throw APIError.unauthorized(problem(from: data))
+
+        case 400:
+            throw APIError.badRequest(problem(from: data))
+
+        // A POST may already have taken effect, so only idempotent requests are retried.
+        case 500, 502...504:
+            if endpoint.isIdempotent, transientRetries < maxTransientRetries {
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+                return try await send(request, for: endpoint, didRetryAuth: didRetryAuth,
+                                      transientRetries: transientRetries + 1)
+            }
+            throw response.statusCode == 500
+                ? APIError.server(problem(from: data))
+                : APIError.unexpectedStatus(response.statusCode, problem(from: data))
+
+        default:
+            throw APIError.unexpectedStatus(response.statusCode, problem(from: data))
+        }
+    }
+
+    private func transport(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        do {
+            return try await httpClient.send(request)
+        } catch is CancellationError {
+            throw APIError.cancelled
+        // What URLSession throws when a Task is cancelled mid-flight.
+        } catch let error as URLError where error.code == .cancelled {
+            throw APIError.cancelled
+        } catch let error as URLError {
+            throw APIError.transport(error.code)
+        }
+    }
+
+    private func problem(from data: Data) -> APIProblem? {
+        try? JSONDecoder().decode(APIProblem.self, from: data)
+    }
+}
+```
+
+**30.** `JackpotKit/Sources/JackpotNetworking/BundledHTTPClient.swift`
+
+The other implementation of the seam: bundled JSON in, an `HTTPURLResponse` out. It is not
+a mock of the client — the client, the endpoints, the status handling and the decoding are
+all still the shipping ones. `latency` makes in-flight states visible, and routing is a
+closure so a fixture can depend on what was posted.
+
+```swift
+import Foundation
+
+/// Answers requests from JSON that ships in a bundle, at the one seam the real client already has.
+/// Everything above it — endpoint building, status handling, retries, decoding, error mapping — is
+/// the shipping path, so a preview or a demo exercises that code rather than a parallel fake.
+public struct BundledHTTPClient: HTTPClient {
+    /// The bytes a request is answered with. Loaded up front so routing stays free of file I/O.
+    public struct Fixture: Sendable {
+        public let data: Data
+        public let statusCode: Int
+
+        public init(_ data: Data, statusCode: Int = 200) {
+            self.data = data
+            self.statusCode = statusCode
+        }
+
+        /// A `.json` file in `bundle`. Nil when the resource is missing, which is a wiring mistake
+        /// rather than a server condition — let the caller decide how loud that should be.
+        public init?(resource: String, in bundle: Bundle, statusCode: Int = 200) {
+            guard let url = bundle.url(forResource: resource, withExtension: "json"),
+                  let data = try? Data(contentsOf: url) else { return nil }
+            self.init(data, statusCode: statusCode)
+        }
+    }
+
+    private let latency: TimeInterval
+    private let route: @Sendable (URLRequest) -> Fixture?
+
+    /// - Parameters:
+    ///   - latency: Artificial delay, so in-flight states are visible in a preview.
+    ///   - route: The fixture that answers a request; nil is served as a 404.
+    public init(latency: TimeInterval = 0,
+                route: @escaping @Sendable (URLRequest) -> Fixture?) {
+        self.latency = latency
+        self.route = route
+    }
+
+    /// Every request is answered by the same fixture.
+    public init(_ fixture: Fixture, latency: TimeInterval = 0) {
+        self.init(latency: latency) { _ in fixture }
+    }
+
+    public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        if latency > 0 {
+            try await Task.sleep(nanoseconds: UInt64(latency * 1_000_000_000))
+        }
+        let fixture = route(request)
+        let response = HTTPURLResponse(
+            url: request.url ?? URL(fileURLWithPath: "/"),
+            statusCode: fixture?.statusCode ?? 404,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        return (fixture?.data ?? Data(), response)
+    }
+}
+```
+
+---
+
+### ▶ Create PR — JackpotNetworking
+
+---
+
+## Step 3 — JackpotForms and the registration sheet
+
+The engine, wired to the client from its first line. One module, folders pointing one way:
+`Domain` (types and rules, no I/O), `Data` (wire shapes), `Password`, `Remote` (endpoints,
+the repository, and the bundled composition) and `UI` (the model and the renderer). The engine
+only ever sees `FormRepository`, and there is exactly one implementation of it —
+`RemoteFormRepository`. Running without a backend is a transport choice, not a second
+repository: `.bundled()` is `.live()` with `BundledHTTPClient` under it, so the whole sheet
+runs on captured payloads while every line above the transport is the one that ships.
+`JackpotRegistration` is the feature on top: the sheet, registration's own rules, and the
+`DevConfig` mapping.
+
+**31.**
+
+```bash
+mkdir -p JackpotKit/Sources/JackpotForms/{Domain,Data,Password,Remote,Resources,UI/Fields}
+mkdir -p JackpotKit/Sources/JackpotRegistration
+```
+
+**32.** `JackpotKit/Package.swift` — the whole file after this step
+
+`JackpotForms` takes `JackpotUI` and `JackpotNetworking`, and processes `Resources` —
+the captured payloads the bundled transport serves. Wire types are `internal`.
+
+```swift
+// swift-tools-version: 5.10
+import PackageDescription
+
+// One local package; each folder under Sources/ is a module. In Xcode: File → Add Package
+// Dependencies → Add Local… → JackpotKit, then add the product you need to the app target.
+// The floor is iOS 15, the host app's. docs/BUILD-PLAYBOOK.md builds this manifest one step at a
+// time, and scripts/build-playbook.py checks that its final step matches this file exactly.
+
+/// The app builds with `SWIFT_STRICT_CONCURRENCY = complete`; the package is held to the same bar.
+let strict: [SwiftSetting] = [.enableExperimentalFeature("StrictConcurrency")]
+
+let package = Package(
+    name: "JackpotKit",
+    defaultLocalization: "en",
+    platforms: [.iOS(.v15)],
+    products: [
+        .library(
+            name: "JackpotKit",
+            targets: ["JackpotUI", "JackpotNetworking", "JackpotForms",
+                      "JackpotRegistration"]
+        ),
+        .library(name: "JackpotUI", targets: ["JackpotUI"]),
+        .library(name: "JackpotNetworking", targets: ["JackpotNetworking"]),
         .library(name: "JackpotForms", targets: ["JackpotForms"]),
         .library(name: "JackpotRegistration", targets: ["JackpotRegistration"]),
     ],
     targets: [
         .target(name: "JackpotUI", swiftSettings: strict),
 
-        .target(name: "JackpotForms", dependencies: ["JackpotUI"], swiftSettings: strict),
+        .target(name: "JackpotNetworking", swiftSettings: strict),
+
+        .target(
+            name: "JackpotForms",
+            dependencies: ["JackpotUI", "JackpotNetworking"],
+            resources: [.process("Resources")],
+            swiftSettings: strict
+        ),
         .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
     ]
 )
 ```
 
-**22.** `JackpotKit/Sources/JackpotForms/Domain/FormName.swift`
+**33.** `JackpotKit/Sources/JackpotForms/Domain/FormName.swift`
 
 `.registration` is the live form.
 
@@ -1701,7 +2275,7 @@ public extension FormName {
 }
 ```
 
-**23.** `JackpotKit/Sources/JackpotForms/Domain/FormValue.swift`
+**34.** `JackpotKit/Sources/JackpotForms/Domain/FormValue.swift`
 
 ```swift
 import Foundation
@@ -1798,7 +2372,7 @@ public struct FormSubmission: Equatable, Sendable, Encodable {
 }
 ```
 
-**24.** `JackpotKit/Sources/JackpotForms/Domain/FormField.swift`
+**35.** `JackpotKit/Sources/JackpotForms/Domain/FormField.swift`
 
 `FieldType` is Input, Dropdown, Checkbox and recaptchaV3 — plus `unknown`, which is what
 keeps the form usable when the CRM adds a type this build cannot draw. WMS spells recaptcha
@@ -1925,7 +2499,7 @@ public struct FormField: Identifiable, Equatable, Hashable, Sendable {
 }
 ```
 
-**25.** `JackpotKit/Sources/JackpotForms/Domain/FormSchema.swift`
+**36.** `JackpotKit/Sources/JackpotForms/Domain/FormSchema.swift`
 
 ```swift
 import Foundation
@@ -1978,7 +2552,7 @@ public struct FormRow: Identifiable, Equatable, Sendable {
 }
 ```
 
-**26.** `JackpotKit/Sources/JackpotForms/Domain/FormSubmitResult.swift`
+**37.** `JackpotKit/Sources/JackpotForms/Domain/FormSubmitResult.swift`
 
 ```swift
 import Foundation
@@ -2008,7 +2582,7 @@ public struct FormSubmitResult: Decodable, Equatable, Sendable {
 }
 ```
 
-**27.** `JackpotKit/Sources/JackpotForms/Domain/FormError.swift`
+**38.** `JackpotKit/Sources/JackpotForms/Domain/FormError.swift`
 
 ```swift
 import Foundation
@@ -2034,7 +2608,7 @@ public enum FormError: LocalizedError, Equatable {
 }
 ```
 
-**28.** `JackpotKit/Sources/JackpotForms/Domain/FormRepository.swift`
+**39.** `JackpotKit/Sources/JackpotForms/Domain/FormRepository.swift`
 
 ```swift
 import Foundation
@@ -2045,7 +2619,7 @@ public protocol FormRepository: Sendable {
 }
 ```
 
-**29.** `JackpotKit/Sources/JackpotForms/Data/FormDTO.swift`
+**40.** `JackpotKit/Sources/JackpotForms/Data/FormDTO.swift`
 
 The wire shapes. A recaptcha row is dropped here and `hasRecaptcha` is set, so `allFields`
 never sees it — the same as the web's `processSection`. `FormSchema(json:)` is how the host
@@ -2147,7 +2721,7 @@ struct FieldDropdownDTO: Decodable {
 }
 ```
 
-**30.** `JackpotKit/Sources/JackpotForms/Password/PasswordSuggestions.swift`
+**41.** `JackpotKit/Sources/JackpotForms/Password/PasswordSuggestions.swift`
 
 The checklist rows, keyed the same way as the web (`min-N-char`, `password-is-vulnerable`).
 
@@ -2236,155 +2810,294 @@ extension PasswordCharacterClass {
 }
 ```
 
-**31.** `JackpotKit/Sources/JackpotForms/Data/MockFormRepository.swift`
+Then `Remote`, in the same step — there is no stage at which the engine is wired to something
+else. Two of the four resources are captured payloads rather than authored files, so they are
+copied in rather than printed:
 
-An in-memory registration schema, a copy table, and a faked submit. Mobile `0000000000`
-fails so the error path can be demoed.
+**42.**
+
+```bash
+cp registration.json JackpotKit/Sources/JackpotForms/Resources/registration.json
+cp locales.json     JackpotKit/Sources/JackpotForms/Resources/locales.json
+```
+
+`registration.json` is the CRM's response saved verbatim — the twelve fields over two
+sections in the catalog above. `locales.json` is the `locales` slice of the app-data payload,
+trimmed to the keys registration asks for. Both are data the CMS owns: nothing in the package
+restates them in Swift, so a preview and production cannot drift apart.
+
+**43.** `JackpotKit/Sources/JackpotForms/Remote/FormEndpoints.swift`
+
+The submit path and the envelope it comes back in. The form GET is not used: the schema is
+injected, here from `registration.json` and in the app from the bootstrap payload.
 
 ```swift
 import Foundation
+import JackpotNetworking
 
-struct MockFormRepository: FormRepository {
-    private let delay: TimeInterval
+struct FormRequest: APIEndpoint {
+    let brand: String
+    let region: String
+    let formName: FormName
 
-    init(delay: TimeInterval = 0.35) {
-        self.delay = delay
-    }
-
-    func form(named name: FormName) async throws -> FormSchema {
-        try await pause()
-        guard name == .registration else { throw FormError.notFound(name) }
-        return MockForm.schema
-    }
-
-    func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
-        try await pause()
-        let mobile = submission["username"].stringValue
-        if mobile == "0000000000" {
-            throw FormError.server(message: "That mobile number is already registered. Try logging in instead.")
-        }
-        return FormSubmitResult(accountId: "27\(mobile)", message: "User Created Successfully.")
-    }
-
-    private func pause() async throws {
-        if delay > 0 {
-            try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-        }
-    }
+    var path: String { "cron/forms/\(brand)/\(region)/\(formName.rawValue)" }
+    var method: HTTPMethod { .GET }
+    var queryItems: [URLQueryItem] { [URLQueryItem(name: "api-version", value: "2.0")] }
 }
 
-enum MockForm {
-    static let translate: @Sendable (String) -> String = { copy[$0.lowercased()] ?? $0 }
+/// No `api-version`. No auth: registration happens before login.
+struct FormSubmitRequest: APIEndpoint {
+    let bodyData: Data
 
-    static let schema = FormSchema(
-        id: 1052,
-        codeName: .registration,
-        sections: [
-            FormSection(id: 45, rows: [
-                row(1, FormField(id: 1, identifier: "username", inputType: .number, isRequired: true,
-                                 regex: "^(27|0)?[1-9][0-9]{8}$", prefix: "+27")),
-                row(2, FormField(id: 2, identifier: "password", inputType: .password, isRequired: true,
-                                 regex: "^(.){8,20}$")),
-                row(3, FormField(id: 3, identifier: "firstname", isRequired: true,
-                                 regex: "^[a-zA-Z][a-zA-Z\\-\\.'\\s]{1,20}$")),
-                row(4, FormField(id: 4, identifier: "lastname", isRequired: true,
-                                 regex: "^[a-zA-Z][a-zA-Z\\-\\.'\\s]{1,20}$")),
-                row(5, FormField(id: 5, identifier: "email", inputType: .email, isRequired: true,
-                                 regex: "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")),
-                row(6, FormField(id: 6, identifier: "referralCode",
-                                 regex: "^[a-zA-Z0-9]{3,25}$|^$")),
-            ]),
-            FormSection(id: 46, rows: [
-                row(1, FormField(id: 7, identifier: "idNumberType", type: .dropdown, isRequired: true,
-                                 regex: "^[a-zA-Z]+$",
-                                 dropdownOptions: [
-                                    .init(value: "idNumber", textKey: "jpc-reg-idnumber", regex: "idNumberRegex"),
-                                    .init(value: "passport", textKey: "jpc-reg-passport", regex: "passportNumberRegex"),
-                                 ])),
-                row(2, FormField(id: 8, identifier: "idNumber", isRequired: true, regex: "^[0-9]{13}$")),
-                row(3, FormField(id: 9, identifier: "dateOfBirth", inputType: .calendar, isRequired: true,
-                                 regex: "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2}(?:\\.\\d*)?)((-(\\d{2}):(\\d{2})|Z)?)$")),
-                row(4, FormField(id: 10, identifier: "sourceOfFunds", type: .dropdown, isRequired: true,
-                                 regex: "^[a-zA-Z]+$",
-                                 dropdownOptions: [
-                                    .init(value: "SalaryOrWages", textKey: "jpc-reg-SalaryOrWages", regex: "[a-zA-Z]"),
-                                    .init(value: "PensionOrGrant", textKey: "jpc-reg-PensionOrGrant", regex: "[a-zA-Z]"),
-                                    .init(value: "AllowanceOrBursary", textKey: "jpc-reg-AllowanceOrBursary", regex: "[a-zA-Z]"),
-                                    .init(value: "SavingsOrRentalOrOther", textKey: "jpc-reg-SavingsOrRentalOrOther", regex: "[a-zA-Z]"),
-                                    .init(value: "SelfEmployed", textKey: "jpc-reg-SelfEmployed", regex: "[a-zA-Z]"),
-                                 ])),
-                row(5, FormField(id: 11, identifier: "receivePromotionalInformation",
-                                 labelKey: "receivePromotionalInformation-jza", type: .checkbox,
-                                 regex: "^true|^false$")),
-                row(6, FormField(id: 12, identifier: "terms", type: .checkbox, isRequired: true, regex: "^true$")),
-            ]),
-        ],
-        hasRecaptcha: true
-    )
-
-    private static func row(_ number: Int, _ field: FormField) -> FormRow {
-        FormRow(number: number, fields: [field])
+    /// ISO-8601 is an assumption; the production encoder wasn't visible.
+    init(_ submission: FormSubmission) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        bodyData = try encoder.encode(submission)
     }
 
-    private static let copy: [String: String] = [
-        "username": "Enter Mobile Number",
-        "password": "Password",
-        "firstname": "First Name (As it appears on your ID)",
-        "lastname": "Surname (As it appears on ID)",
-        "email": "Email",
-        "referralcode": "I have a sign up code",
-        "idnumbertype": "ID Number Type",
-        "idnumber": "ID Number",
-        "dateofbirth": "Enter Date Of Birth",
-        "sourceoffunds": "Enter Source Of Income",
-        "receivepromotionalinformation-jza": "Send Jackpot City Promotions to me",
-        "terms": "I am over 18 years of age & I accept Jackpotcity's Terms & Conditions & Privacy Policy",
-        "jpc-reg-idnumber": "South African ID",
-        "jpc-reg-passport": "Passport",
-        "jpc-reg-salaryorwages": "Salary or Wages",
-        "jpc-reg-pensionorgrant": "Pension or Grant",
-        "jpc-reg-allowanceorbursary": "Allowance or Bursary",
-        "jpc-reg-savingsorrentalorother": "Savings, Rental or Other",
-        "jpc-reg-selfemployed": "Self Employed",
-        "jpc-reg-username-regex": "Enter a valid mobile number",
-        "jpc-reg-password-regex": "Password must be 8–20 characters",
-        "jpc-reg-firstname-regex": "Enter your first name as it appears on your ID",
-        "jpc-reg-lastname-regex": "Enter your surname as it appears on your ID",
-        "jpc-reg-email-regex": "Enter a valid email address",
-        "jpc-reg-referralcode-regex": "Sign up codes are 3–25 letters or numbers",
-        "jpc-reg-idnumbertype-regex": "Please select an ID type",
-        "jpc-reg-idnumber-regex": "Enter in a valid ID number",
-        "jpc-reg-dateofbirth-regex": "Enter date of birth",
-        "jpc-reg-sourceoffunds-regex": "Please select your source of income.",
-        "jpc-reg-terms-regex": "You must accept the Terms & Conditions to continue",
-        "password-validity": "Password Validity",
-        "next": "Next",
-        "previous": "Previous",
-        "sign-up": "Sign Up",
-        "login": "Login",
-        "already-have-account": "Already have an account?",
-        "at-least-one-upper-char": "At least one uppercase character",
-        "at-least-one-lower-char": "At least one lowercase character",
-        "at-least-one-num-char": "At least one number",
-        "at-least-one-special-char": "At least one special character",
-        "min-8-char": "Minimum of 8 characters",
-        "max-20-char": "Maximum of 20 characters",
-        "required": "Required",
-        "requirements-met": "Requirements met",
-        "show-password": "Show password",
-        "hide-password": "Hide password",
-        "loading-form": "Loading form",
-        "couldnt-load-form": "Couldn't load this form",
-        "form-progress": "Form progress",
-        "password-is-vulnerable": "Password contains 'password' - this can be unsafe",
-        "please-remove-spaces": "Please remove spaces",
-    ]
+    var path: String { "cron/forms/submit" }
+    var method: HTTPMethod { .POST }
+    var body: RequestBody? { .json(bodyData) }
+    var requiresAuth: Bool { false }
+}
+
+/// HTTP 200 is not success: `isSuccessful` is.
+struct FormSubmitEnvelope: Decodable {
+    let data: FormSubmitResult?
+    let isSuccessful: Bool?
+    let error: Failure?
+
+    struct Failure: Decodable {
+        let code: Int?
+        let displayCode: Int?
+        let message: String?
+    }
 }
 ```
 
-**32.** `JackpotKit/Sources/JackpotForms/UI/FormDependencies.swift`
+**44.** `JackpotKit/Sources/JackpotForms/Remote/RemoteFormRepository.swift`
 
-The engine's dependencies and `.mock()`. `translate` is the one translation seam: a key
+The only `FormRepository`. Submit only — HTTP 200 is not success, the envelope's
+`isSuccessful` is, and a body that is not the envelope is a rejection. The engine cannot see
+`APIError`, so anything not translated in `userFacing` becomes a generic failure on screen.
+`.live(...)` is at the bottom, and its `httpClient` parameter is the whole offline story.
+
+```swift
+import Foundation
+import JackpotNetworking
+
+public struct RemoteFormRepository: FormRepository {
+    private let form: FormSchema
+    private let apiClient: any ApiClient
+    private let translate: @Sendable (String) -> String
+
+    public init(form: FormSchema = FormSchema(id: 0, codeName: .registration, sections: []),
+                apiClient: any ApiClient,
+                translate: @escaping @Sendable (String) -> String = { $0 }) {
+        self.form = form
+        self.apiClient = apiClient
+        self.translate = translate
+    }
+
+    public func form(named name: FormName) async throws -> FormSchema {
+        guard name == form.codeName else { throw FormError.notFound(name) }
+        return form
+    }
+
+    public func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
+        do {
+            let data = try await apiClient.data(for: FormSubmitRequest(submission))
+            // An empty 2xx is taken as accepted (an assumption); anything else must say `isSuccessful: true`.
+            if data.isEmpty { return FormSubmitResult() }
+            let envelope = try? JSONDecoder().decode(FormSubmitEnvelope.self, from: data)
+            guard let envelope, envelope.isSuccessful == true else {
+                let failure = envelope?.error
+                throw FormError.server(message: message(code: failure?.code ?? failure?.displayCode, server: failure?.message)
+                                       ?? "We couldn't submit the form. Please try again.")
+            }
+            return envelope.data ?? FormSubmitResult()
+        } catch {
+            throw userFacing(error, formName: submission.formCodeName)
+        }
+    }
+
+    // MARK: Errors
+
+    /// Where transport errors become something a person can read; the engine never sees `APIError`.
+    func userFacing(_ error: any Error, formName: FormName) -> any Error {
+        guard let apiError = error as? APIError else { return error }
+        switch apiError {
+        // A cancelled load is a navigation event, not a failure.
+        case .cancelled:
+            return CancellationError()
+        case .transport where apiError.isOffline:
+            return FormError.offline
+        case .unexpectedStatus(404, _):
+            return FormError.notFound(formName)
+        case .badRequest, .unauthorized, .server, .unexpectedStatus:
+            return message(code: apiError.problem?.code, server: apiError.serverMessage)
+                .map { FormError.server(message: $0) } ?? FormError.unexpected
+        case .transport, .decoding, .invalidURL:
+            return FormError.unexpected
+        }
+    }
+
+    /// Error codes are translation keys, `jpc-reg-error.{code}` for registration and the bare number elsewhere;
+    /// an untranslated key falls back to the server's wording.
+    func message(code: Int?, server: String?) -> String? {
+        for key in code.map({ ["jpc-reg-error.\($0)", String($0)] }) ?? [] {
+            let copy = translate(key)
+            if copy != key { return copy }
+        }
+        return server
+    }
+}
+
+public extension FormDependencies {
+    /// - Parameter httpClient: The transport. Swap it for a `BundledHTTPClient` to run this exact
+    ///   composition — same endpoints, same decoding, same error mapping — without a backend.
+    static func live(form: FormSchema,
+                     baseURL: URL,
+                     httpClient: any HTTPClient = URLSessionHTTPClient(),
+                     translate: @escaping @Sendable (String) -> String,
+                     recaptcha: @escaping @Sendable (String) async throws -> String?) -> FormDependencies {
+        let client = RemoteApiClient(environment: APIEnvironment(baseURL: baseURL), httpClient: httpClient)
+        return FormDependencies(
+            repository: RemoteFormRepository(form: form, apiClient: client, translate: translate),
+            translate: translate,
+            recaptcha: recaptcha
+        )
+    }
+
+    static func live(formJSON: Data,
+                     baseURL: URL,
+                     httpClient: any HTTPClient = URLSessionHTTPClient(),
+                     translate: @escaping @Sendable (String) -> String,
+                     recaptcha: @escaping @Sendable (String) async throws -> String?) throws -> FormDependencies {
+        try live(form: FormSchema(json: formJSON), baseURL: baseURL, httpClient: httpClient,
+                 translate: translate, recaptcha: recaptcha)
+    }
+}
+```
+
+**45.** `JackpotKit/Sources/JackpotForms/Resources/submit-accepted.json`
+
+The captured success envelope: an account id, the FICA block, and the JWT the app logs in with.
+
+```json
+{
+  "data": {
+    "accountId": "32212b00-54d0-449e-877a-f712f0976823",
+    "message": "User Created Successfully.",
+    "status": "Success.",
+    "partialRegistrationStatus": 0,
+    "complianceResponse": {
+      "complianceStatus": 1,
+      "requiredComplianceStatus": 1,
+      "isValidId": true,
+      "message": null,
+      "accessToken": "_act-jwt-bundled-fixture"
+    }
+  },
+  "isSuccessful": true,
+  "error": null,
+  "metadata": null,
+  "httpStatusCode": 200
+}
+```
+
+**46.** `JackpotKit/Sources/JackpotForms/Resources/submit-rejected.json`
+
+The captured rejection — HTTP 200 with `isSuccessful: false`. `error.code` is a translation key,
+`jpc-reg-error.153008`, which `locales.json` carries; an untranslated code falls back to
+`error.message`.
+
+```json
+{
+  "data": null,
+  "isSuccessful": false,
+  "error": {
+    "code": 153008,
+    "displayCode": 153008,
+    "message": "An Error Occurred.",
+    "remediation": null
+  },
+  "metadata": null,
+  "httpStatusCode": 200
+}
+```
+
+**47.** `JackpotKit/Sources/JackpotForms/Remote/BundledForms.swift`
+
+Where the four resources become a `FormDependencies`. `.bundled()` calls `.live()` — same
+repository, same endpoints, same decoding — and passes `BundledHTTPClient` as the transport.
+The rejection is keyed on an `idNumber` of thirteen zeros because it has to clear the field's
+own `^[0-9]{13}$` rule before **Sign Up** will enable; a value the form rejects could never
+reach the wire, so it could never demo the wire's failure.
+
+```swift
+import Foundation
+import JackpotNetworking
+
+/// The captured CRM payloads that ship with the package: the `registration` schema, the `locales`
+/// slice that labels it, and the two submit envelopes. Previews, the sandbox and any build without
+/// a backend run on these — through the shipping repository, never a second implementation.
+public enum FormFixtures {
+    /// The schema blob exactly as the CRM returned it. In the app this same shape arrives on
+    /// app-data; here it is a file, which is the only difference.
+    public static let registrationJSON: Data = json("registration")
+
+    /// Empty only if the resource is missing or malformed, which `BundledFormsTests` rules out.
+    public static let registrationSchema: FormSchema =
+        (try? FormSchema(json: registrationJSON)) ?? FormSchema(id: 0, codeName: .registration, sections: [])
+
+    /// Stands in for the app's `getTranslation`: same contract, the key back on a miss.
+    public static let translate: @Sendable (String) -> String = { locales[$0.lowercased()] ?? $0 }
+
+    /// The `idNumber` the bundled CRM rejects. Thirteen digits, so it clears the field's own rule
+    /// and the form can actually be submitted — which is what makes the failure path reachable.
+    public static let rejectedIdNumber = "0000000000000"
+
+    static let locales: [String: String] =
+        (try? JSONDecoder().decode([String: String].self, from: json("locales"))) ?? [:]
+
+    static func json(_ resource: String) -> Data {
+        guard let url = Bundle.module.url(forResource: resource, withExtension: "json"),
+              let data = try? Data(contentsOf: url) else { return Data() }
+        return data
+    }
+}
+
+public extension FormDependencies {
+    /// The live composition over bundled bytes: real endpoints, real envelope decoding, real error
+    /// mapping, with `BundledHTTPClient` in place of the network. Submitting
+    /// `FormFixtures.rejectedIdNumber` returns the CRM's rejection envelope, so both outcomes are
+    /// demoable offline.
+    ///
+    /// - Parameter delay: Latency on submit, so the button's in-flight state is visible.
+    static func bundled(delay: TimeInterval = 0.35) -> FormDependencies {
+        let accepted = BundledHTTPClient.Fixture(resource: "submit-accepted", in: .module)
+        let rejected = BundledHTTPClient.Fixture(resource: "submit-rejected", in: .module)
+        let transport = BundledHTTPClient(latency: delay) { request in
+            let body = request.httpBody.map { String(decoding: $0, as: UTF8.self) } ?? ""
+            return body.contains("\"idNumber\":\"\(FormFixtures.rejectedIdNumber)\"") ? rejected : accepted
+        }
+        return live(
+            form: FormFixtures.registrationSchema,
+            baseURL: URL(string: "https://config.jpc.africa")!,
+            httpClient: transport,
+            translate: FormFixtures.translate,
+            // The captured schema carries no recaptcha row, so nothing asks for a token.
+            recaptcha: { _ in nil }
+        )
+    }
+}
+```
+
+**48.** `JackpotKit/Sources/JackpotForms/UI/FormDependencies.swift`
+
+The engine's dependencies. `translate` is the one translation seam: a key
 in, its text out, the key itself on a miss, so the app's `getTranslation` plugs in as it is.
 `passwordConfig` is a plain struct the engine draws. `recaptcha` is a closure. The host
 injects both at the composition root — JackpotKit never reads `GlobalData`. Throw from
@@ -2429,20 +3142,9 @@ public struct FormDependencies {
         "passportNumberRegex": "^.{5,20}$",
     ]
 }
-
-public extension FormDependencies {
-    static func mock(delay: TimeInterval = 0.35) -> FormDependencies {
-        FormDependencies(
-            repository: MockFormRepository(delay: delay),
-            translate: MockForm.translate,
-            passwordConfig: .init(min: 8, max: 20, vulnerable: true),
-            recaptcha: { _ in "mock-recaptcha-token" }
-        )
-    }
-}
 ```
 
-**33.** `JackpotKit/Sources/JackpotForms/UI/DynamicFormModel.swift`
+**49.** `JackpotKit/Sources/JackpotForms/UI/DynamicFormModel.swift`
 
 The engine. Its state is `values` and `touched`; validity, errors and progress are computed
 from those on every read, so nothing has to be re-validated when a dropdown changes
@@ -2624,7 +3326,7 @@ public final class DynamicFormModel: ObservableObject {
 }
 ```
 
-**34.** `JackpotKit/Sources/JackpotForms/UI/Fields/FieldRenderer.swift`
+**50.** `JackpotKit/Sources/JackpotForms/UI/Fields/FieldRenderer.swift`
 
 The switch is the whole contract. Recaptcha never lands here — it is stripped in the mapper.
 
@@ -2706,7 +3408,7 @@ extension DynamicFormModel {
 }
 ```
 
-**35.** `JackpotKit/Sources/JackpotForms/UI/Fields/InputFieldView.swift`
+**51.** `JackpotKit/Sources/JackpotForms/UI/Fields/InputFieldView.swift`
 
 The text field, with the password checklist from `PasswordSuggestions` while focused.
 
@@ -2765,7 +3467,7 @@ struct InputFieldView: View {
 }
 ```
 
-**36.** `JackpotKit/Sources/JackpotForms/UI/DynamicFormContent.swift`
+**52.** `JackpotKit/Sources/JackpotForms/UI/DynamicFormContent.swift`
 
 Two views over one model. `DynamicFormContent` is the pages; `FormNavigationBar` is
 Previous / Next / Sign Up — that is how step 1 becomes step 2 — and slides the pages
@@ -2901,9 +3603,10 @@ public struct FormNavigationBar: View {
 }
 ```
 
-At this point the engine renders the mock schema end to end. Now the feature that presents it:
+At this point the engine renders the captured schema end to end and submits over the bundled
+transport. Now the feature that presents it:
 
-**37.** `JackpotKit/Sources/JackpotRegistration/DevConfig.swift`
+**53.** `JackpotKit/Sources/JackpotRegistration/DevConfig.swift`
 
 The `appsettings` app-data section. The host injects the decoded slice; this package maps
 `devConfig` into `PasswordSuggestions.Config` (`regionPasswordSuggestions` first, then `passwordLength`).
@@ -3000,8 +3703,10 @@ public extension PasswordSuggestions.Config {
 }
 ```
 
-**38.** `JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift`
+**54.** `JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift`
 
+`.bundled()` is the whole demo path: the bundled forms composition plus the captured
+`devConfig`, so the password checklist is driven by the same mapping production uses.
 `RegistrationDependencies` applies `applyingRegistrationRules()` — the ID-type link, the
 18-year date cap, and `passwordConfig` from injected `AppSettings` — to whatever `forms` it is given.
 `RegistrationView` is the Sign Up sheet: it owns the `DynamicFormModel`, puts
@@ -3027,8 +3732,17 @@ public struct RegistrationDependencies {
         self.theme = theme
     }
 
-    public static func mock() -> RegistrationDependencies {
-        RegistrationDependencies(forms: .mock())
+    /// The sheet on the bundled payloads — the composition the app uses, with the transport served
+    /// from disk. `devConfig` mirrors the captured `appsettings` slice the host injects in production.
+    public static func bundled() -> RegistrationDependencies {
+        RegistrationDependencies(
+            forms: .bundled(),
+            appSettings: AppSettings(devConfig: DevConfig(regionPasswordSuggestions: [
+                PasswordSuggestion(min: 8),
+                PasswordSuggestion(max: 20),
+                PasswordSuggestion(vulnerable: true),
+            ]))
+        )
     }
 }
 
@@ -3080,7 +3794,7 @@ public struct RegistrationView: View {
 }
 ```
 
-**39.** `JackpotKit/Sources/JackpotRegistration/RegistrationPanelController.swift`
+**55.** `JackpotKit/Sources/JackpotRegistration/RegistrationPanelController.swift`
 
 A drop-in for the view controller step 4 deletes: same `addChild`/`popupContainer` call
 site, SwiftUI behind it.
@@ -3111,7 +3825,7 @@ public final class RegistrationPanelController: UIHostingController<Registration
 }
 ```
 
-**40.** `JackpotKit/Sources/JackpotRegistration/Previews.swift`
+**56.** `JackpotKit/Sources/JackpotRegistration/Previews.swift`
 
 ```swift
 #if DEBUG
@@ -3121,7 +3835,7 @@ import JackpotForms
 
 struct RegistrationView_Previews: PreviewProvider {
     private struct Page: View {
-        var dependencies: RegistrationDependencies = .mock()
+        var dependencies: RegistrationDependencies = .bundled()
         var body: some View {
             RegistrationView(dependencies: dependencies, onClose: {}, onLogin: {}) { _ in }
                 .padding(.m)
@@ -3137,9 +3851,6 @@ struct RegistrationView_Previews: PreviewProvider {
                 .previewDisplayName("Sign Up — dark")
             Page().preferredColorScheme(.light)
                 .previewDisplayName("Sign Up — light")
-            Page(dependencies: .init(forms: .mock(delay: 3600)))
-                .preferredColorScheme(.dark)
-                .previewDisplayName("Loading")
         }
         .previewLayout(.sizeThatFits)
     }
@@ -3149,716 +3860,36 @@ struct RegistrationView_Previews: PreviewProvider {
 
 ---
 
-### ▶ Create PR — JackpotForms + JackpotRegistration, on the mock schema
+### ▶ Create PR — JackpotForms + JackpotRegistration, on the bundled payloads
 
 Open `JackpotRegistration/Previews.swift` and resume **Sign Up — dark**: the whole flow,
-both pages, success and the duplicate-mobile failure (`0000000000`), with no app and no
-backend.
+both pages, and — by entering `0000000000000` as the ID number — the CRM's rejection, with
+no app and no backend. The submit that succeeds and the submit that fails both go through
+`RemoteFormRepository`, so what you are reviewing is the shipping path.
 
 ---
 
-## Step 3 — JackpotNetworking
-
-The transport: `HTTPClient` is the seam tests stub, `APIEndpoint` is one request shape,
-`RemoteApiClient` is the pipeline. 200 / 400 / 401 / 500 are the contract;
-`unexpectedStatus` carries anything infrastructure returns. Nothing here knows about forms,
-and nothing here needs translations: the app keeps `getTranslation` for now.
-
-**41.**
-
-```bash
-mkdir -p JackpotKit/Sources/JackpotNetworking
-```
-
-**42.** `JackpotKit/Package.swift` — the whole file after this step
-
-A standalone module; nothing depends on it yet.
-
-```swift
-// swift-tools-version: 5.10
-import PackageDescription
-
-// One local package; each folder under Sources/ is a module. In Xcode: File → Add Package
-// Dependencies → Add Local… → JackpotKit, then add the product you need to the app target.
-// The floor is iOS 15, the host app's. docs/BUILD-PLAYBOOK.md builds this manifest one step at a
-// time, and scripts/build-playbook.py checks that its final step matches this file exactly.
-
-/// The app builds with `SWIFT_STRICT_CONCURRENCY = complete`; the package is held to the same bar.
-let strict: [SwiftSetting] = [.enableExperimentalFeature("StrictConcurrency")]
-
-let package = Package(
-    name: "JackpotKit",
-    defaultLocalization: "en",
-    platforms: [.iOS(.v15)],
-    products: [
-        .library(
-            name: "JackpotKit",
-            targets: ["JackpotUI", "JackpotForms", "JackpotRegistration",
-                      "JackpotNetworking"]
-        ),
-        .library(name: "JackpotUI", targets: ["JackpotUI"]),
-        .library(name: "JackpotForms", targets: ["JackpotForms"]),
-        .library(name: "JackpotRegistration", targets: ["JackpotRegistration"]),
-        .library(name: "JackpotNetworking", targets: ["JackpotNetworking"]),
-    ],
-    targets: [
-        .target(name: "JackpotUI", swiftSettings: strict),
-
-        .target(name: "JackpotForms", dependencies: ["JackpotUI"], swiftSettings: strict),
-        .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
-
-        .target(name: "JackpotNetworking", swiftSettings: strict),
-    ]
-)
-```
-
-**43.** `JackpotKit/Sources/JackpotNetworking/HTTPMethod.swift`
-
-```swift
-import Foundation
-
-public enum HTTPMethod: String, Sendable {
-    case GET, POST, PUT, PATCH, DELETE
-}
-```
-
-**44.** `JackpotKit/Sources/JackpotNetworking/HTTPClient.swift`
-
-Each client owns a `URLSession`; nothing here reaches for `.shared`.
-
-```swift
-import Foundation
-
-public protocol HTTPClient: Sendable {
-    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse)
-}
-
-public struct URLSessionHTTPClient: HTTPClient {
-    private let session: URLSession
-
-    public init(session: URLSession) {
-        self.session = session
-    }
-
-    public init(timeout: TimeInterval = 60, waitsForConnectivity: Bool = false) {
-        let configuration = URLSessionConfiguration.default
-        configuration.timeoutIntervalForRequest = timeout
-        configuration.waitsForConnectivity = waitsForConnectivity
-        self.session = URLSession(configuration: configuration)
-    }
-
-    public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
-        return (data, http)
-    }
-}
-```
-
-**45.** `JackpotKit/Sources/JackpotNetworking/APIEnvironment.swift`
-
-```swift
-import Foundation
-
-public struct APIEnvironment: Sendable {
-    public let baseURL: URL
-    public let defaultHeaders: [String: String]
-    public let defaultQueryItems: [URLQueryItem]
-
-    public init(baseURL: URL,
-                defaultHeaders: [String: String] = ["Accept": "application/json"],
-                defaultQueryItems: [URLQueryItem] = []) {
-        self.baseURL = baseURL
-        self.defaultHeaders = defaultHeaders
-        self.defaultQueryItems = defaultQueryItems
-    }
-}
-```
-
-**46.** `JackpotKit/Sources/JackpotNetworking/APIEndpoint.swift`
-
-```swift
-import Foundation
-
-public enum RequestBody: Sendable {
-    case json(Data)
-    case form([String: String])
-}
-
-public protocol APIEndpoint: Sendable {
-    var path: String { get }
-    var method: HTTPMethod { get }
-    var queryItems: [URLQueryItem] { get }
-    var headers: [String: String] { get }
-    var body: RequestBody? { get }
-    /// False for login and refresh, so an auth interceptor skips them.
-    var requiresAuth: Bool { get }
-    /// Safe to retry on 5xx / timeout.
-    var isIdempotent: Bool { get }
-}
-
-public extension APIEndpoint {
-    var method: HTTPMethod { .GET }
-    var queryItems: [URLQueryItem] { [] }
-    var headers: [String: String] { [:] }
-    var body: RequestBody? { nil }
-    var requiresAuth: Bool { true }
-    var isIdempotent: Bool { method == .GET }
-
-    func urlRequest(in environment: APIEnvironment) throws -> URLRequest {
-        let trimmed = path.hasPrefix("/") ? String(path.dropFirst()) : path
-        guard var components = URLComponents(
-            url: environment.baseURL.appendingPathComponent(trimmed),
-            resolvingAgainstBaseURL: false
-        ) else {
-            throw APIError.invalidURL(path)
-        }
-
-        let allQuery = environment.defaultQueryItems + queryItems
-        if !allQuery.isEmpty { components.queryItems = allQuery }
-
-        guard let url = components.url else { throw APIError.invalidURL(path) }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = method.rawValue
-        for (key, value) in environment.defaultHeaders { request.setValue(value, forHTTPHeaderField: key) }
-        for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
-
-        switch body {
-        case .json(let data):
-            request.httpBody = data
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        case .form(let fields):
-            var form = URLComponents()
-            form.queryItems = fields.map { URLQueryItem(name: $0.key, value: $0.value) }
-            request.httpBody = form.percentEncodedQuery?.data(using: .utf8)
-            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        case nil:
-            break
-        }
-        return request
-    }
-}
-```
-
-**47.** `JackpotKit/Sources/JackpotNetworking/APIError.swift`
-
-```swift
-import Foundation
-
-/// The error envelope on a non-2xx: `{ "code": 0, "message": "…" }`. `code` decodes from number or string;
-/// a body with neither field throws, so `try?` at the call site yields nil rather than an empty complaint.
-public struct APIProblem: Decodable, Sendable, Equatable {
-    public let code: Int?
-    public let message: String?
-
-    public init(code: Int?, message: String?) {
-        self.code = code
-        self.message = message
-    }
-
-    private enum CodingKeys: String, CodingKey { case code, message }
-
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        let decodedCode: Int?
-        if let number = try? container.decodeIfPresent(Int.self, forKey: .code) {
-            decodedCode = number
-        } else {
-            decodedCode = (try? container.decodeIfPresent(String.self, forKey: .code)).flatMap { $0.flatMap(Int.init) }
-        }
-        let decodedMessage = (try? container.decodeIfPresent(String.self, forKey: .message))?.flatMap {
-            $0.isEmpty ? nil : $0
-        }
-
-        guard decodedCode != nil || decodedMessage != nil else {
-            throw DecodingError.dataCorrupted(.init(
-                codingPath: decoder.codingPath,
-                debugDescription: "Not a problem envelope: neither `code` nor `message` present"
-            ))
-        }
-
-        code = decodedCode
-        message = decodedMessage
-    }
-}
-
-/// The contract is 200, 400, 401, 500; `unexpectedStatus` carries anything a proxy or WAF returns.
-public enum APIError: Error, Sendable, Equatable {
-    case invalidURL(String)
-    case transport(URLError.Code)
-    case badRequest(APIProblem?)
-    case unauthorized(APIProblem?)
-    case server(APIProblem?)
-    case unexpectedStatus(Int, APIProblem?)
-    case decoding(String)
-    case cancelled
-
-    public var problem: APIProblem? {
-        switch self {
-        case .badRequest(let p), .unauthorized(let p), .server(let p), .unexpectedStatus(_, let p):
-            return p
-        case .invalidURL, .transport, .decoding, .cancelled:
-            return nil
-        }
-    }
-
-    public var serverMessage: String? {
-        problem?.message.flatMap { $0.isEmpty ? nil : $0 }
-    }
-
-    public var isOffline: Bool {
-        guard case .transport(let code) = self else { return false }
-        return [.notConnectedToInternet, .networkConnectionLost, .dataNotAllowed, .timedOut].contains(code)
-    }
-}
-```
-
-**48.** `JackpotKit/Sources/JackpotNetworking/RequestInterceptor.swift`
-
-```swift
-import Foundation
-
-/// Auth headers, token refresh, logging: once, instead of in every endpoint.
-public protocol RequestInterceptor: Sendable {
-    func adapt(_ request: URLRequest, for endpoint: any APIEndpoint) async throws -> URLRequest
-    /// An adapted request to retry with, or nil. Called at most once.
-    func retry(_ request: URLRequest,
-               for endpoint: any APIEndpoint,
-               response: HTTPURLResponse,
-               data: Data) async -> URLRequest?
-}
-
-public extension RequestInterceptor {
-    func adapt(_ request: URLRequest, for endpoint: any APIEndpoint) async throws -> URLRequest { request }
-    func retry(_ request: URLRequest,
-               for endpoint: any APIEndpoint,
-               response: HTTPURLResponse,
-               data: Data) async -> URLRequest? { nil }
-}
-
-/// The token arrives through a closure, so this module never imports a session type.
-public struct BearerTokenInterceptor: RequestInterceptor {
-    private let token: @Sendable () async -> String?
-
-    public init(token: @escaping @Sendable () async -> String?) {
-        self.token = token
-    }
-
-    public func adapt(_ request: URLRequest, for endpoint: any APIEndpoint) async throws -> URLRequest {
-        guard endpoint.requiresAuth, let token = await token() else { return request }
-        var request = request
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        return request
-    }
-}
-```
-
-**49.** `JackpotKit/Sources/JackpotNetworking/ConditionalRequest.swift`
-
-Registration never sends a conditional request; `RemoteApiClient` still implements the
-protocol method, so the types have to exist. Step 6 uses them.
-
-```swift
-import Foundation
-
-/// The validators a response came back with; sending them back turns a revalidation into a 304.
-/// `Codable` because `AppDataCaching` stores them beside the payload.
-public struct HTTPValidators: Sendable, Equatable, Codable {
-    public let etag: String?
-    public let lastModified: String?
-
-    public init(etag: String?, lastModified: String?) {
-        self.etag = etag
-        self.lastModified = lastModified
-    }
-
-    public init?(_ response: HTTPURLResponse) {
-        let etag = response.value(forHTTPHeaderField: "ETag")
-        let lastModified = response.value(forHTTPHeaderField: "Last-Modified")
-        guard etag != nil || lastModified != nil else { return nil }
-        self.etag = etag
-        self.lastModified = lastModified
-    }
-
-    var conditionalHeaders: [String: String] {
-        var headers: [String: String] = [:]
-        if let etag { headers["If-None-Match"] = etag }
-        if let lastModified { headers["If-Modified-Since"] = lastModified }
-        return headers
-    }
-}
-
-public enum ConditionalResponse: Sendable, Equatable {
-    case notModified
-    case fresh(Data, HTTPValidators?)
-}
-```
-
-**50.** `JackpotKit/Sources/JackpotNetworking/RemoteApiClient.swift`
-
-The retry policy is the part to read: a 5xx or a dropped connection is retried, a 4xx never
-is, and a non-idempotent request is retried only when the transport failed before the
-server could have seen it.
-
-```swift
-import Foundation
-
-public protocol ApiClient: Sendable {
-    func request<Response: Decodable & Sendable>(_ endpoint: some APIEndpoint) async throws -> Response
-    func request(_ endpoint: some APIEndpoint) async throws
-    /// The response body, undecoded.
-    func data(for endpoint: some APIEndpoint) async throws -> Data
-    /// Returns `.notModified` on a 304.
-    func revalidate(_ endpoint: some APIEndpoint,
-                    validators: HTTPValidators?) async throws -> ConditionalResponse
-}
-
-public struct RemoteApiClient: ApiClient {
-    private let environment: APIEnvironment
-    private let httpClient: any HTTPClient
-    private let interceptors: [any RequestInterceptor]
-    private let decoder: JSONDecoder
-    private let maxTransientRetries: Int
-
-    public init(environment: APIEnvironment,
-                httpClient: any HTTPClient = URLSessionHTTPClient(),
-                interceptors: [any RequestInterceptor] = [],
-                decoder: JSONDecoder = JSONDecoder(),
-                maxTransientRetries: Int = 1) {
-        self.environment = environment
-        self.httpClient = httpClient
-        self.interceptors = interceptors
-        self.decoder = decoder
-        self.maxTransientRetries = maxTransientRetries
-    }
-
-    public func request<Response: Decodable & Sendable>(_ endpoint: some APIEndpoint) async throws -> Response {
-        let (data, _) = try await perform(endpoint)
-        do {
-            return try decoder.decode(Response.self, from: data)
-        } catch {
-            // The full description names the failing key path.
-            throw APIError.decoding("\(Response.self): \(error)")
-        }
-    }
-
-    public func request(_ endpoint: some APIEndpoint) async throws {
-        _ = try await perform(endpoint)
-    }
-
-    public func data(for endpoint: some APIEndpoint) async throws -> Data {
-        try await perform(endpoint).0
-    }
-
-    public func revalidate(_ endpoint: some APIEndpoint,
-                           validators: HTTPValidators?) async throws -> ConditionalResponse {
-        let (data, response) = try await perform(endpoint, extraHeaders: validators?.conditionalHeaders ?? [:])
-        if response.statusCode == 304 { return .notModified }
-        return .fresh(data, HTTPValidators(response))
-    }
-
-    // MARK: - Pipeline
-
-    private func perform(_ endpoint: some APIEndpoint,
-                         extraHeaders: [String: String] = [:]) async throws -> (Data, HTTPURLResponse) {
-        var request = try endpoint.urlRequest(in: environment)
-        for (key, value) in extraHeaders {
-            request.setValue(value, forHTTPHeaderField: key)
-        }
-        for interceptor in interceptors {
-            request = try await interceptor.adapt(request, for: endpoint)
-        }
-        return try await send(request, for: endpoint, didRetryAuth: false, transientRetries: 0)
-    }
-
-    private func send(_ request: URLRequest,
-                      for endpoint: some APIEndpoint,
-                      didRetryAuth: Bool,
-                      transientRetries: Int) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await transport(request)
-
-        switch response.statusCode {
-        case 200..<300:
-            return (data, response)
-
-        case 304:
-            return (data, response)
-
-        // `didRetryAuth` is a parameter, not state, so a second 401 cannot loop.
-        case 401:
-            if !didRetryAuth {
-                for interceptor in interceptors {
-                    if let retry = await interceptor.retry(request, for: endpoint, response: response, data: data) {
-                        return try await send(retry, for: endpoint, didRetryAuth: true, transientRetries: transientRetries)
-                    }
-                }
-            }
-            throw APIError.unauthorized(problem(from: data))
-
-        case 400:
-            throw APIError.badRequest(problem(from: data))
-
-        // A POST may already have taken effect, so only idempotent requests are retried.
-        case 500, 502...504:
-            if endpoint.isIdempotent, transientRetries < maxTransientRetries {
-                try await Task.sleep(nanoseconds: 1_000_000_000)
-                return try await send(request, for: endpoint, didRetryAuth: didRetryAuth,
-                                      transientRetries: transientRetries + 1)
-            }
-            throw response.statusCode == 500
-                ? APIError.server(problem(from: data))
-                : APIError.unexpectedStatus(response.statusCode, problem(from: data))
-
-        default:
-            throw APIError.unexpectedStatus(response.statusCode, problem(from: data))
-        }
-    }
-
-    private func transport(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        do {
-            return try await httpClient.send(request)
-        } catch is CancellationError {
-            throw APIError.cancelled
-        // What URLSession throws when a Task is cancelled mid-flight.
-        } catch let error as URLError where error.code == .cancelled {
-            throw APIError.cancelled
-        } catch let error as URLError {
-            throw APIError.transport(error.code)
-        }
-    }
-
-    private func problem(from data: Data) -> APIProblem? {
-        try? JSONDecoder().decode(APIProblem.self, from: data)
-    }
-}
-```
-
----
-
-### ▶ Create PR — JackpotNetworking
-
----
-
-## Step 4 — Connect the forms to the network, and replace the flow in the app
-
-The `Remote` folder joins `JackpotForms`: the submit envelope, the error boundary and
-`.live(...)`. The engine is untouched — that is the point of the protocol — and the sheet is
-untouched too. The host injects the registration JSON, `appSettings` and `translate` from the
-bootstrap payload it already fetched into `GlobalData` — JackpotKit does not fetch app-data,
-devConfig or the form schema. The only new request is submit (plus recaptcha). After step 6 the
-same blobs come from `AppDataResponse` that *replaced* the GlobalData load, not a second GET.
-`recaptcha` is a closure over a `RecaptchaClient` the composition root created with
-`Recaptcha.fetchClient(withSiteKey:)` — RecaptchaEnterprise is an app-target dependency, not
-JackpotKit's. Throw to fail the submit; return nil to post without a token.
-
-**51.**
-
-```bash
-mkdir -p JackpotKit/Sources/JackpotForms/Remote
-```
-
-**52.** `JackpotKit/Package.swift` — the whole file after this step
-
-`JackpotForms` gains `JackpotNetworking`. No new targets.
-
-```swift
-// swift-tools-version: 5.10
-import PackageDescription
-
-// One local package; each folder under Sources/ is a module. In Xcode: File → Add Package
-// Dependencies → Add Local… → JackpotKit, then add the product you need to the app target.
-// The floor is iOS 15, the host app's. docs/BUILD-PLAYBOOK.md builds this manifest one step at a
-// time, and scripts/build-playbook.py checks that its final step matches this file exactly.
-
-/// The app builds with `SWIFT_STRICT_CONCURRENCY = complete`; the package is held to the same bar.
-let strict: [SwiftSetting] = [.enableExperimentalFeature("StrictConcurrency")]
-
-let package = Package(
-    name: "JackpotKit",
-    defaultLocalization: "en",
-    platforms: [.iOS(.v15)],
-    products: [
-        .library(
-            name: "JackpotKit",
-            targets: ["JackpotUI", "JackpotForms", "JackpotRegistration",
-                      "JackpotNetworking"]
-        ),
-        .library(name: "JackpotUI", targets: ["JackpotUI"]),
-        .library(name: "JackpotForms", targets: ["JackpotForms"]),
-        .library(name: "JackpotRegistration", targets: ["JackpotRegistration"]),
-        .library(name: "JackpotNetworking", targets: ["JackpotNetworking"]),
-    ],
-    targets: [
-        .target(name: "JackpotUI", swiftSettings: strict),
-
-        .target(name: "JackpotForms", dependencies: ["JackpotUI", "JackpotNetworking"], swiftSettings: strict),
-        .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
-
-        .target(name: "JackpotNetworking", swiftSettings: strict),
-    ]
-)
-```
-
-**53.** `JackpotKit/Sources/JackpotForms/Remote/FormEndpoints.swift`
-
-The submit path and the envelope it comes back in. The form GET is not used: the schema is injected.
-
-```swift
-import Foundation
-import JackpotNetworking
-
-struct FormRequest: APIEndpoint {
-    let brand: String
-    let region: String
-    let formName: FormName
-
-    var path: String { "cron/forms/\(brand)/\(region)/\(formName.rawValue)" }
-    var method: HTTPMethod { .GET }
-    var queryItems: [URLQueryItem] { [URLQueryItem(name: "api-version", value: "2.0")] }
-}
-
-/// No `api-version`. No auth: registration happens before login.
-struct FormSubmitRequest: APIEndpoint {
-    let bodyData: Data
-
-    /// ISO-8601 is an assumption; the production encoder wasn't visible.
-    init(_ submission: FormSubmission) throws {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        bodyData = try encoder.encode(submission)
-    }
-
-    var path: String { "cron/forms/submit" }
-    var method: HTTPMethod { .POST }
-    var body: RequestBody? { .json(bodyData) }
-    var requiresAuth: Bool { false }
-}
-
-/// HTTP 200 is not success: `isSuccessful` is.
-struct FormSubmitEnvelope: Decodable {
-    let data: FormSubmitResult?
-    let isSuccessful: Bool?
-    let error: Failure?
-
-    struct Failure: Decodable {
-        let code: Int?
-        let displayCode: Int?
-        let message: String?
-    }
-}
-```
-
-**54.** `JackpotKit/Sources/JackpotForms/Remote/RemoteFormRepository.swift`
-
-Submit only — HTTP 200 is not success, the envelope's `isSuccessful` is, and a body that is
-not the envelope is a rejection. The schema is the `registration` blob the host already has.
-The engine cannot see `APIError`, so anything not translated in `userFacing` becomes a generic
-failure on screen. `.live(formJSON:baseURL:translate:recaptcha:)` is at the bottom.
-
-```swift
-import Foundation
-import JackpotNetworking
-
-public struct RemoteFormRepository: FormRepository {
-    private let form: FormSchema
-    private let apiClient: any ApiClient
-    private let translate: @Sendable (String) -> String
-
-    public init(form: FormSchema = FormSchema(id: 0, codeName: .registration, sections: []),
-                apiClient: any ApiClient,
-                translate: @escaping @Sendable (String) -> String = { $0 }) {
-        self.form = form
-        self.apiClient = apiClient
-        self.translate = translate
-    }
-
-    public func form(named name: FormName) async throws -> FormSchema {
-        guard name == form.codeName else { throw FormError.notFound(name) }
-        return form
-    }
-
-    public func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
-        do {
-            let data = try await apiClient.data(for: FormSubmitRequest(submission))
-            // An empty 2xx is taken as accepted (an assumption); anything else must say `isSuccessful: true`.
-            if data.isEmpty { return FormSubmitResult() }
-            let envelope = try? JSONDecoder().decode(FormSubmitEnvelope.self, from: data)
-            guard let envelope, envelope.isSuccessful == true else {
-                let failure = envelope?.error
-                throw FormError.server(message: message(code: failure?.code ?? failure?.displayCode, server: failure?.message)
-                                       ?? "We couldn't submit the form. Please try again.")
-            }
-            return envelope.data ?? FormSubmitResult()
-        } catch {
-            throw userFacing(error, formName: submission.formCodeName)
-        }
-    }
-
-    // MARK: Errors
-
-    /// Where transport errors become something a person can read; the engine never sees `APIError`.
-    func userFacing(_ error: any Error, formName: FormName) -> any Error {
-        guard let apiError = error as? APIError else { return error }
-        switch apiError {
-        // A cancelled load is a navigation event, not a failure.
-        case .cancelled:
-            return CancellationError()
-        case .transport where apiError.isOffline:
-            return FormError.offline
-        case .unexpectedStatus(404, _):
-            return FormError.notFound(formName)
-        case .badRequest, .unauthorized, .server, .unexpectedStatus:
-            return message(code: apiError.problem?.code, server: apiError.serverMessage)
-                .map { FormError.server(message: $0) } ?? FormError.unexpected
-        case .transport, .decoding, .invalidURL:
-            return FormError.unexpected
-        }
-    }
-
-    /// Error codes are translation keys, `jpc-reg-error.{code}` for registration and the bare number elsewhere;
-    /// an untranslated key falls back to the server's wording.
-    func message(code: Int?, server: String?) -> String? {
-        for key in code.map({ ["jpc-reg-error.\($0)", String($0)] }) ?? [] {
-            let copy = translate(key)
-            if copy != key { return copy }
-        }
-        return server
-    }
-}
-
-public extension FormDependencies {
-    static func live(form: FormSchema,
-                     baseURL: URL,
-                     translate: @escaping @Sendable (String) -> String,
-                     recaptcha: @escaping @Sendable (String) async throws -> String?) -> FormDependencies {
-        let client = RemoteApiClient(environment: APIEnvironment(baseURL: baseURL))
-        return FormDependencies(
-            repository: RemoteFormRepository(form: form, apiClient: client, translate: translate),
-            translate: translate,
-            recaptcha: recaptcha
-        )
-    }
-
-    static func live(formJSON: Data,
-                     baseURL: URL,
-                     translate: @escaping @Sendable (String) -> String,
-                     recaptcha: @escaping @Sendable (String) async throws -> String?) throws -> FormDependencies {
-        try live(form: FormSchema(json: formJSON), baseURL: baseURL, translate: translate, recaptcha: recaptcha)
-    }
-}
-```
-
-Then the app, once. **In Xcode:** File → Add Package Dependencies → Add Local… →
-`JackpotKit`, then add **JackpotRegistration** to the app target's frameworks.
-
-**55.** `Sources/Features/Registration/RegistrationPresenter.swift`
+## Step 4 — Replace the flow in the app
+
+No package change: registration is already composed against the real client, so going live is
+one swap of the transport at the composition root — `.bundled()` becomes `.live(...)`, and
+`URLSessionHTTPClient` is the default. The host injects the registration JSON, `appSettings`
+and `translate` from the bootstrap payload it already fetched into `GlobalData` — JackpotKit
+does not fetch app-data, devConfig or the form schema. The only new request is submit (plus
+recaptcha). After step 6 the same blobs come from `AppDataResponse` that *replaced* the
+GlobalData load, not a second GET. `recaptcha` is a closure over a `RecaptchaClient` the
+composition root created with `Recaptcha.fetchClient(withSiteKey:)` — RecaptchaEnterprise is an
+app-target dependency, not JackpotKit's. Throw to fail the submit; return nil to post without a
+token.
+
+**In Xcode:** File → Add Package Dependencies → Add Local… → `JackpotKit`, then add
+**JackpotRegistration** to the app target's frameworks.
+
+**57.** `Sources/Features/Registration/RegistrationPresenter.swift`
 
 `.live` posts submit; the schema, copy and password rules are injected from the bootstrap
-the app already loaded. `.mock()` keeps the faked submit for a build without the backend.
+the app already loaded. The only difference from `.bundled()` is which `HTTPClient` is under it,
+so `.bundled()` remains the build without a backend.
 
 ```swift
 import UIKit
@@ -3899,14 +3930,14 @@ extension MainViewController {
 }
 ```
 
-**56.** Point every existing entry point at `presentRegistration()`:
+**58.** Point every existing entry point at `presentRegistration()`:
 
 - the header **SIGN UP** button
 - the bottom bar **Sign Up** item
 - `NavigationHandler` — the `registration` sitemap branch
 - the Login panel's **Sign Up ›** link
 
-**57.** Delete:
+**59.** Delete:
 
 ```
 RegistrationViewController.swift
@@ -3925,7 +3956,7 @@ flowOneViewController
 flowTwoViewController
 ```
 
-**58.**
+**60.**
 
 ```bash
 grep -rn "registrationPopup\|flowOneViewController\|flowTwoViewController" --include=*.swift .
@@ -3950,13 +3981,13 @@ lookup; `TranslationsStore` owns it for the session. `getTranslation` becomes a 
 store, which fixes the per-lookup rebuild for the whole app with no call-site changes —
 registration included, since it only ever held the function.
 
-**59.**
+**61.**
 
 ```bash
 mkdir -p JackpotKit/Sources/JackpotLocalization
 ```
 
-**60.** `JackpotKit/Package.swift` — the whole file after this step
+**62.** `JackpotKit/Package.swift` — the whole file after this step
 
 `JackpotLocalization` arrives with no dependencies; nothing depends on it until step 6.
 
@@ -3979,29 +4010,34 @@ let package = Package(
     products: [
         .library(
             name: "JackpotKit",
-            targets: ["JackpotUI", "JackpotForms", "JackpotRegistration",
-                      "JackpotNetworking", "JackpotLocalization"]
+            targets: ["JackpotUI", "JackpotNetworking", "JackpotForms",
+                      "JackpotRegistration", "JackpotLocalization"]
         ),
         .library(name: "JackpotUI", targets: ["JackpotUI"]),
+        .library(name: "JackpotNetworking", targets: ["JackpotNetworking"]),
         .library(name: "JackpotForms", targets: ["JackpotForms"]),
         .library(name: "JackpotRegistration", targets: ["JackpotRegistration"]),
-        .library(name: "JackpotNetworking", targets: ["JackpotNetworking"]),
         .library(name: "JackpotLocalization", targets: ["JackpotLocalization"]),
     ],
     targets: [
         .target(name: "JackpotUI", swiftSettings: strict),
 
-        .target(name: "JackpotForms", dependencies: ["JackpotUI", "JackpotNetworking"], swiftSettings: strict),
-        .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
-
         .target(name: "JackpotNetworking", swiftSettings: strict),
+
+        .target(
+            name: "JackpotForms",
+            dependencies: ["JackpotUI", "JackpotNetworking"],
+            resources: [.process("Resources")],
+            swiftSettings: strict
+        ),
+        .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
 
         .target(name: "JackpotLocalization", swiftSettings: strict),
     ]
 )
 ```
 
-**61.** `JackpotKit/Sources/JackpotLocalization/Translations.swift`
+**63.** `JackpotKit/Sources/JackpotLocalization/Translations.swift`
 
 Keys are tried region-suffixed first (`terms-jza` before `terms`), and a miss returns the
 key, the same contract as `getTranslation` — which is what lets `translations(_:)` stand
@@ -4042,7 +4078,7 @@ public struct Translations: Sendable, Equatable {
 }
 ```
 
-**62.** `JackpotKit/Sources/JackpotLocalization/TranslationsRepository.swift`
+**64.** `JackpotKit/Sources/JackpotLocalization/TranslationsRepository.swift`
 
 The protocol and the fixed-table stub. Do not fetch app-data to fill it — `adopt` the
 `locales` the host already has. `RemoteTranslationsRepository` is only the replacement for
@@ -4069,7 +4105,7 @@ public struct StubTranslationsRepository: TranslationsRepository {
 }
 ```
 
-**63.** `JackpotKit/Sources/JackpotLocalization/TranslationsStore.swift`
+**65.** `JackpotKit/Sources/JackpotLocalization/TranslationsStore.swift`
 
 ```swift
 import Foundation
@@ -4131,7 +4167,7 @@ public final class TranslationsStore: ObservableObject {
 }
 ```
 
-**64.** `the app` — two changes and a non-change
+**66.** `the app` — two changes and a non-change
 
 ```swift
 // 1. The store is created once, at the composition root, and injected.
@@ -4172,13 +4208,13 @@ last good payload; `AppDataLoader` serves it at zero latency and revalidates beh
 `DevConfig` lives on `JackpotRegistration`; the host injects `appsettings` from the snapshot.
 Registration does not fetch app-data.
 
-**65.**
+**67.**
 
 ```bash
 mkdir -p JackpotKit/Sources/JackpotAppData
 ```
 
-**66.** `JackpotKit/Package.swift` — the whole file after this step
+**68.** `JackpotKit/Package.swift` — the whole file after this step
 
 The last module. The manifest in the repository, less its test targets.
 
@@ -4201,23 +4237,28 @@ let package = Package(
     products: [
         .library(
             name: "JackpotKit",
-            targets: ["JackpotUI", "JackpotForms", "JackpotRegistration",
-                      "JackpotNetworking", "JackpotLocalization", "JackpotAppData"]
+            targets: ["JackpotUI", "JackpotNetworking", "JackpotForms",
+                      "JackpotRegistration", "JackpotLocalization", "JackpotAppData"]
         ),
         .library(name: "JackpotUI", targets: ["JackpotUI"]),
+        .library(name: "JackpotNetworking", targets: ["JackpotNetworking"]),
         .library(name: "JackpotForms", targets: ["JackpotForms"]),
         .library(name: "JackpotRegistration", targets: ["JackpotRegistration"]),
-        .library(name: "JackpotNetworking", targets: ["JackpotNetworking"]),
         .library(name: "JackpotLocalization", targets: ["JackpotLocalization"]),
         .library(name: "JackpotAppData", targets: ["JackpotAppData"]),
     ],
     targets: [
         .target(name: "JackpotUI", swiftSettings: strict),
 
-        .target(name: "JackpotForms", dependencies: ["JackpotUI", "JackpotNetworking"], swiftSettings: strict),
-        .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
-
         .target(name: "JackpotNetworking", swiftSettings: strict),
+
+        .target(
+            name: "JackpotForms",
+            dependencies: ["JackpotUI", "JackpotNetworking"],
+            resources: [.process("Resources")],
+            swiftSettings: strict
+        ),
+        .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
 
         .target(name: "JackpotLocalization", swiftSettings: strict),
 
@@ -4226,7 +4267,7 @@ let package = Package(
 )
 ```
 
-**67.** `JackpotKit/Sources/JackpotAppData/AppData.swift`
+**69.** `JackpotKit/Sources/JackpotAppData/AppData.swift`
 
 ```swift
 import Foundation
@@ -4293,7 +4334,7 @@ public enum AppDataError: Error, Equatable {
 }
 ```
 
-**68.** `JackpotKit/Sources/JackpotAppData/AppDataCache.swift`
+**70.** `JackpotKit/Sources/JackpotAppData/AppDataCache.swift`
 
 ```swift
 import Foundation
@@ -4399,7 +4440,7 @@ public final class InMemoryAppDataCache: AppDataCaching, @unchecked Sendable {
 }
 ```
 
-**69.** `JackpotKit/Sources/JackpotAppData/AppDataLoader.swift`
+**71.** `JackpotKit/Sources/JackpotAppData/AppDataLoader.swift`
 
 ```swift
 import Foundation
@@ -4510,7 +4551,7 @@ public actor AppDataLoader {
 }
 ```
 
-**70.** `JackpotKit/Sources/JackpotAppData/RemoteTranslationsRepository.swift`
+**72.** `JackpotKit/Sources/JackpotAppData/RemoteTranslationsRepository.swift`
 
 ```swift
 import Foundation
@@ -4532,7 +4573,7 @@ public struct RemoteTranslationsRepository: TranslationsRepository {
 }
 ```
 
-**71.** `the app — bootstrap`
+**73.** `the app — bootstrap`
 
 ```swift
 let loader = AppDataLoader(apiClient: client, cache: FileAppDataCache(), policy: .default)

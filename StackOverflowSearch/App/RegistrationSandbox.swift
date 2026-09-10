@@ -7,7 +7,7 @@ import JackpotUI
 struct RegistrationSandbox: View {
     let onClose: () -> Void
 
-    private static let dependencies = RegistrationDependencies.mock()
+    private static let dependencies = RegistrationDependencies.bundled()
 
     @State private var result: RegistrationResult?
 

@@ -13,8 +13,17 @@ public struct RegistrationDependencies {
         self.theme = theme
     }
 
-    public static func mock() -> RegistrationDependencies {
-        RegistrationDependencies(forms: .mock())
+    /// The sheet on the bundled payloads — the composition the app uses, with the transport served
+    /// from disk. `devConfig` mirrors the captured `appsettings` slice the host injects in production.
+    public static func bundled() -> RegistrationDependencies {
+        RegistrationDependencies(
+            forms: .bundled(),
+            appSettings: AppSettings(devConfig: DevConfig(regionPasswordSuggestions: [
+                PasswordSuggestion(min: 8),
+                PasswordSuggestion(max: 20),
+                PasswordSuggestion(vulnerable: true),
+            ]))
+        )
     }
 }
 

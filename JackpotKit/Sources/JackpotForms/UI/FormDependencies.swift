@@ -35,14 +35,3 @@ public struct FormDependencies {
         "passportNumberRegex": "^.{5,20}$",
     ]
 }
-
-public extension FormDependencies {
-    static func mock(delay: TimeInterval = 0.35) -> FormDependencies {
-        FormDependencies(
-            repository: MockFormRepository(delay: delay),
-            translate: MockForm.translate,
-            passwordConfig: .init(min: 8, max: 20, vulnerable: true),
-            recaptcha: { _ in "mock-recaptcha-token" }
-        )
-    }
-}

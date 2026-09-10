@@ -8,11 +8,12 @@ not wait for them. No feature flags; the app has none and this plan doesn't intr
 
 **Principles**
 
-- **UI first, to show progress.** Step 1 is visible components. Step 2 is the whole Sign Up
-  sheet on the captured schema, with no backend.
-- **Mock before live.** The engine ships with a `FormRepository` protocol and a bundled-JSON
-  implementation. The live one arrives at step 4 and replaces the stub at one line in
-  composition.
+- **UI first, to show progress.** Step 1 is visible components. Step 3 is the whole Sign Up
+  sheet on the captured payloads, with no backend.
+- **One repository, one composition.** The transport lands at step 2, before anything needs it,
+  so the engine is wired to `RemoteFormRepository` from its first line. Running without a
+  backend is a transport choice — `BundledHTTPClient` serves captured JSON at the one seam
+  `HTTPClient` already provides — not a second repository to keep in step with the first.
 - **The app is touched once.** Steps 1 to 3 are additive package code nobody calls. Step 4 is
   a swap plus a delete.
 - **Localisation last.** The feature ships on the existing `getTranslation`, wrapped. The
@@ -27,17 +28,17 @@ The build order, file by file, is [BUILD-PLAYBOOK.md](BUILD-PLAYBOOK.md).
 | # | Step | Modules | Demoable as | Tests |
 |---|---|---|---|---|
 | 1 | **`JackpotUI`** — design system | JackpotUI | the gallery preview: every component, every state | 20 |
-| 2 | **`JackpotForms` on the bundled schema** + **`JackpotRegistration`** | JackpotForms, JackpotRegistration | the Sign Up sheet, both pages, mock service | 55 |
-| 3 | **`JackpotNetworking`** | JackpotNetworking | `RemoteApiClient` against a stubbed transport | 34 |
-| 4 | **Connect forms to the network; replace the flow in the app** | JackpotForms/Remote + app | registration live in the app, copy from `getTranslation` | 21 |
+| 2 | **`JackpotNetworking`** | JackpotNetworking | `RemoteApiClient` against a stubbed transport | 38 |
+| 3 | **`JackpotForms` on the bundled payloads** + **`JackpotRegistration`** | JackpotForms, JackpotRegistration | the Sign Up sheet, both pages, submitted over bundled JSON | 54 |
+| 4 | **Replace the flow in the app** | app | registration live in the app, copy from `getTranslation` | — |
 | 5 | **Fix translations** | JackpotLocalization | `getTranslation` becomes a shim over the store; registration untouched | 18 |
 | 6 | **Fix app data** | JackpotAppData | config served from disk on launch, revalidated behind it | 23 |
 
 ```
-JackpotUI ──► JackpotForms + JackpotRegistration (stub) ──► JackpotNetworking ──► live + app swap ──► translations ──► app data
+JackpotUI ──► JackpotNetworking ──► JackpotForms + JackpotRegistration (bundled transport) ──► app swap ──► translations ──► app data
 ```
 
-171 tests through step 6. Everything lives in one local package, `JackpotKit`; each row above
+153 tests through step 6. Everything lives in one local package, `JackpotKit`; each row above
 is a module inside it, not a package of its own. The manifest is built up step by step in the
 playbook, and the generator checks its final step against `Package.swift`.
 
@@ -69,43 +70,58 @@ the extension points; the next component is designed against the next real schem
 
 **Review:** open the gallery preview in `JackpotPreviewPanel.swift`. 20 tests.
 
-## Step 2 · `JackpotForms` on the bundled schema, and `JackpotRegistration`
+## Step 2 · `JackpotNetworking`
 
-The engine, with no network: one module, three folders pointing one way.
+`HTTPClient`, `APIEndpoint`, `APIError`, interceptors, `RemoteApiClient`. 200 / 400 / 401 / 500
+with `unexpectedStatus` for anything infrastructure returns. Nothing here needs translations:
+the app keeps `getTranslation`.
+
+`BundledHTTPClient` is the second implementation of the `HTTPClient` seam: captured JSON in, an
+`HTTPURLResponse` out, with optional latency and closure routing so a fixture can depend on what
+was posted. It is what makes step 3 possible without a backend, and it fakes only the bytes —
+the client, the endpoints, the status handling and the decoding above it are the shipping ones.
+
+**Review:** `RemoteApiClientTests` (the retry policy), the `APIProblem.code`-is-an-`Int` fix, and
+`BundledHTTPClient.swift`. 38 tests.
+
+## Step 3 · `JackpotForms` on the bundled payloads, and `JackpotRegistration`
+
+The engine, wired to the client from its first line: one module, folders pointing one way.
 
 | Folder | Holds |
 |---|---|
 | `Domain` | `FormSchema`, `FormField` (with `accepts(_:overrideRegex:)`), `FormName`, `FormValue`, `FormSubmitResult`, `FormError`, the `FormRepository` protocol |
-| `Data` | the wire DTOs, each mapping to its domain value (internal); `StubFormRepository`, serving the captured `registration.json` |
-| `UI` | `DynamicFormModel`, `DynamicFormContent`, `FormNavigationBar`, `FormDependencies` (+ `.mock()` and the placeholder copy), `FieldRenderer` binding the model to the `JackpotUI` components, `InputFieldView` for text entry |
+| `Data` | the wire DTOs, each mapping to its domain value (internal) |
+| `Password` | `PasswordSuggestions` — the checklist rows, keyed the way the web keys them |
+| `Remote` | the endpoints and the submit envelope (internal); `RemoteFormRepository`, the only `FormRepository`; `.live()` and `.bundled()` |
+| `Resources` | the captured payloads: `registration.json`, `locales.json`, and the two submit envelopes |
+| `UI` | `DynamicFormModel`, `DynamicFormContent`, `FormNavigationBar`, `FormDependencies`, `FieldRenderer` binding the model to the `JackpotUI` components, `InputFieldView` for text entry |
+
+`.bundled()` is `.live()` with `BundledHTTPClient` underneath, so there is no stage at which the
+sheet runs on something it will later stop running on. The schema is the CRM's response saved
+verbatim and decoded by the same mapper the app uses; the copy is the `locales` slice of the same
+payload. No schema and no copy table is restated in Swift.
 
 The engine's defaults are generic — no cross-field regex links, no date cap. Registration's
 rules come with the feature, in the same step:
 
 | File | Holds |
 |---|---|
-| `RegistrationFeature.swift` | `RegistrationDependencies` (`.mock()` for demos; applies the ID-type link and the 18-year date cap), `RegistrationView` — the pages inside `JackpotPanel`, the login row and navigation in its footer, with `onClose`, `onLogin` and `onComplete`; `RegistrationResult` is `FormSubmitResult` under the app's name |
+| `RegistrationFeature.swift` | `RegistrationDependencies` (`.bundled()` for demos; applies the ID-type link, the 18-year date cap and `passwordConfig` from injected `AppSettings`), `RegistrationView` — the pages inside `JackpotPanel`, the login row and navigation in its footer, with `onClose`, `onLogin` and `onComplete`; `RegistrationResult` is `FormSubmitResult` under the app's name |
+| `DevConfig.swift` | the `appsettings` slice, mapped into `PasswordSuggestions.Config` |
 | `RegistrationPanelController.swift` | a `UIHostingController` sized for the legacy popup container |
 
 **Review:** `FieldRenderer.swift` (the CRM↔app contract), `FormField.swift` (`accepts`, untrusted
-regexes), `DynamicFormModel.swift` (touched state, section gating, ID-type → ID-number), then
-the previews in `JackpotRegistration/Previews.swift`: the full flow, both pages, success and
-the duplicate-mobile failure path, with no app and no backend. 55 tests.
+regexes), `DynamicFormModel.swift` (touched state, section gating, ID-type → ID-number),
+`RemoteFormRepository.swift` (HTTP 200 is not success; `userFacing`), then the previews in
+`JackpotRegistration/Previews.swift`: the full flow, both pages, and — with `0000000000000` as the
+ID number — the CRM's rejection, with no app and no backend. 54 tests.
 
-## Step 3 · `JackpotNetworking`
+## Step 4 · Replace the flow in the app
 
-`HTTPClient`, `APIEndpoint`, `APIError`, interceptors, `RemoteApiClient`. 200 / 400 / 401 / 500
-with `unexpectedStatus` for anything infrastructure returns. Nothing here needs translations:
-the app keeps `getTranslation`.
-
-**Review:** `RemoteApiClientTests` (the retry policy) and the `APIProblem.code`-is-an-`Int` fix.
-34 tests.
-
-## Step 4 · Connect the forms to the network, and replace the flow in the app
-
-`JackpotForms/Remote` — `RemoteFormRepository` (fetch, submit, the error boundary, `.live()`)
-and the endpoints. The engine and the sheet are untouched; `.mock()` becomes
-`.live(baseURL:translate:)` at one call site, and `translate` is the app's existing
+No package change: registration is already composed against the real client, so going live is one
+swap of the transport. `.bundled()` becomes `.live(formJSON:baseURL:translate:recaptcha:)` at one
+call site, `URLSessionHTTPClient` is the default, and `translate` is the app's existing
 `getTranslation` passed as a closure: a key in, its text out, the key itself on a miss. No
 adapter type. Then the only change to the app, in two parts:
 
@@ -131,7 +147,7 @@ their nibs, their `GlobalData` handles.
 
 Net negative. The diff is small enough to review in one sitting and revert in one commit.
 
-**Review:** `RemoteFormRepository.swift` (HTTP 200 is not success; `userFacing`) and the app diff. 21 tests.
+**Review:** the app diff. No package tests: nothing in the package changed.
 
 ## Step 5 · Fix translations
 
@@ -152,7 +168,7 @@ the same payload. In the app: bootstrap from the loader, cache first. 23 tests.
 
 ## Sequencing notes
 
-**What's demoable when.** After step 1, components. After step 2, the entire sheet on a device
+**What's demoable when.** After step 1, components. After step 3, the entire sheet on a device
 from this repository's sandbox. After step 4, registration live in the app. Steps 5 and 6
 change nothing visible to a registering user.
 

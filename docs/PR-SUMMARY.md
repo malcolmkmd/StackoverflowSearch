@@ -72,28 +72,28 @@ at step 5, when `getTranslation` becomes a shim over the store.
 
 The submit goes live with the fetch: `.live` posts through `RemoteFormRepository.submitForm`,
 whose envelope handling is tested against captured responses but not yet exercised end to end —
-see [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md). `.mock()` keeps the faked submit for a build
-without the backend.
+see [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md). `.bundled()` is the same composition over
+`BundledHTTPClient`, so a build without the backend still runs that envelope handling.
 
 ---
 
 ## Testing
 
-The package suites are green — 171 tests:
+The package suites are green — 153 tests:
 
 ```bash
 cd JackpotKit
 xcodebuild -scheme JackpotKit-Package -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
 
-`JackpotUITests` 20 · `JackpotFormsTests` 73 · `JackpotNetworkingTests` 34 ·
-`JackpotLocalizationTests` 18 · `JackpotRegistrationTests` 3 · `JackpotAppDataTests` 23
+`JackpotUITests` 20 · `JackpotNetworkingTests` 38 · `JackpotFormsTests` 54 ·
+`JackpotLocalizationTests` 18 · `JackpotAppDataTests` 23
 
 Manual, on a device: open sign-up from the header and from the bottom bar; complete both pages;
 confirm section gating, the ID-type → ID-number rule change, the password checklist, and that
-the duplicate-mobile failure (`0000000000` against the mock) surfaces under the fields
-without clearing the form. Confirm every label reads as it did — that's `getTranslation`
-plugged straight in.
+the CRM's rejection (`0000000000000` as the ID number against the bundled transport) surfaces
+under the fields without clearing the form. Confirm every label reads as it did — that's
+`getTranslation` plugged straight in.
 
 ## Review guide
 
