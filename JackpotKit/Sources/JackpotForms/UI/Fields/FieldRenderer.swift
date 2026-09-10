@@ -1,8 +1,7 @@
 import SwiftUI
 import JackpotUI
 
-/// The contract between the form builder and the app: a new server type means a new case here, binding the
-/// model to a `JackpotUI` component; until then `unknown` keeps the form usable.
+/// Recaptcha is stripped in the mapper, so `.recaptchaV3` here is defensive.
 struct FieldRenderer: View {
     let field: FormField
     @ObservedObject var model: DynamicFormModel
@@ -10,7 +9,6 @@ struct FieldRenderer: View {
     var body: some View {
         Group {
             switch field.type {
-            // `inputType: "Calender"`; the picker's date is serialised through `FormValue.iso8601`.
             case .input where field.inputType == .calendar:
                 JackpotDateField(model.translate(field.labelKey), selection: model.date(for: field), in: ...model.maximumDate)
             case .input:
@@ -21,7 +19,7 @@ struct FieldRenderer: View {
             case .checkbox:
                 Toggle(model.translate(field.labelKey), isOn: model.bool(for: field))
                     .toggleStyle(.jackpotCheckbox)
-            case .unknown:
+            case .recaptchaV3, .unknown:
                 EmptyView()
             }
         }
@@ -30,10 +28,7 @@ struct FieldRenderer: View {
     }
 }
 
-// MARK: - Keyboard focus order
-
 extension FormField {
-    /// Only single-line text entry joins return-key navigation.
     var acceptsKeyboardFocus: Bool {
         type == .input && inputType != .calendar
     }
@@ -51,8 +46,6 @@ extension DynamicFormModel {
         return next < ids.endIndex ? ids[next] : nil
     }
 }
-
-// MARK: - Shared bindings
 
 extension DynamicFormModel {
     func text(for field: FormField) -> Binding<String> {

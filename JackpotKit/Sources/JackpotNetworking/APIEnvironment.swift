@@ -1,6 +1,5 @@
 import Foundation
 
-/// Base URL plus the headers and query items every request carries.
 public struct APIEnvironment: Sendable {
     public let baseURL: URL
     public let defaultHeaders: [String: String]

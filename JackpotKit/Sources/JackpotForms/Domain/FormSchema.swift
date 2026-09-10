@@ -1,15 +1,17 @@
 import Foundation
 
-/// A form as the CRM describes it: a section is one page, and fields sharing a row sit side by side.
 public struct FormSchema: Identifiable, Equatable, Sendable {
     public let id: Int
     public let codeName: FormName
     public let sections: [FormSection]
+    /// Visible recaptcha v3 was in the CRM schema; the row is stripped so it is never rendered or validated.
+    public let hasRecaptcha: Bool
 
-    public init(id: Int, codeName: FormName, sections: [FormSection]) {
+    public init(id: Int, codeName: FormName, sections: [FormSection], hasRecaptcha: Bool = false) {
         self.id = id
         self.codeName = codeName
         self.sections = sections
+        self.hasRecaptcha = hasRecaptcha
     }
 
     public var allFields: [FormField] {

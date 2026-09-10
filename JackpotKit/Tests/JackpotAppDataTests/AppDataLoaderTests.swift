@@ -164,8 +164,8 @@ private final class SpyClient: ApiClient, @unchecked Sendable {
 
     init(_ outcome: Outcome) { self.outcome = outcome }
 
-    func requestConditional(_ endpoint: some APIEndpoint,
-                            validators: HTTPValidators?) async throws -> ConditionalResponse {
+    func revalidate(_ endpoint: some APIEndpoint,
+                    validators: HTTPValidators?) async throws -> ConditionalResponse {
         calls += 1
         sentValidators = validators
         switch outcome {
@@ -179,5 +179,5 @@ private final class SpyClient: ApiClient, @unchecked Sendable {
         throw APIError.unexpectedStatus(404, nil)
     }
     func request(_ endpoint: some APIEndpoint) async throws { throw APIError.unexpectedStatus(404, nil) }
-    func requestData(_ endpoint: some APIEndpoint) async throws -> Data { throw APIError.unexpectedStatus(404, nil) }
+    func data(for endpoint: some APIEndpoint) async throws -> Data { throw APIError.unexpectedStatus(404, nil) }
 }

@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// A sheet shell: header band with title and close button, content on `background`, optional footer band.
 public struct JackpotPanel<Content: View, Footer: View>: View {
     private let title: String
     private let onClose: () -> Void

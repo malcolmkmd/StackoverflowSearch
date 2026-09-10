@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// A prompt with a link at its trailing edge, on `background` so it rests on a `surface` band.
 public struct JackpotLinkRow: View {
     private let prompt: String
     private let link: String

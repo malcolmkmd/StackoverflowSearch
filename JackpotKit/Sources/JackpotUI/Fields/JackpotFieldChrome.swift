@@ -2,7 +2,6 @@ import SwiftUI
 
 // MARK: - Background
 
-/// Fill, hairline and the focused / invalid ring every field shares.
 public struct JackpotFieldBackground: ViewModifier {
     private let isFocused: Bool
 
@@ -55,7 +54,6 @@ public extension View {
 // MARK: - Error row
 
 public extension View {
-    /// The invalid ring and the message beneath the control; nil clears both.
     func jackpotFieldError(_ message: String?) -> some View {
         modifier(JackpotFieldErrorRow(message: message?.isEmpty == false ? message : nil))
     }
@@ -81,7 +79,6 @@ private struct JackpotFieldErrorRow: ViewModifier {
 
 // MARK: - Floating label
 
-/// The in-field label shared by text field, dropdown and date field; it rises when focused or holding a value.
 struct JackpotFloatingField<Content: View>: View {
     private let title: String
     private let isFloating: Bool

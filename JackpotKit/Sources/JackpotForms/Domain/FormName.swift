@@ -18,6 +18,10 @@ public struct FormName: RawRepresentable, Hashable, Sendable, Encodable {
 // MARK: - Known forms
 
 public extension FormName {
-    /// The two-section sign-up form: credentials, name and email, then FICA.
     static let registration = FormName("registration")
+
+    /// Web `captchaV3Actions`: registration submits as `"register"`.
+    var recaptchaAction: String {
+        rawValue == "registration" ? "register" : rawValue
+    }
 }

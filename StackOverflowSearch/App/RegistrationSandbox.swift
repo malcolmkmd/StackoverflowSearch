@@ -4,11 +4,9 @@ import JackpotForms
 import JackpotRegistration
 import JackpotUI
 
-/// On-device harness for the Sign Up panel: bundled schema, faked submit, the result shown in an alert.
 struct RegistrationSandbox: View {
     let onClose: () -> Void
 
-    /// Built once, so the stub isn't re-read on every body pass.
     private static let dependencies = RegistrationDependencies.mock()
 
     @State private var result: RegistrationResult?

@@ -38,6 +38,20 @@ final class FormEndpointTests: XCTestCase {
         XCTAssertEqual(Set(json.keys), ["form_id", "form_name", "submitted_at", "fields"])
     }
 
+    func testSubmitBodyEncodesRecaptchaBesideFields() throws {
+        let submission = FormSubmission(
+            formCodeName: .registration,
+            values: ["username": .text("849134302")],
+            recaptcha: "tok-v3",
+            formId: "1052",
+            submittedAt: Date(timeIntervalSince1970: 0)
+        )
+        let data = try FormSubmitRequest(submission).bodyData
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["recaptcha"] as? String, "tok-v3")
+        XCTAssertEqual(Set(json.keys), ["form_id", "form_name", "submitted_at", "fields", "recaptcha"])
+    }
+
     private static let sample = FormSubmission(
         formCodeName: .registration,
         values: [
@@ -144,14 +158,14 @@ final class ScriptedApiClient: ApiClient, @unchecked Sendable {
         if let error { throw error }
     }
 
-    func requestData(_ endpoint: some APIEndpoint) async throws -> Data {
+    func data(for endpoint: some APIEndpoint) async throws -> Data {
         lastPath = endpoint.path
         if let error { throw error }
         return data
     }
 
-    func requestConditional(_ endpoint: some APIEndpoint,
-                           validators: HTTPValidators?) async throws -> ConditionalResponse {
+    func revalidate(_ endpoint: some APIEndpoint,
+                    validators: HTTPValidators?) async throws -> ConditionalResponse {
         throw APIError.unexpectedStatus(404, nil)
     }
 }

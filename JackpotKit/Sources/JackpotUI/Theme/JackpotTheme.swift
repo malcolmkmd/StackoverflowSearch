@@ -18,9 +18,7 @@ public struct JackpotTheme: Equatable, Sendable {
 // MARK: - Colours
 
 public struct JackpotColors: Equatable, Sendable {
-    /// The base layer; also the fill of a control resting on a `surface` band.
     public var background = Palette.background
-    /// Sheet header and footer bands, presented pickers.
     public var surface = Palette.surface
 
     /// Same pair as `surface` today; its own role so a theme can separate them.

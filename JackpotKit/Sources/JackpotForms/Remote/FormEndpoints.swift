@@ -1,7 +1,6 @@
 import Foundation
 import JackpotNetworking
 
-/// `GET cron/forms/{brand}/{region}/{name}?api-version=2.0`.
 struct FormRequest: APIEndpoint {
     let brand: String
     let region: String
@@ -12,7 +11,7 @@ struct FormRequest: APIEndpoint {
     var queryItems: [URLQueryItem] { [URLQueryItem(name: "api-version", value: "2.0")] }
 }
 
-/// `POST cron/forms/submit`, with no `api-version`. No auth: registration happens before login.
+/// No `api-version`. No auth: registration happens before login.
 struct FormSubmitRequest: APIEndpoint {
     let bodyData: Data
 

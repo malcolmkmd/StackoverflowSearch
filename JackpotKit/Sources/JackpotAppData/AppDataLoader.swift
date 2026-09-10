@@ -64,7 +64,7 @@ public actor AppDataLoader {
         let key = Self.key(region: region, tenant: tenant, locale: locale)
         let entry = cache.load(key: key)
 
-        let result = try await apiClient.requestConditional(
+        let result = try await apiClient.revalidate(
             AppDataRequest(region: region, tenant: tenant, locale: locale),
             validators: entry?.validators
         )

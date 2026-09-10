@@ -5,6 +5,7 @@ public enum FieldType: Equatable, Hashable, Sendable {
     case input
     case dropdown
     case checkbox
+    case recaptchaV3
     case unknown(String)
 
     public init(raw: String) {
@@ -12,6 +13,8 @@ public enum FieldType: Equatable, Hashable, Sendable {
         case "input":              self = .input
         case "dropdown", "select": self = .dropdown
         case "checkbox":           self = .checkbox
+        // WMS spells it "recapcha v3".
+        case "recapchav3", "recaptchav3": self = .recaptchaV3
         default:                   self = .unknown(raw)
         }
     }

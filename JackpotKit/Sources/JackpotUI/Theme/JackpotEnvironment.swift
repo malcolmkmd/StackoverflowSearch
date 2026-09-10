@@ -1,14 +1,21 @@
 import SwiftUI
 
-// Only what genuinely cascades travels here; per-field data is an initialiser argument.
 extension EnvironmentValues {
     @Entry public var jackpotTheme: JackpotTheme = .jackpotCity
     @Entry public var jackpotIsLoading: Bool = false
     @Entry public var jackpotFocusedField: Binding<String?>? = nil
     @Entry public var jackpotFieldIdentity: String? = nil
+    /// Identity by default, so a component still renders the key when no table is wired.
+    public var jackpotTranslate: @Sendable (String) -> String {
+        get { self[JackpotTranslateKey.self] }
+        set { self[JackpotTranslateKey.self] = newValue }
+    }
 
-    /// Set by `jackpotFieldError(_:)`, read by the field chrome.
     @Entry var jackpotFieldError: String? = nil
+}
+
+private struct JackpotTranslateKey: EnvironmentKey {
+    static let defaultValue: @Sendable (String) -> String = { $0 }
 }
 
 // MARK: - Theme

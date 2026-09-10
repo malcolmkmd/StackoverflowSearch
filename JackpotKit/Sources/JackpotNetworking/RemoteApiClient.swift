@@ -3,10 +3,11 @@ import Foundation
 public protocol ApiClient: Sendable {
     func request<Response: Decodable & Sendable>(_ endpoint: some APIEndpoint) async throws -> Response
     func request(_ endpoint: some APIEndpoint) async throws
-    func requestData(_ endpoint: some APIEndpoint) async throws -> Data
+    /// The response body, undecoded.
+    func data(for endpoint: some APIEndpoint) async throws -> Data
     /// Returns `.notModified` on a 304.
-    func requestConditional(_ endpoint: some APIEndpoint,
-                            validators: HTTPValidators?) async throws -> ConditionalResponse
+    func revalidate(_ endpoint: some APIEndpoint,
+                    validators: HTTPValidators?) async throws -> ConditionalResponse
 }
 
 public struct RemoteApiClient: ApiClient {
@@ -42,12 +43,12 @@ public struct RemoteApiClient: ApiClient {
         _ = try await perform(endpoint)
     }
 
-    public func requestData(_ endpoint: some APIEndpoint) async throws -> Data {
+    public func data(for endpoint: some APIEndpoint) async throws -> Data {
         try await perform(endpoint).0
     }
 
-    public func requestConditional(_ endpoint: some APIEndpoint,
-                                   validators: HTTPValidators?) async throws -> ConditionalResponse {
+    public func revalidate(_ endpoint: some APIEndpoint,
+                           validators: HTTPValidators?) async throws -> ConditionalResponse {
         let (data, response) = try await perform(endpoint, extraHeaders: validators?.conditionalHeaders ?? [:])
         if response.statusCode == 304 { return .notModified }
         return .fresh(data, HTTPValidators(response))

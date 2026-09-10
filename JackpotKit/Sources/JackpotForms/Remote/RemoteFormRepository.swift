@@ -2,33 +2,26 @@ import Foundation
 import JackpotNetworking
 
 public struct RemoteFormRepository: FormRepository {
+    private let form: FormSchema
     private let apiClient: any ApiClient
-    private let brand: String
-    private let region: String
     private let translate: @Sendable (String) -> String
 
-    public init(apiClient: any ApiClient,
-                brand: String = "jackpotcity",
-                region: String = "JZA",
+    public init(form: FormSchema = FormSchema(id: 0, codeName: .registration, sections: []),
+                apiClient: any ApiClient,
                 translate: @escaping @Sendable (String) -> String = { $0 }) {
+        self.form = form
         self.apiClient = apiClient
-        self.brand = brand
-        self.region = region
         self.translate = translate
     }
 
     public func form(named name: FormName) async throws -> FormSchema {
-        do {
-            let dto: FormDTO = try await apiClient.request(FormRequest(brand: brand, region: region, formName: name))
-            return dto.schema
-        } catch {
-            throw userFacing(error, formName: name)
-        }
+        guard name == form.codeName else { throw FormError.notFound(name) }
+        return form
     }
 
     public func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
         do {
-            let data = try await apiClient.requestData(FormSubmitRequest(submission))
+            let data = try await apiClient.data(for: FormSubmitRequest(submission))
             // An empty 2xx is taken as accepted (an assumption); anything else must say `isSuccessful: true`.
             if data.isEmpty { return FormSubmitResult() }
             let envelope = try? JSONDecoder().decode(FormSubmitEnvelope.self, from: data)
@@ -76,16 +69,22 @@ public struct RemoteFormRepository: FormRepository {
 }
 
 public extension FormDependencies {
-    /// The real thing; swap `.mock()` for this at the call site. `baseURL` is the config host, the one app-data
-    /// uses; `region` is `wmsNavigationRegionCode`; `translate` is the app's translation function, `{ getTranslation(Key: $0) }`.
-    static func live(baseURL: URL,
-                     brand: String = "jackpotcity",
-                     region: String = "JZA",
-                     translate: @escaping @Sendable (String) -> String) -> FormDependencies {
+    static func live(form: FormSchema,
+                     baseURL: URL,
+                     translate: @escaping @Sendable (String) -> String,
+                     recaptcha: @escaping @Sendable (String) async throws -> String?) -> FormDependencies {
         let client = RemoteApiClient(environment: APIEnvironment(baseURL: baseURL))
         return FormDependencies(
-            repository: RemoteFormRepository(apiClient: client, brand: brand, region: region, translate: translate),
-            translate: translate
+            repository: RemoteFormRepository(form: form, apiClient: client, translate: translate),
+            translate: translate,
+            recaptcha: recaptcha
         )
+    }
+
+    static func live(formJSON: Data,
+                     baseURL: URL,
+                     translate: @escaping @Sendable (String) -> String,
+                     recaptcha: @escaping @Sendable (String) async throws -> String?) throws -> FormDependencies {
+        try live(form: FormSchema(json: formJSON), baseURL: baseURL, translate: translate, recaptcha: recaptcha)
     }
 }

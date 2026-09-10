@@ -5,7 +5,6 @@ public enum RequestBody: Sendable {
     case form([String: String])
 }
 
-/// One request shape: path, method, body. Knows nothing about hosts, auth or versioning.
 public protocol APIEndpoint: Sendable {
     var path: String { get }
     var method: HTTPMethod { get }

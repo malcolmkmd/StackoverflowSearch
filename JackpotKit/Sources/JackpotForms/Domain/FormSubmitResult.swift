@@ -1,6 +1,5 @@
 import Foundation
 
-/// What `POST cron/forms/submit` returns. HTTP 200 is not success, and a created account can still need manual FICA.
 public struct FormSubmitResult: Decodable, Equatable, Sendable {
     public let accountId: String?
     public let message: String?

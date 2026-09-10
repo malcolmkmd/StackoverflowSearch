@@ -12,6 +12,7 @@ public struct JackpotTextField: View {
     @Environment(\.jackpotTheme) private var theme
     @Environment(\.jackpotFocusedField) private var focusedField
     @Environment(\.jackpotFieldIdentity) private var identity
+    @Environment(\.jackpotTranslate) private var translate
     @FocusState private var isFocused: Bool
     @State private var isRevealed = false
 
@@ -36,7 +37,6 @@ public struct JackpotTextField: View {
         return copy
     }
 
-    /// Fires on focus and blur, for callers that show supporting content while editing.
     public func onFocusChange(_ action: @escaping (Bool) -> Void) -> Self {
         var copy = self
         copy.focusChangedAction = action
@@ -84,7 +84,7 @@ public struct JackpotTextField: View {
                 }
                 .frame(width: theme.sizes.minimumHitTarget, height: theme.sizes.minimumHitTarget)
                 .padding(.trailing, .xs)
-                .accessibilityLabel(isRevealed ? "Hide password" : "Show password")
+                .accessibilityLabel(isRevealed ? translate("hide-password") : translate("show-password"))
             }
         }
         .jackpotFieldBackground(isFocused: isFocused)

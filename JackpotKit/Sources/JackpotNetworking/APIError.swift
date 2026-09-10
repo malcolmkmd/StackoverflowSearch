@@ -58,7 +58,6 @@ public enum APIError: Error, Sendable, Equatable {
         }
     }
 
-    /// The server's own wording, when it sent any.
     public var serverMessage: String? {
         problem?.message.flatMap { $0.isEmpty ? nil : $0 }
     }

@@ -3,7 +3,6 @@ import SwiftUI
 import JackpotUI
 import JackpotForms
 
-/// The Sign Up sheet over the page, as the app presents it: the whole form, both pages, faked submit.
 struct RegistrationView_Previews: PreviewProvider {
     private struct Page: View {
         var dependencies: RegistrationDependencies = .mock()

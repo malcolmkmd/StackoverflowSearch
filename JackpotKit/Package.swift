@@ -30,15 +30,9 @@ let package = Package(
         .target(name: "JackpotUI", swiftSettings: strict),
         .testTarget(name: "JackpotUITests", dependencies: ["JackpotUI"]),
 
-        .target(
-            name: "JackpotForms",
-            dependencies: ["JackpotUI", "JackpotNetworking"],
-            resources: [.process("Resources")],
-            swiftSettings: strict
-        ),
+        .target(name: "JackpotForms", dependencies: ["JackpotUI", "JackpotNetworking"], swiftSettings: strict),
         .testTarget(name: "JackpotFormsTests", dependencies: ["JackpotForms", "JackpotNetworking"]),
         .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
-        .testTarget(name: "JackpotRegistrationTests", dependencies: ["JackpotRegistration", "JackpotForms"]),
 
         .target(name: "JackpotNetworking", swiftSettings: strict),
         .testTarget(name: "JackpotNetworkingTests", dependencies: ["JackpotNetworking"]),

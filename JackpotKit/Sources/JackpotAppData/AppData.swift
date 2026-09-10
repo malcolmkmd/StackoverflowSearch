@@ -49,6 +49,8 @@ public struct AppDataResponse: Sendable, Equatable {
 
     public func contains(_ key: String) -> Bool { sections[key] != nil }
 
+    public func data(for key: String) -> Data? { sections[key] }
+
     public var locales: [String: String] {
         section("locales") ?? [:]
     }

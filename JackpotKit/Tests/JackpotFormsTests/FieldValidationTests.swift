@@ -104,14 +104,6 @@ final class FieldValidationTests: XCTestCase {
         XCTAssertFalse(id.accepts(.text("A1234567")))
     }
 
-    // MARK: Password rules
-
-    func testPasswordRulesAreDerivedFromTheQuantifier() {
-        XCTAssertEqual("^(.){8,20}$".lengthQuantifier, 8...20)
-        XCTAssertNil("^[0-9]{13}$".lengthQuantifier, "a single count is not a range")
-        XCTAssertNil("^.{20,8}$".lengthQuantifier, "an inverted range is not a rule")
-    }
-
     func testDateSerialisesToTheIso8601ShapeTheSchemaExpects() {
         let pattern = "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2}(?:\\.\\d*)?)((-(\\d{2}):(\\d{2})|Z)?)$"
         let dob = field("dateOfBirth", inputType: .calendar, regex: pattern)

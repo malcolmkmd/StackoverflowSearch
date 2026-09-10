@@ -14,7 +14,6 @@ public enum JackpotCapitalization: Equatable, Sendable {
     }
 }
 
-/// Keyboard, autofill, autocorrection and secure entry as one value, passed as `kind:`.
 public struct JackpotFieldKind: Equatable, Sendable {
     public var keyboard: UIKeyboardType = .default
     public var contentType: UITextContentType?

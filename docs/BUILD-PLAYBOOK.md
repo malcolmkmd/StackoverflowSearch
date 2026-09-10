@@ -13,7 +13,7 @@ does not wait for them.
 | Step | Adds | Demoable as |
 | --- | --- | --- |
 | 1 | `JackpotUI` | the gallery: every component, every state |
-| 2 | `JackpotForms` on the bundled schema, `JackpotRegistration` | the Sign Up sheet, both pages, faked submit |
+| 2 | `JackpotForms` on an in-memory schema, `JackpotRegistration` | the Sign Up sheet, both pages, faked submit |
 | 3 | `JackpotNetworking` | `RemoteApiClient` against a stubbed transport |
 | 4 | `JackpotForms/Remote`, `.live()`, the app swap | registration live in the app, copy from `getTranslation` |
 | 5 | `JackpotLocalization` | the same copy from a table built once; `getTranslation` becomes a shim |
@@ -24,15 +24,17 @@ the host app's. The test suite stays in this repository; the playbook lists sour
 
 ### Registration catalog
 
-Twelve fields over two sections, checked against the bundled capture and the live CRM
-response. The `fieldType` values on registration are **Input**, **Dropdown** and
-**Checkbox**; `FieldType` has exactly those three cases plus `unknown`. Date of birth is
-`Input` + `inputType: Calender` (the schema spelling).
+Twelve fields over two sections, checked against the live CRM response. The `fieldType`
+values on registration are **Input**, **Dropdown** and
+**Checkbox**; `FieldType` has those three plus `recaptchaV3` and `unknown`. Date of birth is
+`Input` + `inputType: Calender` (the schema spelling). Recaptcha is not a field: a visible
+`recapcha v3` row sets `FormSchema.hasRecaptcha` and is dropped, so it is never rendered or
+validated. Submit asks the app for a v3 token and encodes it beside `fields`.
 
 | Step | Identifier | `fieldType` | `inputType` | Renders as |
 | --- | --- | --- | --- | --- |
 | 1.1 | `username` | Input | Number | `JackpotTextField` · `.phoneNumber` · `+27` prefix |
-| 1.2 | `password` | Input | Password | `JackpotTextField` · `.newPassword` · `JackpotChecklist` while focused |
+| 1.2 | `password` | Input | Password | `JackpotTextField` · `.newPassword` · `JackpotChecklist` while focused, rules from `devConfig.regionPasswordSuggestions` |
 | 1.3 | `firstname` | Input | Text | `JackpotTextField` · `.givenName` |
 | 1.4 | `lastname` | Input | Text | `JackpotTextField` · `.familyName` |
 | 1.5 | `email` | Input | Email | `JackpotTextField` · `.email` |
@@ -44,7 +46,7 @@ response. The `fieldType` values on registration are **Input**, **Dropdown** and
 | 2.5 | `receivePromotionalInformation` | Checkbox | Text | `Toggle` · `.jackpotCheckbox` |
 | 2.6 | `terms` | Checkbox | Text | `Toggle` · `.jackpotCheckbox` · required `^true$` |
 
-The bundled capture ships `username.prefix = "+27"`; the live payload currently leaves
+The mock schema ships `username.prefix = "+27"`; the live payload currently leaves
 prefix empty (the view still maps `username` to `.phoneNumber`).
 
 Every field keeps its label **inside** the control: it sits where a placeholder would and
@@ -59,8 +61,8 @@ through the environment.
 The buttons at the bottom of registration are `FormNavigationBar` in `DynamicFormContent.swift`,
 which registration places in the panel's footer under the login row. `RegistrationView`
 owns a `DynamicFormModel` and composes `DynamicFormContent` (the pages) and
-`FormNavigationBar` around it. The bundled `registration.json` and the live CRM schema are
-the twelve fields above — paging is not a field.
+`FormNavigationBar` around it. The mock schema and the live CRM schema are the twelve
+fields above — paging is not a field.
 
 | Visible control | Style | When | Action |
 | --- | --- | --- | --- |
@@ -77,16 +79,19 @@ result to `onComplete`. A progress bar (`.jackpotBar`) sits above the scroll vie
 
 ### Registration rules and the preview path
 
-1. **Schema.** `JackpotForms/Resources/registration.json`, the CRM's response saved
-   verbatim; `StubFormRepository` serves it.
-2. **Mock wiring.** `FormDependencies.mock()` is the stub repository plus the placeholder
-   copy table `FormDependencies.registrationCopy`, behind the engine's one translation seam:
-   `translate`, a `(String) -> String` closure shaped like the app's `getTranslation`, the key
-   back on a miss. `.live(baseURL:translate:)` swaps in `RemoteFormRepository` at step 4;
-   nothing else changes.
+1. **Schema.** `MockFormRepository` serves an in-memory `FormSchema` and fakes the submit.
+   The password checklist is a `PasswordSuggestions.Config` (`min` 8, `max` 20, `vulnerable`);
+   every row's copy is a translation key. The host injects `AppSettings` (the `appsettings` slice
+   of app-data); `RegistrationDependencies` maps `devConfig` into that config (`regionPasswordSuggestions`,
+   or `passwordLength` as fallback). JackpotKit never reads `GlobalData`.
+2. **Mock wiring.** `FormDependencies.mock()` is the in-memory repository plus a small copy
+   table, behind the engine's one translation seam: `translate`, a `(String) -> String` closure
+   shaped like the app's `getTranslation`, the key back on a miss. `.live(formJSON:...)` posts
+   submit and uses the injected schema; recaptcha is a second seam, SDK-agnostic like `translate`.
+   `.mock()` returns `"mock-recaptcha-token"` so the sandbox completes.
 3. **Registration's rules.** The engine ships with no cross-field regex links and no date
-   cap. `RegistrationDependencies` adds `regexDependencies: ["idNumber": "idNumberType"]`
-   and an 18-years-ago `maximumDate` on top of whatever `forms` the host passes in.
+   cap. `RegistrationDependencies` adds `regexDependencies: ["idNumber": "idNumberType"]`,
+   an 18-years-ago `maximumDate`, and (when given) `passwordConfig` from injected `AppSettings`.
 4. **Sandbox.** In this repository the app's `SearchView` presents `RegistrationSandbox` with
    `.jackpotPopup`, the way the app presents its panels; the sandbox hosts
    `RegistrationView(dependencies: .mock())` and shows the `RegistrationResult` it gets
@@ -203,9 +208,7 @@ public struct JackpotTheme: Equatable, Sendable {
 // MARK: - Colours
 
 public struct JackpotColors: Equatable, Sendable {
-    /// The base layer; also the fill of a control resting on a `surface` band.
     public var background = Palette.background
-    /// Sheet header and footer bands, presented pickers.
     public var surface = Palette.surface
 
     /// Same pair as `surface` today; its own role so a theme can separate them.
@@ -325,20 +328,28 @@ public struct JackpotTypography: Equatable, Sendable {
 **4.** `JackpotKit/Sources/JackpotUI/Theme/JackpotEnvironment.swift`
 
 The environment carries what genuinely cascades. `jackpotFieldError` is internal: it is
-set by the `jackpotFieldError(_:)` modifier and read by the chrome.
+set by the `jackpotFieldError(_:)` modifier and read by the chrome. `jackpotTranslate` is
+the app's translation function, identity by default, so a component still renders the key.
 
 ```swift
 import SwiftUI
 
-// Only what genuinely cascades travels here; per-field data is an initialiser argument.
 extension EnvironmentValues {
     @Entry public var jackpotTheme: JackpotTheme = .jackpotCity
     @Entry public var jackpotIsLoading: Bool = false
     @Entry public var jackpotFocusedField: Binding<String?>? = nil
     @Entry public var jackpotFieldIdentity: String? = nil
+    /// Identity by default, so a component still renders the key when no table is wired.
+    public var jackpotTranslate: @Sendable (String) -> String {
+        get { self[JackpotTranslateKey.self] }
+        set { self[JackpotTranslateKey.self] = newValue }
+    }
 
-    /// Set by `jackpotFieldError(_:)`, read by the field chrome.
     @Entry var jackpotFieldError: String? = nil
+}
+
+private struct JackpotTranslateKey: EnvironmentKey {
+    static let defaultValue: @Sendable (String) -> String = { $0 }
 }
 
 // MARK: - Theme
@@ -565,7 +576,7 @@ Registration's two consents use `.jackpotCheckbox`.
 ```swift
 import SwiftUI
 
-/// A tappable box with a wrapping label; VoiceOver is handed a switch.
+/// VoiceOver is handed a switch, not a button.
 public struct JackpotCheckboxToggleStyle: ToggleStyle {
     public init() {}
 
@@ -693,7 +704,6 @@ public enum JackpotCapitalization: Equatable, Sendable {
     }
 }
 
-/// Keyboard, autofill, autocorrection and secure entry as one value, passed as `kind:`.
 public struct JackpotFieldKind: Equatable, Sendable {
     public var keyboard: UIKeyboardType = .default
     public var contentType: UITextContentType?
@@ -758,7 +768,6 @@ import SwiftUI
 
 // MARK: - Background
 
-/// Fill, hairline and the focused / invalid ring every field shares.
 public struct JackpotFieldBackground: ViewModifier {
     private let isFocused: Bool
 
@@ -811,7 +820,6 @@ public extension View {
 // MARK: - Error row
 
 public extension View {
-    /// The invalid ring and the message beneath the control; nil clears both.
     func jackpotFieldError(_ message: String?) -> some View {
         modifier(JackpotFieldErrorRow(message: message?.isEmpty == false ? message : nil))
     }
@@ -837,7 +845,6 @@ private struct JackpotFieldErrorRow: ViewModifier {
 
 // MARK: - Floating label
 
-/// The in-field label shared by text field, dropdown and date field; it rises when focused or holding a value.
 struct JackpotFloatingField<Content: View>: View {
     private let title: String
     private let isFloating: Bool
@@ -881,7 +888,7 @@ struct JackpotFloatingField<Content: View>: View {
 **11.** `JackpotKit/Sources/JackpotUI/Fields/JackpotTextField.swift`
 
 Title, kind, prefix and suffix on `init`. Secure entry and the reveal button follow
-from `kind.isSecure`.
+from `kind.isSecure`. Show / hide labels go through `jackpotTranslate`.
 
 ```swift
 import SwiftUI
@@ -898,6 +905,7 @@ public struct JackpotTextField: View {
     @Environment(\.jackpotTheme) private var theme
     @Environment(\.jackpotFocusedField) private var focusedField
     @Environment(\.jackpotFieldIdentity) private var identity
+    @Environment(\.jackpotTranslate) private var translate
     @FocusState private var isFocused: Bool
     @State private var isRevealed = false
 
@@ -922,7 +930,6 @@ public struct JackpotTextField: View {
         return copy
     }
 
-    /// Fires on focus and blur, for callers that show supporting content while editing.
     public func onFocusChange(_ action: @escaping (Bool) -> Void) -> Self {
         var copy = self
         copy.focusChangedAction = action
@@ -970,7 +977,7 @@ public struct JackpotTextField: View {
                 }
                 .frame(width: theme.sizes.minimumHitTarget, height: theme.sizes.minimumHitTarget)
                 .padding(.trailing, .xs)
-                .accessibilityLabel(isRevealed ? "Hide password" : "Show password")
+                .accessibilityLabel(isRevealed ? translate("hide-password") : translate("show-password"))
             }
         }
         .jackpotFieldBackground(isFocused: isFocused)
@@ -1167,7 +1174,8 @@ public struct JackpotDateField: View {
 
 **14.** `JackpotKit/Sources/JackpotUI/Components/JackpotChecklist.swift`
 
-The live password-rules panel on `password`.
+The live password-rules panel on `password`. Title and section stay plain strings — the
+caller resolves keys before passing them in — so the component stays key-agnostic.
 
 ```swift
 import SwiftUI
@@ -1190,6 +1198,7 @@ public struct JackpotChecklist: View {
     private let items: [JackpotChecklistItem]
 
     @Environment(\.jackpotTheme) private var theme
+    @Environment(\.jackpotTranslate) private var translate
     @State private var isExpanded = true
 
     public init(_ title: String, section: String = "Required", items: [JackpotChecklistItem]) {
@@ -1205,7 +1214,7 @@ public struct JackpotChecklist: View {
                     ProgressView(value: satisfiedFraction)
                         .progressViewStyle(.jackpotBar(height: .xs))
                         .tint(satisfiedFraction < 1 ? theme.colors.warning : theme.colors.success)
-                        .accessibilityLabel("Requirements met")
+                        .accessibilityLabel(translate("requirements-met"))
 
                     Text(section).jackpotTextStyle(\.sectionTitle)
 
@@ -1262,7 +1271,6 @@ public struct JackpotErrorView: View {
         self.title = title
     }
 
-    /// Adds the retry button.
     public func onRetry(_ action: @escaping () -> Void) -> Self {
         var copy = self
         copy.retryAction = action
@@ -1303,7 +1311,6 @@ its mirror under Login.
 ```swift
 import SwiftUI
 
-/// A prompt with a link at its trailing edge, on `background` so it rests on a `surface` band.
 public struct JackpotLinkRow: View {
     private let prompt: String
     private let link: String
@@ -1353,7 +1360,6 @@ the layers.
 ```swift
 import SwiftUI
 
-/// A sheet shell: header band with title and close button, content on `background`, optional footer band.
 public struct JackpotPanel<Content: View, Footer: View>: View {
     private let title: String
     private let onClose: () -> Void
@@ -1474,7 +1480,6 @@ component in one place.
 ```swift
 import SwiftUI
 
-/// A themed surface at phone width for previewing components.
 public struct JackpotPreviewPanel<Content: View>: View {
     private let title: String?
     private let content: Content
@@ -1607,19 +1612,19 @@ both appearances.
 
 ---
 
-## Step 2 — JackpotForms on the bundled schema, and the registration sheet
+## Step 2 — JackpotForms on an in-memory schema, and the registration sheet
 
 The engine, with no network. One module, three folders pointing one way: `Domain` (types
-and rules, no I/O), `Data` (wire shapes and the bundled stub) and `UI` (the model and the
-renderer). The engine only ever sees `FormRepository`; `StubFormRepository` serves the
-captured `registration.json` and fakes the submit, which is what lets the whole sheet run
-before any endpoint exists. `JackpotRegistration` is the feature on top: the sheet and
-registration's own rules.
+and rules, no I/O), `Data` (wire shapes and the mock repository) and `UI` (the model
+and the renderer). The engine only ever sees `FormRepository`; `MockFormRepository` serves
+an in-memory schema and fakes the submit, which is what lets the whole sheet run before any
+endpoint exists. `JackpotRegistration` is the feature on top: the sheet, registration's own
+rules, and the `DevConfig` mapping.
 
 **20.**
 
 ```bash
-mkdir -p JackpotKit/Sources/JackpotForms/{Domain,Data,UI/Fields,Resources}
+mkdir -p JackpotKit/Sources/JackpotForms/{Domain,Data,UI/Fields,Password}
 mkdir -p JackpotKit/Sources/JackpotRegistration
 ```
 
@@ -1656,12 +1661,7 @@ let package = Package(
     targets: [
         .target(name: "JackpotUI", swiftSettings: strict),
 
-        .target(
-            name: "JackpotForms",
-            dependencies: ["JackpotUI"],
-            resources: [.process("Resources")],
-            swiftSettings: strict
-        ),
+        .target(name: "JackpotForms", dependencies: ["JackpotUI"], swiftSettings: strict),
         .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
     ]
 )
@@ -1692,8 +1692,12 @@ public struct FormName: RawRepresentable, Hashable, Sendable, Encodable {
 // MARK: - Known forms
 
 public extension FormName {
-    /// The two-section sign-up form: credentials, name and email, then FICA.
     static let registration = FormName("registration")
+
+    /// Web `captchaV3Actions`: registration submits as `"register"`.
+    var recaptchaAction: String {
+        rawValue == "registration" ? "register" : rawValue
+    }
 }
 ```
 
@@ -1751,28 +1755,41 @@ extension FormValue: Encodable {
     }
 }
 
-/// What the host receives on submit, encoded as the submit endpoint expects it.
+/// Recaptcha is encoded as a sibling of `fields`, matching the web request body.
 public struct FormSubmission: Equatable, Sendable, Encodable {
     public let formId: String
     public let formCodeName: FormName
     public let submittedAt: Date
     public let values: [String: FormValue]
+    public let recaptcha: String?
 
     enum CodingKeys: String, CodingKey {
         case formId = "form_id"
         case formCodeName = "form_name"
         case submittedAt = "submitted_at"
         case values = "fields"
+        case recaptcha
     }
 
     public init(formCodeName: FormName,
                 values: [String: FormValue],
+                recaptcha: String? = nil,
                 formId: String = "",
                 submittedAt: Date = Date()) {
         self.formId = formId
         self.formCodeName = formCodeName
         self.submittedAt = submittedAt
         self.values = values
+        self.recaptcha = recaptcha
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(formId, forKey: .formId)
+        try container.encode(formCodeName, forKey: .formCodeName)
+        try container.encode(submittedAt, forKey: .submittedAt)
+        try container.encode(values, forKey: .values)
+        try container.encodeIfPresent(recaptcha, forKey: .recaptcha)
     }
 
     public subscript(identifier: String) -> FormValue {
@@ -1783,8 +1800,9 @@ public struct FormSubmission: Equatable, Sendable, Encodable {
 
 **24.** `JackpotKit/Sources/JackpotForms/Domain/FormField.swift`
 
-`FieldType` is Input, Dropdown and Checkbox — the registration catalog — plus `unknown`,
-which is what keeps the form usable when the CRM adds a type this build cannot draw.
+`FieldType` is Input, Dropdown, Checkbox and recaptchaV3 — plus `unknown`, which is what
+keeps the form usable when the CRM adds a type this build cannot draw. WMS spells recaptcha
+`recapcha v3`.
 
 ```swift
 import Foundation
@@ -1794,6 +1812,7 @@ public enum FieldType: Equatable, Hashable, Sendable {
     case input
     case dropdown
     case checkbox
+    case recaptchaV3
     case unknown(String)
 
     public init(raw: String) {
@@ -1801,6 +1820,8 @@ public enum FieldType: Equatable, Hashable, Sendable {
         case "input":              self = .input
         case "dropdown", "select": self = .dropdown
         case "checkbox":           self = .checkbox
+        // WMS spells it "recapcha v3".
+        case "recapchav3", "recaptchav3": self = .recaptchaV3
         default:                   self = .unknown(raw)
         }
     }
@@ -1909,16 +1930,18 @@ public struct FormField: Identifiable, Equatable, Hashable, Sendable {
 ```swift
 import Foundation
 
-/// A form as the CRM describes it: a section is one page, and fields sharing a row sit side by side.
 public struct FormSchema: Identifiable, Equatable, Sendable {
     public let id: Int
     public let codeName: FormName
     public let sections: [FormSection]
+    /// Visible recaptcha v3 was in the CRM schema; the row is stripped so it is never rendered or validated.
+    public let hasRecaptcha: Bool
 
-    public init(id: Int, codeName: FormName, sections: [FormSection]) {
+    public init(id: Int, codeName: FormName, sections: [FormSection], hasRecaptcha: Bool = false) {
         self.id = id
         self.codeName = codeName
         self.sections = sections
+        self.hasRecaptcha = hasRecaptcha
     }
 
     public var allFields: [FormField] {
@@ -1960,7 +1983,6 @@ public struct FormRow: Identifiable, Equatable, Sendable {
 ```swift
 import Foundation
 
-/// What `POST cron/forms/submit` returns. HTTP 200 is not success, and a created account can still need manual FICA.
 public struct FormSubmitResult: Decodable, Equatable, Sendable {
     public let accountId: String?
     public let message: String?
@@ -1991,7 +2013,6 @@ public struct FormSubmitResult: Decodable, Equatable, Sendable {
 ```swift
 import Foundation
 
-/// Why a form operation failed, in words the UI can show. `server` keeps the server's wording.
 public enum FormError: LocalizedError, Equatable {
     case offline
     case notFound(FormName)
@@ -2018,7 +2039,6 @@ public enum FormError: LocalizedError, Equatable {
 ```swift
 import Foundation
 
-/// Fetch is `GET cron/forms/{brand}/{region}/{name}?api-version=2.0`; submit posts to `cron/forms/submit`.
 public protocol FormRepository: Sendable {
     func form(named name: FormName) async throws -> FormSchema
     func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult
@@ -2027,26 +2047,40 @@ public protocol FormRepository: Sendable {
 
 **29.** `JackpotKit/Sources/JackpotForms/Data/FormDTO.swift`
 
-The wire shapes and, on each, the domain value it maps to.
+The wire shapes. A recaptcha row is dropped here and `hasRecaptcha` is set, so `allFields`
+never sees it — the same as the web's `processSection`. `FormSchema(json:)` is how the host
+injects the `registration` blob it already has.
 
 ```swift
 import Foundation
 
-// Wire shapes, exactly as the CRM sends them. Everything is optional but the identifiers: product
-// edits the schema in a CMS, so a missing `prefix` must not fail the decode.
 struct FormDTO: Decodable {
     let formId: Int
     let formCodeName: String
     let sections: [FormSectionDTO]?
 
     var schema: FormSchema {
-        FormSchema(
-            id: formId,
-            codeName: FormName(formCodeName),
-            sections: (sections ?? [])
-                .sorted { ($0.formSectionOrder ?? $0.formSectionId) < ($1.formSectionOrder ?? $1.formSectionId) }
-                .map(\.section)
-        )
+        // Recaptcha is not a field: any row that contains it is dropped, and a visible one sets `hasRecaptcha`.
+        var hasRecaptcha = false
+        let mapped = (sections ?? [])
+            .sorted { ($0.formSectionOrder ?? $0.formSectionId) < ($1.formSectionOrder ?? $1.formSectionId) }
+            .map { dto -> FormSection in
+                let rows = dto.section.rows.compactMap { row -> FormRow? in
+                    guard row.fields.contains(where: { $0.type == .recaptchaV3 }) else { return row }
+                    if row.fields.contains(where: { $0.type == .recaptchaV3 && $0.isVisible }) {
+                        hasRecaptcha = true
+                    }
+                    return nil
+                }
+                return FormSection(id: dto.formSectionId, rows: rows)
+            }
+        return FormSchema(id: formId, codeName: FormName(formCodeName), sections: mapped, hasRecaptcha: hasRecaptcha)
+    }
+}
+
+extension FormSchema {
+    public init(json: Data) throws {
+        self = try JSONDecoder().decode(FormDTO.self, from: json).schema
     }
 }
 
@@ -2092,7 +2126,7 @@ struct FormFieldDTO: Decodable {
             type: FieldType(raw: fieldType),
             inputType: InputType(raw: inputType ?? "Text"),
             validationMessageKey: validationMessage ?? "regex",
-            // Fail safe: an unspecified field is optional and visible rather than blocking submission.
+            // Unspecified is optional and visible, so a CMS omission cannot block submit.
             isRequired: isRequired ?? false,
             isVisible: isVisible ?? true,
             isReadOnly: isReadOnly ?? false,
@@ -2113,29 +2147,117 @@ struct FieldDropdownDTO: Decodable {
 }
 ```
 
-**30.** `JackpotKit/Sources/JackpotForms/Data/StubFormRepository.swift`
+**30.** `JackpotKit/Sources/JackpotForms/Password/PasswordSuggestions.swift`
 
-Serves the bundled `registration.json` and fakes the submit.
+The checklist rows, keyed the same way as the web (`min-N-char`, `password-is-vulnerable`).
+
+```swift
+import Foundation
+import JackpotUI
+
+public enum PasswordSuggestions {
+    public struct Config: Sendable, Equatable {
+        public var min: Int?
+        public var max: Int?
+        public var vulnerable: Bool
+        public var spaces: Bool
+        public var required: Set<PasswordCharacterClass>
+
+        public init(min: Int? = nil,
+                    max: Int? = nil,
+                    vulnerable: Bool = false,
+                    spaces: Bool = false,
+                    required: Set<PasswordCharacterClass> = []) {
+            self.min = min
+            self.max = max
+            self.vulnerable = vulnerable
+            self.spaces = spaces
+            self.required = required
+        }
+    }
+
+    public static func items(for value: String,
+                              config: Config,
+                              translate: (String) -> String) -> [JackpotChecklistItem] {
+        var items: [JackpotChecklistItem] = []
+        if let n = config.min {
+            items.append(.init(id: "min",
+                                text: translate("min-\(n)-char"),
+                                isSatisfied: value.count >= n))
+        }
+        if let n = config.max {
+            items.append(.init(id: "max",
+                                text: translate("max-\(n)-char"),
+                                isSatisfied: !value.isEmpty && value.count <= n))
+        }
+        if config.vulnerable {
+            items.append(.init(id: "vulnerable",
+                                text: translate("password-is-vulnerable"),
+                                isSatisfied: value.range(of: "password", options: .caseInsensitive) == nil))
+        }
+        if config.spaces {
+            items.append(.init(id: "spaces",
+                                text: translate("please-remove-spaces"),
+                                isSatisfied: value.rangeOfCharacter(from: .whitespaces) == nil))
+        }
+        for cls in [PasswordCharacterClass.upper, .lower, .number, .special] where config.required.contains(cls) {
+            items.append(cls.checklistItem(for: value, translate: translate))
+        }
+        return items
+    }
+}
+
+public enum PasswordCharacterClass: String, Codable, Sendable {
+    case upper, lower, number, special
+}
+
+extension PasswordCharacterClass {
+    var translationKey: String {
+        switch self {
+        case .upper:   return "at-least-one-upper-char"
+        case .lower:   return "at-least-one-lower-char"
+        case .number:  return "at-least-one-num-char"
+        case .special: return "at-least-one-special-char"
+        }
+    }
+
+    func isSatisfied(by value: String) -> Bool {
+        switch self {
+        case .upper:   return value.rangeOfCharacter(from: .uppercaseLetters) != nil
+        case .lower:   return value.rangeOfCharacter(from: .lowercaseLetters) != nil
+        case .number:  return value.rangeOfCharacter(from: .decimalDigits) != nil
+        case .special: return value.rangeOfCharacter(from: CharacterSet.alphanumerics.union(.whitespaces).inverted) != nil
+        }
+    }
+
+    func checklistItem(for value: String, translate: (String) -> String) -> JackpotChecklistItem {
+        JackpotChecklistItem(id: rawValue, text: translate(translationKey), isSatisfied: isSatisfied(by: value))
+    }
+}
+```
+
+**31.** `JackpotKit/Sources/JackpotForms/Data/MockFormRepository.swift`
+
+An in-memory registration schema, a copy table, and a faked submit. Mobile `0000000000`
+fails so the error path can be demoed.
 
 ```swift
 import Foundation
 
-/// Serves the bundled registration schema and fakes the submit, so the feature runs before the endpoint is reachable.
-public struct StubFormRepository: FormRepository {
+struct MockFormRepository: FormRepository {
     private let delay: TimeInterval
 
-    public init(delay: TimeInterval = 0.35) {
+    init(delay: TimeInterval = 0.35) {
         self.delay = delay
     }
 
-    public func form(named name: FormName) async throws -> FormSchema {
+    func form(named name: FormName) async throws -> FormSchema {
         try await pause()
         guard name == .registration else { throw FormError.notFound(name) }
-        return try JSONDecoder().decode(FormDTO.self, from: Self.registrationJSON).schema
+        return MockForm.schema
     }
 
-    /// Succeeds with a fake account; fails for mobile `"0000000000"`, so the error path can be demoed.
-    public func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
+    func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
         try await pause()
         let mobile = submission["username"].stringValue
         if mobile == "0000000000" {
@@ -2144,60 +2266,161 @@ public struct StubFormRepository: FormRepository {
         return FormSubmitResult(accountId: "27\(mobile)", message: "User Created Successfully.")
     }
 
-    /// `registration.json` is the CRM's response saved verbatim.
-    static let registrationJSON = try! Data(contentsOf: Bundle.module.url(forResource: "registration", withExtension: "json")!)
-
     private func pause() async throws {
         if delay > 0 {
             try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
         }
     }
 }
+
+enum MockForm {
+    static let translate: @Sendable (String) -> String = { copy[$0.lowercased()] ?? $0 }
+
+    static let schema = FormSchema(
+        id: 1052,
+        codeName: .registration,
+        sections: [
+            FormSection(id: 45, rows: [
+                row(1, FormField(id: 1, identifier: "username", inputType: .number, isRequired: true,
+                                 regex: "^(27|0)?[1-9][0-9]{8}$", prefix: "+27")),
+                row(2, FormField(id: 2, identifier: "password", inputType: .password, isRequired: true,
+                                 regex: "^(.){8,20}$")),
+                row(3, FormField(id: 3, identifier: "firstname", isRequired: true,
+                                 regex: "^[a-zA-Z][a-zA-Z\\-\\.'\\s]{1,20}$")),
+                row(4, FormField(id: 4, identifier: "lastname", isRequired: true,
+                                 regex: "^[a-zA-Z][a-zA-Z\\-\\.'\\s]{1,20}$")),
+                row(5, FormField(id: 5, identifier: "email", inputType: .email, isRequired: true,
+                                 regex: "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")),
+                row(6, FormField(id: 6, identifier: "referralCode",
+                                 regex: "^[a-zA-Z0-9]{3,25}$|^$")),
+            ]),
+            FormSection(id: 46, rows: [
+                row(1, FormField(id: 7, identifier: "idNumberType", type: .dropdown, isRequired: true,
+                                 regex: "^[a-zA-Z]+$",
+                                 dropdownOptions: [
+                                    .init(value: "idNumber", textKey: "jpc-reg-idnumber", regex: "idNumberRegex"),
+                                    .init(value: "passport", textKey: "jpc-reg-passport", regex: "passportNumberRegex"),
+                                 ])),
+                row(2, FormField(id: 8, identifier: "idNumber", isRequired: true, regex: "^[0-9]{13}$")),
+                row(3, FormField(id: 9, identifier: "dateOfBirth", inputType: .calendar, isRequired: true,
+                                 regex: "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2}(?:\\.\\d*)?)((-(\\d{2}):(\\d{2})|Z)?)$")),
+                row(4, FormField(id: 10, identifier: "sourceOfFunds", type: .dropdown, isRequired: true,
+                                 regex: "^[a-zA-Z]+$",
+                                 dropdownOptions: [
+                                    .init(value: "SalaryOrWages", textKey: "jpc-reg-SalaryOrWages", regex: "[a-zA-Z]"),
+                                    .init(value: "PensionOrGrant", textKey: "jpc-reg-PensionOrGrant", regex: "[a-zA-Z]"),
+                                    .init(value: "AllowanceOrBursary", textKey: "jpc-reg-AllowanceOrBursary", regex: "[a-zA-Z]"),
+                                    .init(value: "SavingsOrRentalOrOther", textKey: "jpc-reg-SavingsOrRentalOrOther", regex: "[a-zA-Z]"),
+                                    .init(value: "SelfEmployed", textKey: "jpc-reg-SelfEmployed", regex: "[a-zA-Z]"),
+                                 ])),
+                row(5, FormField(id: 11, identifier: "receivePromotionalInformation",
+                                 labelKey: "receivePromotionalInformation-jza", type: .checkbox,
+                                 regex: "^true|^false$")),
+                row(6, FormField(id: 12, identifier: "terms", type: .checkbox, isRequired: true, regex: "^true$")),
+            ]),
+        ],
+        hasRecaptcha: true
+    )
+
+    private static func row(_ number: Int, _ field: FormField) -> FormRow {
+        FormRow(number: number, fields: [field])
+    }
+
+    private static let copy: [String: String] = [
+        "username": "Enter Mobile Number",
+        "password": "Password",
+        "firstname": "First Name (As it appears on your ID)",
+        "lastname": "Surname (As it appears on ID)",
+        "email": "Email",
+        "referralcode": "I have a sign up code",
+        "idnumbertype": "ID Number Type",
+        "idnumber": "ID Number",
+        "dateofbirth": "Enter Date Of Birth",
+        "sourceoffunds": "Enter Source Of Income",
+        "receivepromotionalinformation-jza": "Send Jackpot City Promotions to me",
+        "terms": "I am over 18 years of age & I accept Jackpotcity's Terms & Conditions & Privacy Policy",
+        "jpc-reg-idnumber": "South African ID",
+        "jpc-reg-passport": "Passport",
+        "jpc-reg-salaryorwages": "Salary or Wages",
+        "jpc-reg-pensionorgrant": "Pension or Grant",
+        "jpc-reg-allowanceorbursary": "Allowance or Bursary",
+        "jpc-reg-savingsorrentalorother": "Savings, Rental or Other",
+        "jpc-reg-selfemployed": "Self Employed",
+        "jpc-reg-username-regex": "Enter a valid mobile number",
+        "jpc-reg-password-regex": "Password must be 8–20 characters",
+        "jpc-reg-firstname-regex": "Enter your first name as it appears on your ID",
+        "jpc-reg-lastname-regex": "Enter your surname as it appears on your ID",
+        "jpc-reg-email-regex": "Enter a valid email address",
+        "jpc-reg-referralcode-regex": "Sign up codes are 3–25 letters or numbers",
+        "jpc-reg-idnumbertype-regex": "Please select an ID type",
+        "jpc-reg-idnumber-regex": "Enter in a valid ID number",
+        "jpc-reg-dateofbirth-regex": "Enter date of birth",
+        "jpc-reg-sourceoffunds-regex": "Please select your source of income.",
+        "jpc-reg-terms-regex": "You must accept the Terms & Conditions to continue",
+        "password-validity": "Password Validity",
+        "next": "Next",
+        "previous": "Previous",
+        "sign-up": "Sign Up",
+        "login": "Login",
+        "already-have-account": "Already have an account?",
+        "at-least-one-upper-char": "At least one uppercase character",
+        "at-least-one-lower-char": "At least one lowercase character",
+        "at-least-one-num-char": "At least one number",
+        "at-least-one-special-char": "At least one special character",
+        "min-8-char": "Minimum of 8 characters",
+        "max-20-char": "Maximum of 20 characters",
+        "required": "Required",
+        "requirements-met": "Requirements met",
+        "show-password": "Show password",
+        "hide-password": "Hide password",
+        "loading-form": "Loading form",
+        "couldnt-load-form": "Couldn't load this form",
+        "form-progress": "Form progress",
+        "password-is-vulnerable": "Password contains 'password' - this can be unsafe",
+        "please-remove-spaces": "Please remove spaces",
+    ]
+}
 ```
-
-**31.**
-
-```bash
-cp registration.json JackpotKit/Sources/JackpotForms/Resources/registration.json
-```
-
-`registration.json` is the CRM's response saved verbatim — 12 fields over two sections.
-`JackpotForms` processes it as a resource; `StubFormRepository` reads it from `Bundle.module`
-for the sandbox, the previews and the tests alike.
 
 **32.** `JackpotKit/Sources/JackpotForms/UI/FormDependencies.swift`
 
-The engine's dependencies, `.mock()` and the placeholder copy. `translate` is the one
-translation seam: a key in, its text out, the key itself on a miss, so the app's
-`getTranslation` plugs in as it is. Defaults are generic: no regex links, no date cap;
-`namedPatterns` is what a name on a dropdown option's `regex` stands for, which is how
-a dropdown changes another field's rule. Registration adds its own links below.
+The engine's dependencies and `.mock()`. `translate` is the one translation seam: a key
+in, its text out, the key itself on a miss, so the app's `getTranslation` plugs in as it is.
+`passwordConfig` is a plain struct the engine draws. `recaptcha` is a closure. The host
+injects both at the composition root — JackpotKit never reads `GlobalData`. Throw from
+`recaptcha` to fail the submit (web logs and re-throws); return nil to post without a token
+and let the server 401.
 
 ```swift
 import Foundation
 
-/// Everything the engine needs besides the form name. Defaults are generic; a feature adds its rules on top.
 public struct FormDependencies {
     public var repository: any FormRepository
-    /// The app's translation function: a key in, its text out, and the key itself on a miss.
+    /// A key in, its text out, and the key itself on a miss.
     public var translate: @Sendable (String) -> String
     /// "This field's regex is chosen by that dropdown", by identifier. Declared, never inferred from row order.
     public var regexDependencies: [String: String]
     /// What a name on a dropdown option's `regex` stands for. A literal pattern there describes the selection itself.
     public var namedPatterns: [String: String]
-    /// Latest date a calendar field may select; nil means today.
     public var maximumDate: Date?
+    public var passwordConfig: PasswordSuggestions.Config
+    /// Returns a v3 assessment token for the given action, or nil to skip. The app wires this to Google's SDK; the package never imports it.
+    public var recaptcha: @Sendable (String) async throws -> String?
 
     public init(repository: any FormRepository,
                 translate: @escaping @Sendable (String) -> String = { $0 },
                 regexDependencies: [String: String] = [:],
                 namedPatterns: [String: String] = FormDependencies.jpcPatterns,
-                maximumDate: Date? = nil) {
+                maximumDate: Date? = nil,
+                passwordConfig: PasswordSuggestions.Config = .init(),
+                recaptcha: @escaping @Sendable (String) async throws -> String? = { _ in nil }) {
         self.repository = repository
         self.translate = translate
         self.regexDependencies = regexDependencies
         self.namedPatterns = namedPatterns
         self.maximumDate = maximumDate
+        self.passwordConfig = passwordConfig
+        self.recaptcha = recaptcha
     }
 
     /// `passportNumberRegex` is a length rule, not a character class.
@@ -2208,46 +2431,14 @@ public struct FormDependencies {
 }
 
 public extension FormDependencies {
-    /// The bundled registration schema behind fake latency, so loading states are visible, with placeholder copy.
     static func mock(delay: TimeInterval = 0.35) -> FormDependencies {
-        FormDependencies(repository: StubFormRepository(delay: delay), translate: { registrationCopy[$0] ?? $0 })
+        FormDependencies(
+            repository: MockFormRepository(delay: delay),
+            translate: MockForm.translate,
+            passwordConfig: .init(min: 8, max: 20, vulnerable: true),
+            recaptcha: { _ in "mock-recaptcha-token" }
+        )
     }
-
-    /// Placeholder copy for the registration keys, until the app's own strings are wired in.
-    private static let registrationCopy = [
-        "username": "Enter Mobile Number",
-        "password": "Password",
-        "firstname": "First Name (As it appears on your ID)",
-        "lastname": "Surname (As it appears on ID)",
-        "email": "Email",
-        "referralCode": "I have a sign up code",
-        "idNumberType": "ID Number Type",
-        "idNumber": "ID Number",
-        "dateOfBirth": "Enter Date Of Birth",
-        "sourceOfFunds": "Enter Source Of Income",
-        "receivePromotionalInformation-jza": "Send Jackpot City Promotions to me",
-        "terms": "I am over 18 years of age & I accept Jackpotcity's Terms & Conditions & Privacy Policy",
-
-        "jpc-reg-idnumber": "South African ID",
-        "jpc-reg-passport": "Passport",
-        "jpc-reg-SalaryOrWages": "Salary or Wages",
-        "jpc-reg-PensionOrGrant": "Pension or Grant",
-        "jpc-reg-AllowanceOrBursary": "Allowance or Bursary",
-        "jpc-reg-SavingsOrRentalOrOther": "Savings, Rental or Other",
-        "jpc-reg-SelfEmployed": "Self Employed",
-
-        "jpc-reg-username-regex": "Enter a valid mobile number",
-        "jpc-reg-password-regex": "Password must be 8–20 characters",
-        "jpc-reg-firstname-regex": "Enter your first name as it appears on your ID",
-        "jpc-reg-lastname-regex": "Enter your surname as it appears on your ID",
-        "jpc-reg-email-regex": "Enter a valid email address",
-        "jpc-reg-referralCode-regex": "Sign up codes are 3–25 letters or numbers",
-        "jpc-reg-idNumberType-regex": "Please select an ID type",
-        "jpc-reg-idNumber-regex": "Enter in a valid ID number",
-        "jpc-reg-dateOfBirth-regex": "Enter date of birth",
-        "jpc-reg-sourceOfFunds-regex": "Please select your source of income.",
-        "jpc-reg-terms-regex": "You must accept the Terms & Conditions to continue",
-    ]
 }
 ```
 
@@ -2260,16 +2451,14 @@ cannot reset a half-filled form. `advance()` / `goBack()` / `submit()` are what 
 Previous and Sign Up call; `submit()` posts through the same `FormRepository` that loaded
 the form. `overrideRegex(for:)` is how selecting Passport relaxes the SA-ID rule on a
 different field. A field's rule is `FormField.accepts(_:overrideRegex:)`: a server regex
-that will not compile is no constraint.
+that will not compile is no constraint. `submit()` asks `recaptcha` for a token only when
+`hasRecaptcha` is set.
 
 ```swift
 import Foundation
 import Combine
 
 @MainActor
-/// Owns the fetched schema, every value, which fields have been touched, and the visible section. Validity is
-/// computed from those rather than stored, so a dropdown that changes another field's rule needs no bookkeeping.
-/// `ObservableObject` rather than `@Observable` because the floor is iOS 15.
 public final class DynamicFormModel: ObservableObject {
     public enum ViewState: Equatable {
         case loading
@@ -2282,16 +2471,13 @@ public final class DynamicFormModel: ObservableObject {
         case backward
     }
 
-    // MARK: Published state
     @Published public private(set) var viewState: ViewState = .loading
     @Published public private(set) var values: [String: FormValue] = [:]
     @Published public private(set) var sectionIndex: Int = 0
-    /// Set before `sectionIndex` changes, so the section transition slides the right way wherever the bar is.
     @Published public private(set) var pagingDirection: PagingDirection = .forward
     @Published public private(set) var isSubmitting = false
     @Published public private(set) var submitError: String?
 
-    /// `@Published` so the reveal renders in the same update, not one late.
     @Published private var touched: Set<String> = []
 
     private let formName: FormName
@@ -2316,7 +2502,6 @@ public final class DynamicFormModel: ObservableObject {
     public var isFirstSection: Bool { sectionIndex == 0 }
     public var isLastSection: Bool { sectionIndex >= sections.count - 1 }
 
-    /// Fraction of required fields that validate; drives the progress bar.
     public var progress: Double {
         guard let form else { return 0 }
         let required = form.allFields.filter { $0.isVisible && $0.isRequired }
@@ -2349,9 +2534,9 @@ public final class DynamicFormModel: ObservableObject {
 
     public var maximumDate: Date { dependencies.maximumDate ?? Date() }
 
-    // MARK: Loading
+    public var passwordConfig: PasswordSuggestions.Config { dependencies.passwordConfig }
 
-    /// A no-op once loaded, so re-appearing cannot reset a half-filled form; a failed load runs again.
+    /// A no-op once loaded, so re-appearing cannot reset a half-filled form.
     public func load() async {
         if case .loaded = viewState { return }
         viewState = .loading
@@ -2369,31 +2554,26 @@ public final class DynamicFormModel: ObservableObject {
 
     private func defaultValue(for field: FormField) -> FormValue {
         switch field.type {
-        case .checkbox:                   return .bool(false)
-        case .input, .dropdown, .unknown: return field.inputType == .calendar ? .empty : .text("")
+        case .checkbox:                              return .bool(false)
+        case .input, .dropdown, .recaptchaV3, .unknown:
+            return field.inputType == .calendar ? .empty : .text("")
         }
     }
-
-    // MARK: Editing
 
     public func setValue(_ value: FormValue, for field: FormField) {
         values[field.identifier] = value
     }
 
-    /// Call on blur. Re-touching is a no-op rather than another render.
     public func markTouched(_ identifier: String) {
         guard !touched.contains(identifier) else { return }
         touched.insert(identifier)
     }
 
-    // MARK: Validation
-
     private func isValid(_ field: FormField) -> Bool {
         field.accepts(value(for: field), overrideRegex: overrideRegex(for: field))
     }
 
-    /// The rule a dropdown imposes on `field` when `regexDependencies` links them and the chosen option names a
-    /// pattern. ID type → ID number: Passport relaxes the thirteen-digit rule.
+    /// ID type → ID number: Passport relaxes the thirteen-digit rule.
     private func overrideRegex(for field: FormField) -> String? {
         guard let driver = dependencies.regexDependencies[field.identifier].flatMap({ form?.field(identifiedBy: $0) }),
               let option = driver.dropdownOptions.first(where: { $0.value == value(for: driver).stringValue }),
@@ -2402,9 +2582,6 @@ public final class DynamicFormModel: ObservableObject {
         return dependencies.namedPatterns[name]
     }
 
-    // MARK: Paging
-
-    /// Next is disabled until the section validates, so this only ever moves.
     public func advance() {
         guard isCurrentSectionValid, !isLastSection else { return }
         pagingDirection = .forward
@@ -2417,9 +2594,6 @@ public final class DynamicFormModel: ObservableObject {
         sectionIndex -= 1
     }
 
-    // MARK: Submitting
-
-    /// The result once the repository accepts the form; nil while invalid or when it was refused, with `submitError` set.
     public func submit() async -> FormSubmitResult? {
         guard let form, isFormValid else { return nil }
         isSubmitting = true
@@ -2427,8 +2601,15 @@ public final class DynamicFormModel: ObservableObject {
         defer { isSubmitting = false }
 
         do {
+            var token: String?
+            if form.hasRecaptcha {
+                token = try await dependencies.recaptcha(form.codeName.recaptchaAction)
+            }
             return try await dependencies.repository.submitForm(
-                FormSubmission(formCodeName: form.codeName, values: values, formId: String(form.id))
+                FormSubmission(formCodeName: form.codeName,
+                               values: values,
+                               recaptcha: token,
+                               formId: String(form.id))
             )
         } catch is CancellationError {
         } catch {
@@ -2445,15 +2626,13 @@ public final class DynamicFormModel: ObservableObject {
 
 **34.** `JackpotKit/Sources/JackpotForms/UI/Fields/FieldRenderer.swift`
 
-The switch is the whole contract. Registration hits `.input` with `Calender` (the date
-picker), `.input`, `.dropdown` and `.checkbox`; only text entry needs a view of its own.
+The switch is the whole contract. Recaptcha never lands here — it is stripped in the mapper.
 
 ```swift
 import SwiftUI
 import JackpotUI
 
-/// The contract between the form builder and the app: a new server type means a new case here, binding the
-/// model to a `JackpotUI` component; until then `unknown` keeps the form usable.
+/// Recaptcha is stripped in the mapper, so `.recaptchaV3` here is defensive.
 struct FieldRenderer: View {
     let field: FormField
     @ObservedObject var model: DynamicFormModel
@@ -2461,7 +2640,6 @@ struct FieldRenderer: View {
     var body: some View {
         Group {
             switch field.type {
-            // `inputType: "Calender"`; the picker's date is serialised through `FormValue.iso8601`.
             case .input where field.inputType == .calendar:
                 JackpotDateField(model.translate(field.labelKey), selection: model.date(for: field), in: ...model.maximumDate)
             case .input:
@@ -2472,7 +2650,7 @@ struct FieldRenderer: View {
             case .checkbox:
                 Toggle(model.translate(field.labelKey), isOn: model.bool(for: field))
                     .toggleStyle(.jackpotCheckbox)
-            case .unknown:
+            case .recaptchaV3, .unknown:
                 EmptyView()
             }
         }
@@ -2481,10 +2659,7 @@ struct FieldRenderer: View {
     }
 }
 
-// MARK: - Keyboard focus order
-
 extension FormField {
-    /// Only single-line text entry joins return-key navigation.
     var acceptsKeyboardFocus: Bool {
         type == .input && inputType != .calendar
     }
@@ -2502,8 +2677,6 @@ extension DynamicFormModel {
         return next < ids.endIndex ? ids[next] : nil
     }
 }
-
-// MARK: - Shared bindings
 
 extension DynamicFormModel {
     func text(for field: FormField) -> Binding<String> {
@@ -2535,7 +2708,7 @@ extension DynamicFormModel {
 
 **35.** `JackpotKit/Sources/JackpotForms/UI/Fields/InputFieldView.swift`
 
-The text field, with the password rules read off the `{min,max}` in its regex.
+The text field, with the password checklist from `PasswordSuggestions` while focused.
 
 ```swift
 import SwiftUI
@@ -2561,21 +2734,15 @@ struct InputFieldView: View {
 
             // The rules are guidance while composing; once the field is left, the error line carries the verdict.
             if field.inputType == .password, isEditing {
-                JackpotChecklist("Password Validity", items: passwordRules)
+                JackpotChecklist(model.translate("password-validity"),
+                                 section: model.translate("required"),
+                                 items: PasswordSuggestions.items(for: model.value(for: field).stringValue,
+                                                                 config: model.passwordConfig,
+                                                                 translate: model.translate))
                     .transition(.scale(scale: 0.97, anchor: .top).combined(with: .opacity))
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.9), value: isEditing)
-    }
-
-    /// The schema gives password one regex, `^(.){8,20}$`, and the design shows two rules, so the `{min,max}` quantifier is parsed.
-    private var passwordRules: [JackpotChecklistItem] {
-        guard let bounds = field.regex?.lengthQuantifier else { return [] }
-        let count = model.value(for: field).stringValue.count
-        return [
-            JackpotChecklistItem(id: "min", text: "Minimum of \(bounds.lowerBound) characters", isSatisfied: count >= bounds.lowerBound),
-            JackpotChecklistItem(id: "max", text: "Maximum of \(bounds.upperBound) characters", isSatisfied: count > 0 && count <= bounds.upperBound),
-        ]
     }
 
     private var kind: JackpotFieldKind {
@@ -2596,34 +2763,24 @@ struct InputFieldView: View {
         }
     }
 }
-
-extension String {
-    /// `8...20` from `^(.){8,20}$`.
-    var lengthQuantifier: ClosedRange<Int>? {
-        guard let open = lastIndex(of: "{"), let close = self[open...].firstIndex(of: "}") else { return nil }
-        let bounds = self[index(after: open)..<close].split(separator: ",").map { Int($0) }
-        guard bounds.count == 2, let minimum = bounds[0], let maximum = bounds[1], minimum <= maximum else { return nil }
-        return minimum...maximum
-    }
-}
 ```
 
 **36.** `JackpotKit/Sources/JackpotForms/UI/DynamicFormContent.swift`
 
 Two views over one model. `DynamicFormContent` is the pages; `FormNavigationBar` is
 Previous / Next / Sign Up — that is how step 1 becomes step 2 — and slides the pages
-using the direction the model publishes. Registration composes the two inside its panel.
+using the direction the model publishes. Both look up copy through `jackpotTranslate`,
+seeded by `RegistrationView`. Registration composes the two inside its panel.
 
 ```swift
 import SwiftUI
 import JackpotUI
 
-/// The pages: progress, the current section's rows, the submit error, and the loading and failure states.
-/// The host owns the `DynamicFormModel` and places `FormNavigationBar` wherever the design wants it.
 public struct DynamicFormContent: View {
     @ObservedObject private var model: DynamicFormModel
 
     @Environment(\.jackpotTheme) private var theme
+    @Environment(\.jackpotTranslate) private var translate
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var focusedField: String?
 
@@ -2636,10 +2793,10 @@ public struct DynamicFormContent: View {
         case .loading:
             ProgressView()
                 .frame(maxWidth: .infinity, minHeight: 220)
-                .accessibilityLabel("Loading form")
+                .accessibilityLabel(translate("loading-form"))
 
         case .failed(let message):
-            JackpotErrorView(message, title: "Couldn't load this form")
+            JackpotErrorView(message, title: translate("couldnt-load-form"))
                 .onRetry { Task { await model.load() } }
 
         case .loaded:
@@ -2648,7 +2805,7 @@ public struct DynamicFormContent: View {
                     ProgressView(value: model.progress)
                         .progressViewStyle(.jackpotBar)
                         .padding(.horizontal, .m).padding(.top, .sm)
-                        .accessibilityLabel("Form progress")
+                        .accessibilityLabel(translate("form-progress"))
                 }
 
                 ScrollView {
@@ -2662,13 +2819,11 @@ public struct DynamicFormContent: View {
                         }
                     }
                     .padding(.m)
-                    // A new identity per section is what lets the transition run.
                     .id(model.sectionIndex)
                     .transition(sectionTransition)
                 }
             }
             .jackpotFocusedField($focusedField)
-            // Validate before moving focus, so the error and the new focus land in one update.
             .onSubmit {
                 guard let current = focusedField else { return }
                 model.markTouched(current)
@@ -2678,7 +2833,6 @@ public struct DynamicFormContent: View {
         }
     }
 
-    /// Offset rather than `.move`, so the sections don't drag the scroll width around mid-flight.
     private var sectionTransition: AnyTransition {
         guard !reduceMotion else { return .opacity }
         let travel: CGFloat = model.pagingDirection == .forward ? 60 : -60
@@ -2687,16 +2841,17 @@ public struct DynamicFormContent: View {
     }
 }
 
-/// Fields sharing a `rowNumber` render side by side.
 struct FormRowView: View {
     let row: FormRow
     @ObservedObject var model: DynamicFormModel
 
     var body: some View {
-        // An unknown type stays off the stack: even empty, the error row would take a spacing slot.
+        // Unknown types (and recaptcha if it leaked past the mapper) stay off the stack: even empty, the error row would take a spacing slot.
         let visible = row.fields.filter { field in
-            if case .unknown = field.type { return false }
-            return field.isVisible
+            switch field.type {
+            case .unknown, .recaptchaV3: return false
+            default: return field.isVisible
+            }
         }
         if !visible.isEmpty {
             HStack(alignment: .top, spacing: .s) {
@@ -2706,11 +2861,11 @@ struct FormRowView: View {
     }
 }
 
-/// Previous / Next / Sign Up. Renders nothing until the form has loaded; `onComplete` receives what the repository returned.
 public struct FormNavigationBar: View {
     @ObservedObject private var model: DynamicFormModel
     private let onComplete: (FormSubmitResult) -> Void
 
+    @Environment(\.jackpotTranslate) private var translate
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(model: DynamicFormModel, onComplete: @escaping (FormSubmitResult) -> Void) {
@@ -2722,16 +2877,16 @@ public struct FormNavigationBar: View {
         if model.form != nil {
             HStack(spacing: .sm) {
                 if !model.isFirstSection {
-                    Button("Previous") { withAnimation(pagingAnimation) { model.goBack() } }
+                    Button(translate("previous")) { withAnimation(pagingAnimation) { model.goBack() } }
                         .buttonStyle(.jackpot(.secondary))
                 }
                 if model.isLastSection {
-                    Button("Sign Up") { Task { if let result = await model.submit() { onComplete(result) } } }
+                    Button(translate("sign-up")) { Task { if let result = await model.submit() { onComplete(result) } } }
                         .buttonStyle(.jackpot)
                         .disabled(!model.isFormValid)
                         .jackpotLoading(model.isSubmitting)
                 } else {
-                    Button("Next") { withAnimation(pagingAnimation) { model.advance() } }
+                    Button(translate("next")) { withAnimation(pagingAnimation) { model.advance() } }
                         .buttonStyle(.jackpot)
                         .disabled(!model.isCurrentSectionValid)
                 }
@@ -2746,54 +2901,149 @@ public struct FormNavigationBar: View {
 }
 ```
 
-At this point the engine renders the bundled schema end to end. Now the feature that presents it:
+At this point the engine renders the mock schema end to end. Now the feature that presents it:
 
-**37.** `JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift`
+**37.** `JackpotKit/Sources/JackpotRegistration/DevConfig.swift`
 
-`RegistrationDependencies` applies `applyingRegistrationRules()` — the ID-type link and
-the 18-year date cap — to whatever `forms` it is given. `RegistrationView` is the Sign Up
-sheet: it owns the `DynamicFormModel`, puts `DynamicFormContent` inside `JackpotPanel`, and
-fills the footer with the login row and `FormNavigationBar`, with `onClose` for the
-header, `onLogin` for the row and `onComplete` for the `RegistrationResult` the submit
-returns.
+The `appsettings` app-data section. The host injects the decoded slice; this package maps
+`devConfig` into `PasswordSuggestions.Config` (`regionPasswordSuggestions` first, then `passwordLength`).
+
+```swift
+import Foundation
+import JackpotForms
+
+public struct AppSettings: Codable, Equatable, Sendable {
+    public var devConfig: DevConfig?
+
+    public init(devConfig: DevConfig? = nil) {
+        self.devConfig = devConfig
+    }
+}
+
+public struct DevConfig: Codable, Equatable, Sendable {
+    public var passwordReg: PasswordStrength?
+    public var regionPasswordSuggestions: [PasswordSuggestion]?
+    public var passwordLength: PasswordLength?
+    public var passwordRegex: String?
+
+    public init(passwordReg: PasswordStrength? = nil,
+                regionPasswordSuggestions: [PasswordSuggestion]? = nil,
+                passwordLength: PasswordLength? = nil,
+                passwordRegex: String? = nil) {
+        self.passwordReg = passwordReg
+        self.regionPasswordSuggestions = regionPasswordSuggestions
+        self.passwordLength = passwordLength
+        self.passwordRegex = passwordRegex
+    }
+}
+
+public struct PasswordStrength: Codable, Equatable, Sendable {
+    public var medium: String?
+    public var strong: String?
+
+    public init(medium: String? = nil, strong: String? = nil) {
+        self.medium = medium
+        self.strong = strong
+    }
+}
+
+public struct PasswordLength: Codable, Equatable, Sendable {
+    public var minimum: Int?
+    public var maximum: Int?
+
+    public init(minimum: Int? = nil, maximum: Int? = nil) {
+        self.minimum = minimum
+        self.maximum = maximum
+    }
+}
+
+public struct PasswordSuggestion: Codable, Equatable, Sendable {
+    public var min: Int?
+    public var max: Int?
+    public var vulnerable: Bool?
+    public var spaces: Bool?
+    public var required: [PasswordCharacterClass]?
+
+    public init(min: Int? = nil,
+                max: Int? = nil,
+                vulnerable: Bool? = nil,
+                spaces: Bool? = nil,
+                required: [PasswordCharacterClass]? = nil) {
+        self.min = min
+        self.max = max
+        self.vulnerable = vulnerable
+        self.spaces = spaces
+        self.required = required
+    }
+}
+
+public extension PasswordSuggestions.Config {
+    init(_ dev: DevConfig?) {
+        if let suggestions = dev?.regionPasswordSuggestions, !suggestions.isEmpty {
+            self.init(
+                min: suggestions.compactMap(\.min).first,
+                max: suggestions.compactMap(\.max).first,
+                vulnerable: suggestions.contains { $0.vulnerable == true },
+                spaces: suggestions.contains { $0.spaces == true },
+                required: Set(suggestions.flatMap { $0.required ?? [] })
+            )
+        } else {
+            self.init(
+                min: dev?.passwordLength?.minimum,
+                max: dev?.passwordLength?.maximum,
+                vulnerable: false,
+                spaces: false,
+                required: []
+            )
+        }
+    }
+}
+```
+
+**38.** `JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift`
+
+`RegistrationDependencies` applies `applyingRegistrationRules()` — the ID-type link, the
+18-year date cap, and `passwordConfig` from injected `AppSettings` — to whatever `forms` it is given.
+`RegistrationView` is the Sign Up sheet: it owns the `DynamicFormModel`, puts
+`DynamicFormContent` inside `JackpotPanel`, and fills the footer with the login row and
+`FormNavigationBar`, with `onClose` for the header, `onLogin` for the row and `onComplete`
+for the `RegistrationResult` the submit returns. Shell copy (`sign-up`, `login`,
+`already-have-account`) goes through `translate`; `jackpotTranslate` is seeded from the
+same closure so the bar and pages look keys up without threading it through every initialiser.
 
 ```swift
 import SwiftUI
 import JackpotUI
 import JackpotForms
 
-/// What Sign Up hands back: the account id, the session token, and `isPartial` when FICA still needs a manual upload.
 public typealias RegistrationResult = FormSubmitResult
 
-/// Everything the feature needs, supplied by the app where it's presented.
 public struct RegistrationDependencies {
-    /// `.mock()` until networking lands, `.live(baseURL:translate:)` after; registration's rules are applied on top.
     public let forms: FormDependencies
     public let theme: JackpotTheme
 
-    public init(forms: FormDependencies, theme: JackpotTheme = .jackpotCity) {
-        self.forms = forms.applyingRegistrationRules()
+    public init(forms: FormDependencies, theme: JackpotTheme = .jackpotCity, appSettings: AppSettings? = nil) {
+        self.forms = forms.applyingRegistrationRules(devConfig: appSettings?.devConfig)
         self.theme = theme
     }
 
-    /// Bundled schema and a faked submit: no backend, no app.
     public static func mock() -> RegistrationDependencies {
         RegistrationDependencies(forms: .mock())
     }
 }
 
 extension FormDependencies {
-    /// The ID-type dropdown decides the ID-number regex, and the date-of-birth picker cannot select an under-18 date.
-    func applyingRegistrationRules(now: Date = Date()) -> FormDependencies {
+    func applyingRegistrationRules(now: Date = Date(), devConfig: DevConfig? = nil) -> FormDependencies {
         var rules = self
         rules.regexDependencies = ["idNumber": "idNumberType"]
         rules.maximumDate = Calendar(identifier: .gregorian).date(byAdding: .year, value: -18, to: now)
+        if let devConfig {
+            rules.passwordConfig = .init(devConfig)
+        }
         return rules
     }
 }
 
-/// The Sign Up sheet: the two-page form inside `JackpotPanel`, the login row and navigation in the footer.
-/// The shell's copy is fixed here, like the Next / Previous labels, until the app-data keys are known.
 public struct RegistrationView: View {
     private let theme: JackpotTheme
     private let onClose: () -> Void
@@ -2813,21 +3063,24 @@ public struct RegistrationView: View {
     }
 
     public var body: some View {
-        JackpotPanel("Sign Up", onClose: onClose) {
+        JackpotPanel(model.translate("sign-up"), onClose: onClose) {
             DynamicFormContent(model: model)
         } footer: {
             VStack(spacing: .sm) {
-                JackpotLinkRow("Already have an account?", link: "Login", action: onLogin)
+                JackpotLinkRow(model.translate("already-have-account"),
+                               link: model.translate("login"),
+                               action: onLogin)
                 FormNavigationBar(model: model, onComplete: onComplete)
             }
         }
         .jackpotTheme(theme)
+        .environment(\.jackpotTranslate, model.translate)
         .task { await model.load() }
     }
 }
 ```
 
-**38.** `JackpotKit/Sources/JackpotRegistration/RegistrationPanelController.swift`
+**39.** `JackpotKit/Sources/JackpotRegistration/RegistrationPanelController.swift`
 
 A drop-in for the view controller step 4 deletes: same `addChild`/`popupContainer` call
 site, SwiftUI behind it.
@@ -2858,7 +3111,7 @@ public final class RegistrationPanelController: UIHostingController<Registration
 }
 ```
 
-**39.** `JackpotKit/Sources/JackpotRegistration/Previews.swift`
+**40.** `JackpotKit/Sources/JackpotRegistration/Previews.swift`
 
 ```swift
 #if DEBUG
@@ -2866,7 +3119,6 @@ import SwiftUI
 import JackpotUI
 import JackpotForms
 
-/// The Sign Up sheet over the page, as the app presents it: the whole form, both pages, faked submit.
 struct RegistrationView_Previews: PreviewProvider {
     private struct Page: View {
         var dependencies: RegistrationDependencies = .mock()
@@ -2897,7 +3149,7 @@ struct RegistrationView_Previews: PreviewProvider {
 
 ---
 
-### ▶ Create PR — JackpotForms + JackpotRegistration, on the bundled schema
+### ▶ Create PR — JackpotForms + JackpotRegistration, on the mock schema
 
 Open `JackpotRegistration/Previews.swift` and resume **Sign Up — dark**: the whole flow,
 both pages, success and the duplicate-mobile failure (`0000000000`), with no app and no
@@ -2912,13 +3164,13 @@ The transport: `HTTPClient` is the seam tests stub, `APIEndpoint` is one request
 `unexpectedStatus` carries anything infrastructure returns. Nothing here knows about forms,
 and nothing here needs translations: the app keeps `getTranslation` for now.
 
-**40.**
+**41.**
 
 ```bash
 mkdir -p JackpotKit/Sources/JackpotNetworking
 ```
 
-**41.** `JackpotKit/Package.swift` — the whole file after this step
+**42.** `JackpotKit/Package.swift` — the whole file after this step
 
 A standalone module; nothing depends on it yet.
 
@@ -2952,12 +3204,7 @@ let package = Package(
     targets: [
         .target(name: "JackpotUI", swiftSettings: strict),
 
-        .target(
-            name: "JackpotForms",
-            dependencies: ["JackpotUI"],
-            resources: [.process("Resources")],
-            swiftSettings: strict
-        ),
+        .target(name: "JackpotForms", dependencies: ["JackpotUI"], swiftSettings: strict),
         .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
 
         .target(name: "JackpotNetworking", swiftSettings: strict),
@@ -2965,7 +3212,7 @@ let package = Package(
 )
 ```
 
-**42.** `JackpotKit/Sources/JackpotNetworking/HTTPMethod.swift`
+**43.** `JackpotKit/Sources/JackpotNetworking/HTTPMethod.swift`
 
 ```swift
 import Foundation
@@ -2975,12 +3222,13 @@ public enum HTTPMethod: String, Sendable {
 }
 ```
 
-**43.** `JackpotKit/Sources/JackpotNetworking/HTTPClient.swift`
+**44.** `JackpotKit/Sources/JackpotNetworking/HTTPClient.swift`
+
+Each client owns a `URLSession`; nothing here reaches for `.shared`.
 
 ```swift
 import Foundation
 
-/// The transport seam tests stub.
 public protocol HTTPClient: Sendable {
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse)
 }
@@ -2988,11 +3236,11 @@ public protocol HTTPClient: Sendable {
 public struct URLSessionHTTPClient: HTTPClient {
     private let session: URLSession
 
-    public init(session: URLSession = .shared) {
+    public init(session: URLSession) {
         self.session = session
     }
 
-    public init(timeout: TimeInterval, waitsForConnectivity: Bool = false) {
+    public init(timeout: TimeInterval = 60, waitsForConnectivity: Bool = false) {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = timeout
         configuration.waitsForConnectivity = waitsForConnectivity
@@ -3009,12 +3257,11 @@ public struct URLSessionHTTPClient: HTTPClient {
 }
 ```
 
-**44.** `JackpotKit/Sources/JackpotNetworking/APIEnvironment.swift`
+**45.** `JackpotKit/Sources/JackpotNetworking/APIEnvironment.swift`
 
 ```swift
 import Foundation
 
-/// Base URL plus the headers and query items every request carries.
 public struct APIEnvironment: Sendable {
     public let baseURL: URL
     public let defaultHeaders: [String: String]
@@ -3030,7 +3277,7 @@ public struct APIEnvironment: Sendable {
 }
 ```
 
-**45.** `JackpotKit/Sources/JackpotNetworking/APIEndpoint.swift`
+**46.** `JackpotKit/Sources/JackpotNetworking/APIEndpoint.swift`
 
 ```swift
 import Foundation
@@ -3040,7 +3287,6 @@ public enum RequestBody: Sendable {
     case form([String: String])
 }
 
-/// One request shape: path, method, body. Knows nothing about hosts, auth or versioning.
 public protocol APIEndpoint: Sendable {
     var path: String { get }
     var method: HTTPMethod { get }
@@ -3097,7 +3343,7 @@ public extension APIEndpoint {
 }
 ```
 
-**46.** `JackpotKit/Sources/JackpotNetworking/APIError.swift`
+**47.** `JackpotKit/Sources/JackpotNetworking/APIError.swift`
 
 ```swift
 import Foundation
@@ -3160,7 +3406,6 @@ public enum APIError: Error, Sendable, Equatable {
         }
     }
 
-    /// The server's own wording, when it sent any.
     public var serverMessage: String? {
         problem?.message.flatMap { $0.isEmpty ? nil : $0 }
     }
@@ -3172,7 +3417,7 @@ public enum APIError: Error, Sendable, Equatable {
 }
 ```
 
-**47.** `JackpotKit/Sources/JackpotNetworking/RequestInterceptor.swift`
+**48.** `JackpotKit/Sources/JackpotNetworking/RequestInterceptor.swift`
 
 ```swift
 import Foundation
@@ -3212,7 +3457,7 @@ public struct BearerTokenInterceptor: RequestInterceptor {
 }
 ```
 
-**48.** `JackpotKit/Sources/JackpotNetworking/ConditionalRequest.swift`
+**49.** `JackpotKit/Sources/JackpotNetworking/ConditionalRequest.swift`
 
 Registration never sends a conditional request; `RemoteApiClient` still implements the
 protocol method, so the types have to exist. Step 6 uses them.
@@ -3253,7 +3498,7 @@ public enum ConditionalResponse: Sendable, Equatable {
 }
 ```
 
-**49.** `JackpotKit/Sources/JackpotNetworking/RemoteApiClient.swift`
+**50.** `JackpotKit/Sources/JackpotNetworking/RemoteApiClient.swift`
 
 The retry policy is the part to read: a 5xx or a dropped connection is retried, a 4xx never
 is, and a non-idempotent request is retried only when the transport failed before the
@@ -3265,10 +3510,11 @@ import Foundation
 public protocol ApiClient: Sendable {
     func request<Response: Decodable & Sendable>(_ endpoint: some APIEndpoint) async throws -> Response
     func request(_ endpoint: some APIEndpoint) async throws
-    func requestData(_ endpoint: some APIEndpoint) async throws -> Data
+    /// The response body, undecoded.
+    func data(for endpoint: some APIEndpoint) async throws -> Data
     /// Returns `.notModified` on a 304.
-    func requestConditional(_ endpoint: some APIEndpoint,
-                            validators: HTTPValidators?) async throws -> ConditionalResponse
+    func revalidate(_ endpoint: some APIEndpoint,
+                    validators: HTTPValidators?) async throws -> ConditionalResponse
 }
 
 public struct RemoteApiClient: ApiClient {
@@ -3304,12 +3550,12 @@ public struct RemoteApiClient: ApiClient {
         _ = try await perform(endpoint)
     }
 
-    public func requestData(_ endpoint: some APIEndpoint) async throws -> Data {
+    public func data(for endpoint: some APIEndpoint) async throws -> Data {
         try await perform(endpoint).0
     }
 
-    public func requestConditional(_ endpoint: some APIEndpoint,
-                                   validators: HTTPValidators?) async throws -> ConditionalResponse {
+    public func revalidate(_ endpoint: some APIEndpoint,
+                           validators: HTTPValidators?) async throws -> ConditionalResponse {
         let (data, response) = try await perform(endpoint, extraHeaders: validators?.conditionalHeaders ?? [:])
         if response.statusCode == 304 { return .notModified }
         return .fresh(data, HTTPValidators(response))
@@ -3399,19 +3645,23 @@ public struct RemoteApiClient: ApiClient {
 
 ## Step 4 — Connect the forms to the network, and replace the flow in the app
 
-The `Remote` folder joins `JackpotForms`: the cron endpoints, the submit envelope, the error
-boundary and `.live()` — the two files that import `JackpotNetworking`. The engine is
-untouched — that is the point of the protocol — and the sheet is untouched too; the only line
-that changes at the call site is `.mock()` → `.live(baseURL:translate:)`, and `translate` is
-the app's existing `getTranslation`, passed as it is.
+The `Remote` folder joins `JackpotForms`: the submit envelope, the error boundary and
+`.live(...)`. The engine is untouched — that is the point of the protocol — and the sheet is
+untouched too. The host injects the registration JSON, `appSettings` and `translate` from the
+bootstrap payload it already fetched into `GlobalData` — JackpotKit does not fetch app-data,
+devConfig or the form schema. The only new request is submit (plus recaptcha). After step 6 the
+same blobs come from `AppDataResponse` that *replaced* the GlobalData load, not a second GET.
+`recaptcha` is a closure over a `RecaptchaClient` the composition root created with
+`Recaptcha.fetchClient(withSiteKey:)` — RecaptchaEnterprise is an app-target dependency, not
+JackpotKit's. Throw to fail the submit; return nil to post without a token.
 
-**50.**
+**51.**
 
 ```bash
 mkdir -p JackpotKit/Sources/JackpotForms/Remote
 ```
 
-**51.** `JackpotKit/Package.swift` — the whole file after this step
+**52.** `JackpotKit/Package.swift` — the whole file after this step
 
 `JackpotForms` gains `JackpotNetworking`. No new targets.
 
@@ -3445,12 +3695,7 @@ let package = Package(
     targets: [
         .target(name: "JackpotUI", swiftSettings: strict),
 
-        .target(
-            name: "JackpotForms",
-            dependencies: ["JackpotUI", "JackpotNetworking"],
-            resources: [.process("Resources")],
-            swiftSettings: strict
-        ),
+        .target(name: "JackpotForms", dependencies: ["JackpotUI", "JackpotNetworking"], swiftSettings: strict),
         .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
 
         .target(name: "JackpotNetworking", swiftSettings: strict),
@@ -3458,15 +3703,14 @@ let package = Package(
 )
 ```
 
-**52.** `JackpotKit/Sources/JackpotForms/Remote/FormEndpoints.swift`
+**53.** `JackpotKit/Sources/JackpotForms/Remote/FormEndpoints.swift`
 
-The cron paths, the submit request and the envelope it comes back in.
+The submit path and the envelope it comes back in. The form GET is not used: the schema is injected.
 
 ```swift
 import Foundation
 import JackpotNetworking
 
-/// `GET cron/forms/{brand}/{region}/{name}?api-version=2.0`.
 struct FormRequest: APIEndpoint {
     let brand: String
     let region: String
@@ -3477,7 +3721,7 @@ struct FormRequest: APIEndpoint {
     var queryItems: [URLQueryItem] { [URLQueryItem(name: "api-version", value: "2.0")] }
 }
 
-/// `POST cron/forms/submit`, with no `api-version`. No auth: registration happens before login.
+/// No `api-version`. No auth: registration happens before login.
 struct FormSubmitRequest: APIEndpoint {
     let bodyData: Data
 
@@ -3508,47 +3752,38 @@ struct FormSubmitEnvelope: Decodable {
 }
 ```
 
-**53.** `JackpotKit/Sources/JackpotForms/Remote/RemoteFormRepository.swift`
+**54.** `JackpotKit/Sources/JackpotForms/Remote/RemoteFormRepository.swift`
 
-The fetch, the submit — HTTP 200 is not success, the envelope's `isSuccessful` is, and a
-body that is not the envelope is a rejection — and the boundary that decides what the
-user reads: the engine cannot see `APIError`, so anything not translated in `userFacing`
-becomes a generic failure on screen. Error codes are translation keys and go through
-`translate`. `.live(baseURL:translate:)` is at the bottom: swap it for `.mock()` at the
-call site and nothing else changes.
+Submit only — HTTP 200 is not success, the envelope's `isSuccessful` is, and a body that is
+not the envelope is a rejection. The schema is the `registration` blob the host already has.
+The engine cannot see `APIError`, so anything not translated in `userFacing` becomes a generic
+failure on screen. `.live(formJSON:baseURL:translate:recaptcha:)` is at the bottom.
 
 ```swift
 import Foundation
 import JackpotNetworking
 
 public struct RemoteFormRepository: FormRepository {
+    private let form: FormSchema
     private let apiClient: any ApiClient
-    private let brand: String
-    private let region: String
     private let translate: @Sendable (String) -> String
 
-    public init(apiClient: any ApiClient,
-                brand: String = "jackpotcity",
-                region: String = "JZA",
+    public init(form: FormSchema = FormSchema(id: 0, codeName: .registration, sections: []),
+                apiClient: any ApiClient,
                 translate: @escaping @Sendable (String) -> String = { $0 }) {
+        self.form = form
         self.apiClient = apiClient
-        self.brand = brand
-        self.region = region
         self.translate = translate
     }
 
     public func form(named name: FormName) async throws -> FormSchema {
-        do {
-            let dto: FormDTO = try await apiClient.request(FormRequest(brand: brand, region: region, formName: name))
-            return dto.schema
-        } catch {
-            throw userFacing(error, formName: name)
-        }
+        guard name == form.codeName else { throw FormError.notFound(name) }
+        return form
     }
 
     public func submitForm(_ submission: FormSubmission) async throws -> FormSubmitResult {
         do {
-            let data = try await apiClient.requestData(FormSubmitRequest(submission))
+            let data = try await apiClient.data(for: FormSubmitRequest(submission))
             // An empty 2xx is taken as accepted (an assumption); anything else must say `isSuccessful: true`.
             if data.isEmpty { return FormSubmitResult() }
             let envelope = try? JSONDecoder().decode(FormSubmitEnvelope.self, from: data)
@@ -3596,17 +3831,23 @@ public struct RemoteFormRepository: FormRepository {
 }
 
 public extension FormDependencies {
-    /// The real thing; swap `.mock()` for this at the call site. `baseURL` is the config host, the one app-data
-    /// uses; `region` is `wmsNavigationRegionCode`; `translate` is the app's translation function, `{ getTranslation(Key: $0) }`.
-    static func live(baseURL: URL,
-                     brand: String = "jackpotcity",
-                     region: String = "JZA",
-                     translate: @escaping @Sendable (String) -> String) -> FormDependencies {
+    static func live(form: FormSchema,
+                     baseURL: URL,
+                     translate: @escaping @Sendable (String) -> String,
+                     recaptcha: @escaping @Sendable (String) async throws -> String?) -> FormDependencies {
         let client = RemoteApiClient(environment: APIEnvironment(baseURL: baseURL))
         return FormDependencies(
-            repository: RemoteFormRepository(apiClient: client, brand: brand, region: region, translate: translate),
-            translate: translate
+            repository: RemoteFormRepository(form: form, apiClient: client, translate: translate),
+            translate: translate,
+            recaptcha: recaptcha
         )
+    }
+
+    static func live(formJSON: Data,
+                     baseURL: URL,
+                     translate: @escaping @Sendable (String) -> String,
+                     recaptcha: @escaping @Sendable (String) async throws -> String?) throws -> FormDependencies {
+        try live(form: FormSchema(json: formJSON), baseURL: baseURL, translate: translate, recaptcha: recaptcha)
     }
 }
 ```
@@ -3614,24 +3855,30 @@ public extension FormDependencies {
 Then the app, once. **In Xcode:** File → Add Package Dependencies → Add Local… →
 `JackpotKit`, then add **JackpotRegistration** to the app target's frameworks.
 
-**54.** `Sources/Features/Registration/RegistrationPresenter.swift`
+**55.** `Sources/Features/Registration/RegistrationPresenter.swift`
 
-`.live` makes the fetch and the submit real together; `.mock()` keeps the faked submit for a
-build without the backend.
+`.live` posts submit; the schema, copy and password rules are injected from the bootstrap
+the app already loaded. `.mock()` keeps the faked submit for a build without the backend.
 
 ```swift
 import UIKit
 import JackpotRegistration
+import JackpotForms
 
 extension MainViewController {
 
-    func presentRegistration() {
+    func presentRegistration(recaptchaClient: RecaptchaClient) throws {
         let controller = RegistrationPanelController(
             dependencies: RegistrationDependencies(
-                forms: .live(
+                forms: try .live(
+                    formJSON: registrationJSON,   // already on config — do not GET /cron/forms
                     baseURL: URL(string: "https://config.jpc.africa")!,
-                    translate: { getTranslation(Key: $0) }
-                )
+                    translate: { getTranslation(Key: $0) },
+                    recaptcha: { action in
+                        try await recaptchaClient.execute(withAction: RecaptchaAction(customAction: action))
+                    }
+                ),
+                appSettings: appSettings          // already on config — do not GET /cron/app-data
             ),
             onClose: { [weak self] in self?.popupContainer.dismiss() },
             onLogin: { [weak self] in
@@ -3652,14 +3899,14 @@ extension MainViewController {
 }
 ```
 
-**55.** Point every existing entry point at `presentRegistration()`:
+**56.** Point every existing entry point at `presentRegistration()`:
 
 - the header **SIGN UP** button
 - the bottom bar **Sign Up** item
 - `NavigationHandler` — the `registration` sitemap branch
 - the Login panel's **Sign Up ›** link
 
-**56.** Delete:
+**57.** Delete:
 
 ```
 RegistrationViewController.swift
@@ -3678,7 +3925,7 @@ flowOneViewController
 flowTwoViewController
 ```
 
-**57.**
+**58.**
 
 ```bash
 grep -rn "registrationPopup\|flowOneViewController\|flowTwoViewController" --include=*.swift .
@@ -3703,13 +3950,13 @@ lookup; `TranslationsStore` owns it for the session. `getTranslation` becomes a 
 store, which fixes the per-lookup rebuild for the whole app with no call-site changes —
 registration included, since it only ever held the function.
 
-**58.**
+**59.**
 
 ```bash
 mkdir -p JackpotKit/Sources/JackpotLocalization
 ```
 
-**59.** `JackpotKit/Package.swift` — the whole file after this step
+**60.** `JackpotKit/Package.swift` — the whole file after this step
 
 `JackpotLocalization` arrives with no dependencies; nothing depends on it until step 6.
 
@@ -3744,12 +3991,7 @@ let package = Package(
     targets: [
         .target(name: "JackpotUI", swiftSettings: strict),
 
-        .target(
-            name: "JackpotForms",
-            dependencies: ["JackpotUI", "JackpotNetworking"],
-            resources: [.process("Resources")],
-            swiftSettings: strict
-        ),
+        .target(name: "JackpotForms", dependencies: ["JackpotUI", "JackpotNetworking"], swiftSettings: strict),
         .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
 
         .target(name: "JackpotNetworking", swiftSettings: strict),
@@ -3759,7 +4001,7 @@ let package = Package(
 )
 ```
 
-**60.** `JackpotKit/Sources/JackpotLocalization/Translations.swift`
+**61.** `JackpotKit/Sources/JackpotLocalization/Translations.swift`
 
 Keys are tried region-suffixed first (`terms-jza` before `terms`), and a miss returns the
 key, the same contract as `getTranslation` — which is what lets `translations(_:)` stand
@@ -3800,10 +4042,11 @@ public struct Translations: Sendable, Equatable {
 }
 ```
 
-**61.** `JackpotKit/Sources/JackpotLocalization/TranslationsRepository.swift`
+**62.** `JackpotKit/Sources/JackpotLocalization/TranslationsRepository.swift`
 
-The protocol and the fixed-table stub. The live implementation reads the app-data payload
-and arrives with it at step 6.
+The protocol and the fixed-table stub. Do not fetch app-data to fill it — `adopt` the
+`locales` the host already has. `RemoteTranslationsRepository` is only the replacement for
+the existing bootstrap GET, never a second one.
 
 ```swift
 import Foundation
@@ -3826,7 +4069,7 @@ public struct StubTranslationsRepository: TranslationsRepository {
 }
 ```
 
-**62.** `JackpotKit/Sources/JackpotLocalization/TranslationsStore.swift`
+**63.** `JackpotKit/Sources/JackpotLocalization/TranslationsStore.swift`
 
 ```swift
 import Foundation
@@ -3888,13 +4131,12 @@ public final class TranslationsStore: ObservableObject {
 }
 ```
 
-**63.** `the app` — two changes and a non-change
+**64.** `the app` — two changes and a non-change
 
 ```swift
 // 1. The store is created once, at the composition root, and injected.
 let translations = TranslationsStore(repository: StubTranslationsRepository(Translations()))
-translations.adopt(Translations(GlobalData.shareData.configData?.locale ?? [:],
-                                regionCode: GlobalData.shareData.AppSetupData.wmsNavigationRegionCode))
+translations.adopt(Translations(locales, regionCode: region))  // already on the bootstrap payload
 
 // 2. The legacy helper becomes a shim. `regional` is passed through as given, so existing
 //    call sites return byte-identical strings; the deprecation is the burn-down list.
@@ -3905,8 +4147,11 @@ func getTranslation(Key: String, regional: Bool = false) -> String {
 }
 
 // 3. Registration needs no change: the closure it was given at step 4 now reads the store.
-//    Once the deprecation burns down, pass the table directly.
-forms: .live(baseURL: configURL, translate: { translations.translations($0) })
+forms: try .live(formJSON: registrationJSON, baseURL: configURL,
+                 translate: { translations.translations($0) },
+                 recaptcha: { action in
+                     try await recaptchaClient.execute(withAction: RecaptchaAction(customAction: action))
+                 })
 ```
 
 ---
@@ -3923,15 +4168,17 @@ Every label and error reads as before; the table is built once instead of per lo
 [LAUNCH-PERFORMANCE](LAUNCH-PERFORMANCE.md). `AppDataResponse` splits the bootstrap payload
 by top-level key so one null section cannot lose the other five; `FileAppDataCache` keeps the
 last good payload; `AppDataLoader` serves it at zero latency and revalidates behind it;
-`RemoteTranslationsRepository` feeds the store from the same payload.
+`RemoteTranslationsRepository` exists only as the replacement for that GET, never beside it.
+`DevConfig` lives on `JackpotRegistration`; the host injects `appsettings` from the snapshot.
+Registration does not fetch app-data.
 
-**64.**
+**65.**
 
 ```bash
 mkdir -p JackpotKit/Sources/JackpotAppData
 ```
 
-**65.** `JackpotKit/Package.swift` — the whole file after this step
+**66.** `JackpotKit/Package.swift` — the whole file after this step
 
 The last module. The manifest in the repository, less its test targets.
 
@@ -3967,12 +4214,7 @@ let package = Package(
     targets: [
         .target(name: "JackpotUI", swiftSettings: strict),
 
-        .target(
-            name: "JackpotForms",
-            dependencies: ["JackpotUI", "JackpotNetworking"],
-            resources: [.process("Resources")],
-            swiftSettings: strict
-        ),
+        .target(name: "JackpotForms", dependencies: ["JackpotUI", "JackpotNetworking"], swiftSettings: strict),
         .target(name: "JackpotRegistration", dependencies: ["JackpotUI", "JackpotForms"], swiftSettings: strict),
 
         .target(name: "JackpotNetworking", swiftSettings: strict),
@@ -3984,7 +4226,7 @@ let package = Package(
 )
 ```
 
-**66.** `JackpotKit/Sources/JackpotAppData/AppData.swift`
+**67.** `JackpotKit/Sources/JackpotAppData/AppData.swift`
 
 ```swift
 import Foundation
@@ -4038,6 +4280,8 @@ public struct AppDataResponse: Sendable, Equatable {
 
     public func contains(_ key: String) -> Bool { sections[key] != nil }
 
+    public func data(for key: String) -> Data? { sections[key] }
+
     public var locales: [String: String] {
         section("locales") ?? [:]
     }
@@ -4049,7 +4293,7 @@ public enum AppDataError: Error, Equatable {
 }
 ```
 
-**67.** `JackpotKit/Sources/JackpotAppData/AppDataCache.swift`
+**68.** `JackpotKit/Sources/JackpotAppData/AppDataCache.swift`
 
 ```swift
 import Foundation
@@ -4155,7 +4399,7 @@ public final class InMemoryAppDataCache: AppDataCaching, @unchecked Sendable {
 }
 ```
 
-**68.** `JackpotKit/Sources/JackpotAppData/AppDataLoader.swift`
+**69.** `JackpotKit/Sources/JackpotAppData/AppDataLoader.swift`
 
 ```swift
 import Foundation
@@ -4224,7 +4468,7 @@ public actor AppDataLoader {
         let key = Self.key(region: region, tenant: tenant, locale: locale)
         let entry = cache.load(key: key)
 
-        let result = try await apiClient.requestConditional(
+        let result = try await apiClient.revalidate(
             AppDataRequest(region: region, tenant: tenant, locale: locale),
             validators: entry?.validators
         )
@@ -4266,14 +4510,14 @@ public actor AppDataLoader {
 }
 ```
 
-**69.** `JackpotKit/Sources/JackpotAppData/RemoteTranslationsRepository.swift`
+**70.** `JackpotKit/Sources/JackpotAppData/RemoteTranslationsRepository.swift`
 
 ```swift
 import Foundation
 import JackpotNetworking
 import JackpotLocalization
 
-/// Fetches the whole bootstrap payload and keeps only the strings.
+/// Adopt locales from a bootstrap payload the app already has. Do not fetch app-data a second time.
 public struct RemoteTranslationsRepository: TranslationsRepository {
     private let apiClient: any ApiClient
 
@@ -4282,15 +4526,13 @@ public struct RemoteTranslationsRepository: TranslationsRepository {
     }
 
     public func translations(region: String, tenant: String, locale: String) async throws -> Translations {
-        let data = try await apiClient.requestData(
-            AppDataRequest(region: region, tenant: tenant, locale: locale)
-        )
+        let data = try await apiClient.data(for: AppDataRequest(region: region, tenant: tenant, locale: locale))
         return Translations(try AppDataResponse(data: data).locales, regionCode: region)
     }
 }
 ```
 
-**70.** `the app — bootstrap`
+**71.** `the app — bootstrap`
 
 ```swift
 let loader = AppDataLoader(apiClient: client, cache: FileAppDataCache(), policy: .default)
@@ -4308,7 +4550,8 @@ Task { if let fresh = try? await loader.refresh(region: region, tenant: "jackpot
 
 func apply(_ response: AppDataResponse) {
     translations.adopt(Translations(response.locales, regionCode: region))
-    // every other section is decoded by the feature that owns it
+    appSettings = response.section("appsettings", as: AppSettings.self)
+    registrationJSON = response.data(for: "registration")
 }
 ```
 

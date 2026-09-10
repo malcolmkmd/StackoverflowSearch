@@ -18,6 +18,7 @@ public struct JackpotChecklist: View {
     private let items: [JackpotChecklistItem]
 
     @Environment(\.jackpotTheme) private var theme
+    @Environment(\.jackpotTranslate) private var translate
     @State private var isExpanded = true
 
     public init(_ title: String, section: String = "Required", items: [JackpotChecklistItem]) {
@@ -33,7 +34,7 @@ public struct JackpotChecklist: View {
                     ProgressView(value: satisfiedFraction)
                         .progressViewStyle(.jackpotBar(height: .xs))
                         .tint(satisfiedFraction < 1 ? theme.colors.warning : theme.colors.success)
-                        .accessibilityLabel("Requirements met")
+                        .accessibilityLabel(translate("requirements-met"))
 
                     Text(section).jackpotTextStyle(\.sectionTitle)
 

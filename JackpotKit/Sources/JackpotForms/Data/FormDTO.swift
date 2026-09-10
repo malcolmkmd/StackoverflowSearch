@@ -1,20 +1,32 @@
 import Foundation
 
-// Wire shapes, exactly as the CRM sends them. Everything is optional but the identifiers: product
-// edits the schema in a CMS, so a missing `prefix` must not fail the decode.
 struct FormDTO: Decodable {
     let formId: Int
     let formCodeName: String
     let sections: [FormSectionDTO]?
 
     var schema: FormSchema {
-        FormSchema(
-            id: formId,
-            codeName: FormName(formCodeName),
-            sections: (sections ?? [])
-                .sorted { ($0.formSectionOrder ?? $0.formSectionId) < ($1.formSectionOrder ?? $1.formSectionId) }
-                .map(\.section)
-        )
+        // Recaptcha is not a field: any row that contains it is dropped, and a visible one sets `hasRecaptcha`.
+        var hasRecaptcha = false
+        let mapped = (sections ?? [])
+            .sorted { ($0.formSectionOrder ?? $0.formSectionId) < ($1.formSectionOrder ?? $1.formSectionId) }
+            .map { dto -> FormSection in
+                let rows = dto.section.rows.compactMap { row -> FormRow? in
+                    guard row.fields.contains(where: { $0.type == .recaptchaV3 }) else { return row }
+                    if row.fields.contains(where: { $0.type == .recaptchaV3 && $0.isVisible }) {
+                        hasRecaptcha = true
+                    }
+                    return nil
+                }
+                return FormSection(id: dto.formSectionId, rows: rows)
+            }
+        return FormSchema(id: formId, codeName: FormName(formCodeName), sections: mapped, hasRecaptcha: hasRecaptcha)
+    }
+}
+
+extension FormSchema {
+    public init(json: Data) throws {
+        self = try JSONDecoder().decode(FormDTO.self, from: json).schema
     }
 }
 
@@ -60,7 +72,7 @@ struct FormFieldDTO: Decodable {
             type: FieldType(raw: fieldType),
             inputType: InputType(raw: inputType ?? "Text"),
             validationMessageKey: validationMessage ?? "regex",
-            // Fail safe: an unspecified field is optional and visible rather than blocking submission.
+            // Unspecified is optional and visible, so a CMS omission cannot block submit.
             isRequired: isRequired ?? false,
             isVisible: isVisible ?? true,
             isReadOnly: isReadOnly ?? false,

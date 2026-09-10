@@ -69,7 +69,7 @@ The skeleton then appears on the **first launch only**, not on every launch.
 ### `JackpotNetworking` — conditional requests
 
 ```swift
-let result = try await apiClient.requestConditional(endpoint, validators: stored)
+let result = try await apiClient.revalidate(endpoint, validators: stored)
 // → .notModified            (304, empty body)
 // → .fresh(Data, HTTPValidators?)
 ```

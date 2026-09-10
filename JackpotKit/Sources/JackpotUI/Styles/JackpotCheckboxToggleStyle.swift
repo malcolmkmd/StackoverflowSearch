@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A tappable box with a wrapping label; VoiceOver is handed a switch.
+/// VoiceOver is handed a switch, not a button.
 public struct JackpotCheckboxToggleStyle: ToggleStyle {
     public init() {}
 

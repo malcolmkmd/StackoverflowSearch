@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Rebuild docs/BUILD-PLAYBOOK.md (and .pdf) from the files actually on disk.
 
-Six steps: the design system, the form engine and the registration sheet on the bundled
+Six steps: the design system, the form engine and the registration sheet on an in-memory
 schema, the transport, the live wiring and the app swap, the localisation migration, and the
 app-data migration.
 
@@ -52,10 +52,9 @@ TARGETS = [
     Target("JackpotUI", 1),
     Target("JackpotUITests", 1, [("JackpotUI", 1)], test=True),
 
-    Target("JackpotForms", 2, [("JackpotUI", 2), ("JackpotNetworking", 4)], resources="Resources"),
+    Target("JackpotForms", 2, [("JackpotUI", 2), ("JackpotNetworking", 4)]),
     Target("JackpotFormsTests", 2, [("JackpotForms", 2), ("JackpotNetworking", 4)], test=True),
     Target("JackpotRegistration", 2, [("JackpotUI", 2), ("JackpotForms", 2)]),
-    Target("JackpotRegistrationTests", 2, [("JackpotRegistration", 2), ("JackpotForms", 2)], test=True),
 
     Target("JackpotNetworking", 3),
     Target("JackpotNetworkingTests", 3, [("JackpotNetworking", 3)], test=True),
@@ -239,7 +238,7 @@ table(
     ["Step", "Adds", "Demoable as"],
     [
         ["1", "`JackpotUI`", "the gallery: every component, every state"],
-        ["2", "`JackpotForms` on the bundled schema, `JackpotRegistration`", "the Sign Up sheet, both pages, faked submit"],
+        ["2", "`JackpotForms` on an in-memory schema, `JackpotRegistration`", "the Sign Up sheet, both pages, faked submit"],
         ["3", "`JackpotNetworking`", "`RemoteApiClient` against a stubbed transport"],
         ["4", "`JackpotForms/Remote`, `.live()`, the app swap", "registration live in the app, copy from `getTranslation`"],
         ["5", "`JackpotLocalization`", "the same copy from a table built once; `getTranslation` becomes a shim"],
@@ -252,16 +251,18 @@ text(
 )
 text("### Registration catalog")
 text(
-    "Twelve fields over two sections, checked against the bundled capture and the live CRM\n"
-    "response. The `fieldType` values on registration are **Input**, **Dropdown** and\n"
-    "**Checkbox**; `FieldType` has exactly those three cases plus `unknown`. Date of birth is\n"
-    "`Input` + `inputType: Calender` (the schema spelling)."
+    "Twelve fields over two sections, checked against the live CRM response. The `fieldType`\n"
+    "values on registration are **Input**, **Dropdown** and\n"
+    "**Checkbox**; `FieldType` has those three plus `recaptchaV3` and `unknown`. Date of birth is\n"
+    "`Input` + `inputType: Calender` (the schema spelling). Recaptcha is not a field: a visible\n"
+    "`recapcha v3` row sets `FormSchema.hasRecaptcha` and is dropped, so it is never rendered or\n"
+    "validated. Submit asks the app for a v3 token and encodes it beside `fields`."
 )
 table(
     ["Step", "Identifier", "`fieldType`", "`inputType`", "Renders as"],
     [
         ["1.1", "`username`", "Input", "Number", "`JackpotTextField` · `.phoneNumber` · `+27` prefix"],
-        ["1.2", "`password`", "Input", "Password", "`JackpotTextField` · `.newPassword` · `JackpotChecklist` while focused"],
+        ["1.2", "`password`", "Input", "Password", "`JackpotTextField` · `.newPassword` · `JackpotChecklist` while focused, rules from `devConfig.regionPasswordSuggestions`"],
         ["1.3", "`firstname`", "Input", "Text", "`JackpotTextField` · `.givenName`"],
         ["1.4", "`lastname`", "Input", "Text", "`JackpotTextField` · `.familyName`"],
         ["1.5", "`email`", "Input", "Email", "`JackpotTextField` · `.email`"],
@@ -275,7 +276,7 @@ table(
     ],
 )
 text(
-    "The bundled capture ships `username.prefix = \"+27\"`; the live payload currently leaves\n"
+    "The mock schema ships `username.prefix = \"+27\"`; the live payload currently leaves\n"
     "prefix empty (the view still maps `username` to `.phoneNumber`)."
 )
 text(
@@ -291,8 +292,8 @@ text(
     "The buttons at the bottom of registration are `FormNavigationBar` in `DynamicFormContent.swift`,\n"
     "which registration places in the panel's footer under the login row. `RegistrationView`\n"
     "owns a `DynamicFormModel` and composes `DynamicFormContent` (the pages) and\n"
-    "`FormNavigationBar` around it. The bundled `registration.json` and the live CRM schema are\n"
-    "the twelve fields above — paging is not a field."
+    "`FormNavigationBar` around it. The mock schema and the live CRM schema are the twelve\n"
+    "fields above — paging is not a field."
 )
 table(
     ["Visible control", "Style", "When", "Action"],
@@ -312,16 +313,19 @@ text(
 )
 text("### Registration rules and the preview path")
 text(
-    "1. **Schema.** `JackpotForms/Resources/registration.json`, the CRM's response saved\n"
-    "   verbatim; `StubFormRepository` serves it.\n"
-    "2. **Mock wiring.** `FormDependencies.mock()` is the stub repository plus the placeholder\n"
-    "   copy table `FormDependencies.registrationCopy`, behind the engine's one translation seam:\n"
-    "   `translate`, a `(String) -> String` closure shaped like the app's `getTranslation`, the key\n"
-    "   back on a miss. `.live(baseURL:translate:)` swaps in `RemoteFormRepository` at step 4;\n"
-    "   nothing else changes.\n"
+    "1. **Schema.** `MockFormRepository` serves an in-memory `FormSchema` and fakes the submit.\n"
+    "   The password checklist is a `PasswordSuggestions.Config` (`min` 8, `max` 20, `vulnerable`);\n"
+    "   every row's copy is a translation key. The host injects `AppSettings` (the `appsettings` slice\n"
+    "   of app-data); `RegistrationDependencies` maps `devConfig` into that config (`regionPasswordSuggestions`,\n"
+    "   or `passwordLength` as fallback). JackpotKit never reads `GlobalData`.\n"
+    "2. **Mock wiring.** `FormDependencies.mock()` is the in-memory repository plus a small copy\n"
+    "   table, behind the engine's one translation seam: `translate`, a `(String) -> String` closure\n"
+    "   shaped like the app's `getTranslation`, the key back on a miss. `.live(formJSON:...)` posts\n"
+    "   submit and uses the injected schema; recaptcha is a second seam, SDK-agnostic like `translate`.\n"
+    "   `.mock()` returns `\"mock-recaptcha-token\"` so the sandbox completes.\n"
     "3. **Registration's rules.** The engine ships with no cross-field regex links and no date\n"
-    "   cap. `RegistrationDependencies` adds `regexDependencies: [\"idNumber\": \"idNumberType\"]`\n"
-    "   and an 18-years-ago `maximumDate` on top of whatever `forms` the host passes in.\n"
+    "   cap. `RegistrationDependencies` adds `regexDependencies: [\"idNumber\": \"idNumberType\"]`,\n"
+    "   an 18-years-ago `maximumDate`, and (when given) `passwordConfig` from injected `AppSettings`.\n"
     "4. **Sandbox.** In this repository the app's `SearchView` presents `RegistrationSandbox` with\n"
     "   `.jackpotPopup`, the way the app presents its panels; the sandbox hosts\n"
     "   `RegistrationView(dependencies: .mock())` and shows the `RegistrationResult` it gets\n"
@@ -393,7 +397,8 @@ files(
         (
             "JackpotKit/Sources/JackpotUI/Theme/JackpotEnvironment.swift",
             "The environment carries what genuinely cascades. `jackpotFieldError` is internal: it is\n"
-            "set by the `jackpotFieldError(_:)` modifier and read by the chrome.",
+            "set by the `jackpotFieldError(_:)` modifier and read by the chrome. `jackpotTranslate` is\n"
+            "the app's translation function, identity by default, so a component still renders the key.",
         ),
         "JackpotKit/Sources/JackpotUI/Theme/JackpotStyling.swift",
         (
@@ -420,7 +425,7 @@ files(
         (
             "JackpotKit/Sources/JackpotUI/Fields/JackpotTextField.swift",
             "Title, kind, prefix and suffix on `init`. Secure entry and the reveal button follow\n"
-            "from `kind.isSecure`.",
+            "from `kind.isSecure`. Show / hide labels go through `jackpotTranslate`.",
         ),
         "JackpotKit/Sources/JackpotUI/Fields/JackpotDropdown.swift",
         (
@@ -429,7 +434,8 @@ files(
         ),
         (
             "JackpotKit/Sources/JackpotUI/Components/JackpotChecklist.swift",
-            "The live password-rules panel on `password`.",
+            "The live password-rules panel on `password`. Title and section stay plain strings — the\n"
+            "caller resolves keys before passing them in — so the component stays key-agnostic.",
         ),
         (
             "JackpotKit/Sources/JackpotUI/Components/JackpotErrorView.swift",
@@ -465,17 +471,17 @@ create_pr("JackpotUI",
 
 # ---------------------------------------------------------------- step 2
 
-text("## Step 2 — JackpotForms on the bundled schema, and the registration sheet")
+text("## Step 2 — JackpotForms on an in-memory schema, and the registration sheet")
 text(
     "The engine, with no network. One module, three folders pointing one way: `Domain` (types\n"
-    "and rules, no I/O), `Data` (wire shapes and the bundled stub) and `UI` (the model and the\n"
-    "renderer). The engine only ever sees `FormRepository`; `StubFormRepository` serves the\n"
-    "captured `registration.json` and fakes the submit, which is what lets the whole sheet run\n"
-    "before any endpoint exists. `JackpotRegistration` is the feature on top: the sheet and\n"
-    "registration's own rules."
+    "and rules, no I/O), `Data` (wire shapes and the mock repository) and `UI` (the model\n"
+    "and the renderer). The engine only ever sees `FormRepository`; `MockFormRepository` serves\n"
+    "an in-memory schema and fakes the submit, which is what lets the whole sheet run before any\n"
+    "endpoint exists. `JackpotRegistration` is the feature on top: the sheet, registration's own\n"
+    "rules, and the `DevConfig` mapping."
 )
 bash(
-    "mkdir -p JackpotKit/Sources/JackpotForms/{Domain,Data,UI/Fields,Resources}\n"
+    "mkdir -p JackpotKit/Sources/JackpotForms/{Domain,Data,UI/Fields,Password}\n"
     "mkdir -p JackpotKit/Sources/JackpotRegistration"
 )
 manifest_step(2, "`JackpotForms` depends on `JackpotUI` alone at this step; the network joins it at step 4.\n"
@@ -489,8 +495,9 @@ files(
         "JackpotKit/Sources/JackpotForms/Domain/FormValue.swift",
         (
             "JackpotKit/Sources/JackpotForms/Domain/FormField.swift",
-            "`FieldType` is Input, Dropdown and Checkbox — the registration catalog — plus `unknown`,\n"
-            "which is what keeps the form usable when the CRM adds a type this build cannot draw.",
+            "`FieldType` is Input, Dropdown, Checkbox and recaptchaV3 — plus `unknown`, which is what\n"
+            "keeps the form usable when the CRM adds a type this build cannot draw. WMS spells recaptcha\n"
+            "`recapcha v3`.",
         ),
         "JackpotKit/Sources/JackpotForms/Domain/FormSchema.swift",
         "JackpotKit/Sources/JackpotForms/Domain/FormSubmitResult.swift",
@@ -498,29 +505,31 @@ files(
         "JackpotKit/Sources/JackpotForms/Domain/FormRepository.swift",
         (
             "JackpotKit/Sources/JackpotForms/Data/FormDTO.swift",
-            "The wire shapes and, on each, the domain value it maps to.",
+            "The wire shapes. A recaptcha row is dropped here and `hasRecaptcha` is set, so `allFields`\n"
+            "never sees it — the same as the web's `processSection`. `FormSchema(json:)` is how the host\n"
+            "injects the `registration` blob it already has.",
         ),
         (
-            "JackpotKit/Sources/JackpotForms/Data/StubFormRepository.swift",
-            "Serves the bundled `registration.json` and fakes the submit.",
+            "JackpotKit/Sources/JackpotForms/Password/PasswordSuggestions.swift",
+            "The checklist rows, keyed the same way as the web (`min-N-char`, `password-is-vulnerable`).",
+        ),
+        (
+            "JackpotKit/Sources/JackpotForms/Data/MockFormRepository.swift",
+            "An in-memory registration schema, a copy table, and a faked submit. Mobile `0000000000`\n"
+            "fails so the error path can be demoed.",
         ),
     ]
-)
-bash(
-    "cp registration.json JackpotKit/Sources/JackpotForms/Resources/registration.json",
-    note="`registration.json` is the CRM's response saved verbatim — 12 fields over two sections.\n"
-    "`JackpotForms` processes it as a resource; `StubFormRepository` reads it from `Bundle.module`\n"
-    "for the sandbox, the previews and the tests alike.",
 )
 files(
     [
         (
             "JackpotKit/Sources/JackpotForms/UI/FormDependencies.swift",
-            "The engine's dependencies, `.mock()` and the placeholder copy. `translate` is the one\n"
-            "translation seam: a key in, its text out, the key itself on a miss, so the app's\n"
-            "`getTranslation` plugs in as it is. Defaults are generic: no regex links, no date cap;\n"
-            "`namedPatterns` is what a name on a dropdown option's `regex` stands for, which is how\n"
-            "a dropdown changes another field's rule. Registration adds its own links below.",
+            "The engine's dependencies and `.mock()`. `translate` is the one translation seam: a key\n"
+            "in, its text out, the key itself on a miss, so the app's `getTranslation` plugs in as it is.\n"
+            "`passwordConfig` is a plain struct the engine draws. `recaptcha` is a closure. The host\n"
+            "injects both at the composition root — JackpotKit never reads `GlobalData`. Throw from\n"
+            "`recaptcha` to fail the submit (web logs and re-throws); return nil to post without a token\n"
+            "and let the server 401.",
         ),
         (
             "JackpotKit/Sources/JackpotForms/UI/DynamicFormModel.swift",
@@ -531,38 +540,46 @@ files(
             "Previous and Sign Up call; `submit()` posts through the same `FormRepository` that loaded\n"
             "the form. `overrideRegex(for:)` is how selecting Passport relaxes the SA-ID rule on a\n"
             "different field. A field's rule is `FormField.accepts(_:overrideRegex:)`: a server regex\n"
-            "that will not compile is no constraint.",
+            "that will not compile is no constraint. `submit()` asks `recaptcha` for a token only when\n"
+            "`hasRecaptcha` is set.",
         ),
         (
             "JackpotKit/Sources/JackpotForms/UI/Fields/FieldRenderer.swift",
-            "The switch is the whole contract. Registration hits `.input` with `Calender` (the date\n"
-            "picker), `.input`, `.dropdown` and `.checkbox`; only text entry needs a view of its own.",
+            "The switch is the whole contract. Recaptcha never lands here — it is stripped in the mapper.",
         ),
         (
             "JackpotKit/Sources/JackpotForms/UI/Fields/InputFieldView.swift",
-            "The text field, with the password rules read off the `{min,max}` in its regex.",
+            "The text field, with the password checklist from `PasswordSuggestions` while focused.",
         ),
         (
             "JackpotKit/Sources/JackpotForms/UI/DynamicFormContent.swift",
             "Two views over one model. `DynamicFormContent` is the pages; `FormNavigationBar` is\n"
             "Previous / Next / Sign Up — that is how step 1 becomes step 2 — and slides the pages\n"
-            "using the direction the model publishes. Registration composes the two inside its panel.",
+            "using the direction the model publishes. Both look up copy through `jackpotTranslate`,\n"
+            "seeded by `RegistrationView`. Registration composes the two inside its panel.",
         ),
     ]
 )
 text(
-    "At this point the engine renders the bundled schema end to end. Now the feature that presents it:"
+    "At this point the engine renders the mock schema end to end. Now the feature that presents it:"
 )
 files(
     [
         (
+            "JackpotKit/Sources/JackpotRegistration/DevConfig.swift",
+            "The `appsettings` app-data section. The host injects the decoded slice; this package maps\n"
+            "`devConfig` into `PasswordSuggestions.Config` (`regionPasswordSuggestions` first, then `passwordLength`).",
+        ),
+        (
             "JackpotKit/Sources/JackpotRegistration/RegistrationFeature.swift",
-            "`RegistrationDependencies` applies `applyingRegistrationRules()` — the ID-type link and\n"
-            "the 18-year date cap — to whatever `forms` it is given. `RegistrationView` is the Sign Up\n"
-            "sheet: it owns the `DynamicFormModel`, puts `DynamicFormContent` inside `JackpotPanel`, and\n"
-            "fills the footer with the login row and `FormNavigationBar`, with `onClose` for the\n"
-            "header, `onLogin` for the row and `onComplete` for the `RegistrationResult` the submit\n"
-            "returns.",
+            "`RegistrationDependencies` applies `applyingRegistrationRules()` — the ID-type link, the\n"
+            "18-year date cap, and `passwordConfig` from injected `AppSettings` — to whatever `forms` it is given.\n"
+            "`RegistrationView` is the Sign Up sheet: it owns the `DynamicFormModel`, puts\n"
+            "`DynamicFormContent` inside `JackpotPanel`, and fills the footer with the login row and\n"
+            "`FormNavigationBar`, with `onClose` for the header, `onLogin` for the row and `onComplete`\n"
+            "for the `RegistrationResult` the submit returns. Shell copy (`sign-up`, `login`,\n"
+            "`already-have-account`) goes through `translate`; `jackpotTranslate` is seeded from the\n"
+            "same closure so the bar and pages look keys up without threading it through every initialiser.",
         ),
         (
             "JackpotKit/Sources/JackpotRegistration/RegistrationPanelController.swift",
@@ -572,7 +589,7 @@ files(
         "JackpotKit/Sources/JackpotRegistration/Previews.swift",
     ]
 )
-create_pr("JackpotForms + JackpotRegistration, on the bundled schema",
+create_pr("JackpotForms + JackpotRegistration, on the mock schema",
           note="Open `JackpotRegistration/Previews.swift` and resume **Sign Up — dark**: the whole flow,\n"
                "both pages, success and the duplicate-mobile failure (`0000000000`), with no app and no\n"
                "backend.")
@@ -593,7 +610,10 @@ manifest_step(3, "A standalone module; nothing depends on it yet.")
 files(
     [
         "JackpotKit/Sources/JackpotNetworking/HTTPMethod.swift",
-        "JackpotKit/Sources/JackpotNetworking/HTTPClient.swift",
+        (
+            "JackpotKit/Sources/JackpotNetworking/HTTPClient.swift",
+            "Each client owns a `URLSession`; nothing here reaches for `.shared`.",
+        ),
         "JackpotKit/Sources/JackpotNetworking/APIEnvironment.swift",
         "JackpotKit/Sources/JackpotNetworking/APIEndpoint.swift",
         "JackpotKit/Sources/JackpotNetworking/APIError.swift",
@@ -617,11 +637,15 @@ create_pr("JackpotNetworking")
 
 text("## Step 4 — Connect the forms to the network, and replace the flow in the app")
 text(
-    "The `Remote` folder joins `JackpotForms`: the cron endpoints, the submit envelope, the error\n"
-    "boundary and `.live()` — the two files that import `JackpotNetworking`. The engine is\n"
-    "untouched — that is the point of the protocol — and the sheet is untouched too; the only line\n"
-    "that changes at the call site is `.mock()` → `.live(baseURL:translate:)`, and `translate` is\n"
-    "the app's existing `getTranslation`, passed as it is."
+    "The `Remote` folder joins `JackpotForms`: the submit envelope, the error boundary and\n"
+    "`.live(...)`. The engine is untouched — that is the point of the protocol — and the sheet is\n"
+    "untouched too. The host injects the registration JSON, `appSettings` and `translate` from the\n"
+    "bootstrap payload it already fetched into `GlobalData` — JackpotKit does not fetch app-data,\n"
+    "devConfig or the form schema. The only new request is submit (plus recaptcha). After step 6 the\n"
+    "same blobs come from `AppDataResponse` that *replaced* the GlobalData load, not a second GET.\n"
+    "`recaptcha` is a closure over a `RecaptchaClient` the composition root created with\n"
+    "`Recaptcha.fetchClient(withSiteKey:)` — RecaptchaEnterprise is an app-target dependency, not\n"
+    "JackpotKit's. Throw to fail the submit; return nil to post without a token."
 )
 bash("mkdir -p JackpotKit/Sources/JackpotForms/Remote")
 manifest_step(4, "`JackpotForms` gains `JackpotNetworking`. No new targets.")
@@ -629,16 +653,14 @@ files(
     [
         (
             "JackpotKit/Sources/JackpotForms/Remote/FormEndpoints.swift",
-            "The cron paths, the submit request and the envelope it comes back in.",
+            "The submit path and the envelope it comes back in. The form GET is not used: the schema is injected.",
         ),
         (
             "JackpotKit/Sources/JackpotForms/Remote/RemoteFormRepository.swift",
-            "The fetch, the submit — HTTP 200 is not success, the envelope's `isSuccessful` is, and a\n"
-            "body that is not the envelope is a rejection — and the boundary that decides what the\n"
-            "user reads: the engine cannot see `APIError`, so anything not translated in `userFacing`\n"
-            "becomes a generic failure on screen. Error codes are translation keys and go through\n"
-            "`translate`. `.live(baseURL:translate:)` is at the bottom: swap it for `.mock()` at the\n"
-            "call site and nothing else changes.",
+            "Submit only — HTTP 200 is not success, the envelope's `isSuccessful` is, and a body that is\n"
+            "not the envelope is a rejection. The schema is the `registration` blob the host already has.\n"
+            "The engine cannot see `APIError`, so anything not translated in `userFacing` becomes a generic\n"
+            "failure on screen. `.live(formJSON:baseURL:translate:recaptcha:)` is at the bottom.",
         ),
     ]
 )
@@ -650,16 +672,22 @@ swift_literal(
     "Sources/Features/Registration/RegistrationPresenter.swift",
     """import UIKit
 import JackpotRegistration
+import JackpotForms
 
 extension MainViewController {
 
-    func presentRegistration() {
+    func presentRegistration(recaptchaClient: RecaptchaClient) throws {
         let controller = RegistrationPanelController(
             dependencies: RegistrationDependencies(
-                forms: .live(
+                forms: try .live(
+                    formJSON: registrationJSON,   // already on config — do not GET /cron/forms
                     baseURL: URL(string: "https://config.jpc.africa")!,
-                    translate: { getTranslation(Key: $0) }
-                )
+                    translate: { getTranslation(Key: $0) },
+                    recaptcha: { action in
+                        try await recaptchaClient.execute(withAction: RecaptchaAction(customAction: action))
+                    }
+                ),
+                appSettings: appSettings          // already on config — do not GET /cron/app-data
             ),
             onClose: { [weak self] in self?.popupContainer.dismiss() },
             onLogin: { [weak self] in
@@ -679,8 +707,8 @@ extension MainViewController {
     }
 }
 """,
-    note="`.live` makes the fetch and the submit real together; `.mock()` keeps the faked submit for a\n"
-    "build without the backend.",
+    note="`.live` posts submit; the schema, copy and password rules are injected from the bootstrap\n"
+    "the app already loaded. `.mock()` keeps the faked submit for a build without the backend.",
 )
 step += 1
 text(f"**{step}.** Point every existing entry point at `presentRegistration()`:")
@@ -735,8 +763,9 @@ files(
         ),
         (
             "JackpotKit/Sources/JackpotLocalization/TranslationsRepository.swift",
-            "The protocol and the fixed-table stub. The live implementation reads the app-data payload\n"
-            "and arrives with it at step 6.",
+            "The protocol and the fixed-table stub. Do not fetch app-data to fill it — `adopt` the\n"
+            "`locales` the host already has. `RemoteTranslationsRepository` is only the replacement for\n"
+            "the existing bootstrap GET, never a second one.",
         ),
         "JackpotKit/Sources/JackpotLocalization/TranslationsStore.swift",
     ]
@@ -745,8 +774,7 @@ swift_literal(
     "the app",
     """// 1. The store is created once, at the composition root, and injected.
 let translations = TranslationsStore(repository: StubTranslationsRepository(Translations()))
-translations.adopt(Translations(GlobalData.shareData.configData?.locale ?? [:],
-                                regionCode: GlobalData.shareData.AppSetupData.wmsNavigationRegionCode))
+translations.adopt(Translations(locales, regionCode: region))  // already on the bootstrap payload
 
 // 2. The legacy helper becomes a shim. `regional` is passed through as given, so existing
 //    call sites return byte-identical strings; the deprecation is the burn-down list.
@@ -757,8 +785,11 @@ func getTranslation(Key: String, regional: Bool = false) -> String {
 }
 
 // 3. Registration needs no change: the closure it was given at step 4 now reads the store.
-//    Once the deprecation burns down, pass the table directly.
-forms: .live(baseURL: configURL, translate: { translations.translations($0) })
+forms: try .live(formJSON: registrationJSON, baseURL: configURL,
+                 translate: { translations.translations($0) },
+                 recaptcha: { action in
+                     try await recaptchaClient.execute(withAction: RecaptchaAction(customAction: action))
+                 })
 """,
     suffix=" — two changes and a non-change",
 )
@@ -773,7 +804,9 @@ text(
     "[LAUNCH-PERFORMANCE](LAUNCH-PERFORMANCE.md). `AppDataResponse` splits the bootstrap payload\n"
     "by top-level key so one null section cannot lose the other five; `FileAppDataCache` keeps the\n"
     "last good payload; `AppDataLoader` serves it at zero latency and revalidates behind it;\n"
-    "`RemoteTranslationsRepository` feeds the store from the same payload."
+    "`RemoteTranslationsRepository` exists only as the replacement for that GET, never beside it.\n"
+    "`DevConfig` lives on `JackpotRegistration`; the host injects `appsettings` from the snapshot.\n"
+    "Registration does not fetch app-data."
 )
 bash(
     "mkdir -p JackpotKit/Sources/JackpotAppData"
@@ -804,7 +837,8 @@ Task { if let fresh = try? await loader.refresh(region: region, tenant: "jackpot
 
 func apply(_ response: AppDataResponse) {
     translations.adopt(Translations(response.locales, regionCode: region))
-    // every other section is decoded by the feature that owns it
+    appSettings = response.section("appsettings", as: AppSettings.self)
+    registrationJSON = response.data(for: "registration")
 }
 """,
 )

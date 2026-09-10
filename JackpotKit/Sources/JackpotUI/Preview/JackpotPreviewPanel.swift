@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// A themed surface at phone width for previewing components.
 public struct JackpotPreviewPanel<Content: View>: View {
     private let title: String?
     private let content: Content

@@ -49,28 +49,41 @@ extension FormValue: Encodable {
     }
 }
 
-/// What the host receives on submit, encoded as the submit endpoint expects it.
+/// Recaptcha is encoded as a sibling of `fields`, matching the web request body.
 public struct FormSubmission: Equatable, Sendable, Encodable {
     public let formId: String
     public let formCodeName: FormName
     public let submittedAt: Date
     public let values: [String: FormValue]
+    public let recaptcha: String?
 
     enum CodingKeys: String, CodingKey {
         case formId = "form_id"
         case formCodeName = "form_name"
         case submittedAt = "submitted_at"
         case values = "fields"
+        case recaptcha
     }
 
     public init(formCodeName: FormName,
                 values: [String: FormValue],
+                recaptcha: String? = nil,
                 formId: String = "",
                 submittedAt: Date = Date()) {
         self.formId = formId
         self.formCodeName = formCodeName
         self.submittedAt = submittedAt
         self.values = values
+        self.recaptcha = recaptcha
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(formId, forKey: .formId)
+        try container.encode(formCodeName, forKey: .formCodeName)
+        try container.encode(submittedAt, forKey: .submittedAt)
+        try container.encode(values, forKey: .values)
+        try container.encodeIfPresent(recaptcha, forKey: .recaptcha)
     }
 
     public subscript(identifier: String) -> FormValue {

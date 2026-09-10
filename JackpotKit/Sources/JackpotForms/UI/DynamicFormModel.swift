@@ -2,9 +2,6 @@ import Foundation
 import Combine
 
 @MainActor
-/// Owns the fetched schema, every value, which fields have been touched, and the visible section. Validity is
-/// computed from those rather than stored, so a dropdown that changes another field's rule needs no bookkeeping.
-/// `ObservableObject` rather than `@Observable` because the floor is iOS 15.
 public final class DynamicFormModel: ObservableObject {
     public enum ViewState: Equatable {
         case loading
@@ -17,16 +14,13 @@ public final class DynamicFormModel: ObservableObject {
         case backward
     }
 
-    // MARK: Published state
     @Published public private(set) var viewState: ViewState = .loading
     @Published public private(set) var values: [String: FormValue] = [:]
     @Published public private(set) var sectionIndex: Int = 0
-    /// Set before `sectionIndex` changes, so the section transition slides the right way wherever the bar is.
     @Published public private(set) var pagingDirection: PagingDirection = .forward
     @Published public private(set) var isSubmitting = false
     @Published public private(set) var submitError: String?
 
-    /// `@Published` so the reveal renders in the same update, not one late.
     @Published private var touched: Set<String> = []
 
     private let formName: FormName
@@ -51,7 +45,6 @@ public final class DynamicFormModel: ObservableObject {
     public var isFirstSection: Bool { sectionIndex == 0 }
     public var isLastSection: Bool { sectionIndex >= sections.count - 1 }
 
-    /// Fraction of required fields that validate; drives the progress bar.
     public var progress: Double {
         guard let form else { return 0 }
         let required = form.allFields.filter { $0.isVisible && $0.isRequired }
@@ -84,9 +77,9 @@ public final class DynamicFormModel: ObservableObject {
 
     public var maximumDate: Date { dependencies.maximumDate ?? Date() }
 
-    // MARK: Loading
+    public var passwordConfig: PasswordSuggestions.Config { dependencies.passwordConfig }
 
-    /// A no-op once loaded, so re-appearing cannot reset a half-filled form; a failed load runs again.
+    /// A no-op once loaded, so re-appearing cannot reset a half-filled form.
     public func load() async {
         if case .loaded = viewState { return }
         viewState = .loading
@@ -104,31 +97,26 @@ public final class DynamicFormModel: ObservableObject {
 
     private func defaultValue(for field: FormField) -> FormValue {
         switch field.type {
-        case .checkbox:                   return .bool(false)
-        case .input, .dropdown, .unknown: return field.inputType == .calendar ? .empty : .text("")
+        case .checkbox:                              return .bool(false)
+        case .input, .dropdown, .recaptchaV3, .unknown:
+            return field.inputType == .calendar ? .empty : .text("")
         }
     }
-
-    // MARK: Editing
 
     public func setValue(_ value: FormValue, for field: FormField) {
         values[field.identifier] = value
     }
 
-    /// Call on blur. Re-touching is a no-op rather than another render.
     public func markTouched(_ identifier: String) {
         guard !touched.contains(identifier) else { return }
         touched.insert(identifier)
     }
 
-    // MARK: Validation
-
     private func isValid(_ field: FormField) -> Bool {
         field.accepts(value(for: field), overrideRegex: overrideRegex(for: field))
     }
 
-    /// The rule a dropdown imposes on `field` when `regexDependencies` links them and the chosen option names a
-    /// pattern. ID type → ID number: Passport relaxes the thirteen-digit rule.
+    /// ID type → ID number: Passport relaxes the thirteen-digit rule.
     private func overrideRegex(for field: FormField) -> String? {
         guard let driver = dependencies.regexDependencies[field.identifier].flatMap({ form?.field(identifiedBy: $0) }),
               let option = driver.dropdownOptions.first(where: { $0.value == value(for: driver).stringValue }),
@@ -137,9 +125,6 @@ public final class DynamicFormModel: ObservableObject {
         return dependencies.namedPatterns[name]
     }
 
-    // MARK: Paging
-
-    /// Next is disabled until the section validates, so this only ever moves.
     public func advance() {
         guard isCurrentSectionValid, !isLastSection else { return }
         pagingDirection = .forward
@@ -152,9 +137,6 @@ public final class DynamicFormModel: ObservableObject {
         sectionIndex -= 1
     }
 
-    // MARK: Submitting
-
-    /// The result once the repository accepts the form; nil while invalid or when it was refused, with `submitError` set.
     public func submit() async -> FormSubmitResult? {
         guard let form, isFormValid else { return nil }
         isSubmitting = true
@@ -162,8 +144,15 @@ public final class DynamicFormModel: ObservableObject {
         defer { isSubmitting = false }
 
         do {
+            var token: String?
+            if form.hasRecaptcha {
+                token = try await dependencies.recaptcha(form.codeName.recaptchaAction)
+            }
             return try await dependencies.repository.submitForm(
-                FormSubmission(formCodeName: form.codeName, values: values, formId: String(form.id))
+                FormSubmission(formCodeName: form.codeName,
+                               values: values,
+                               recaptcha: token,
+                               formId: String(form.id))
             )
         } catch is CancellationError {
         } catch {

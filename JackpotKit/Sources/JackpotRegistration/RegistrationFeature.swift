@@ -2,38 +2,34 @@ import SwiftUI
 import JackpotUI
 import JackpotForms
 
-/// What Sign Up hands back: the account id, the session token, and `isPartial` when FICA still needs a manual upload.
 public typealias RegistrationResult = FormSubmitResult
 
-/// Everything the feature needs, supplied by the app where it's presented.
 public struct RegistrationDependencies {
-    /// `.mock()` until networking lands, `.live(baseURL:translate:)` after; registration's rules are applied on top.
     public let forms: FormDependencies
     public let theme: JackpotTheme
 
-    public init(forms: FormDependencies, theme: JackpotTheme = .jackpotCity) {
-        self.forms = forms.applyingRegistrationRules()
+    public init(forms: FormDependencies, theme: JackpotTheme = .jackpotCity, appSettings: AppSettings? = nil) {
+        self.forms = forms.applyingRegistrationRules(devConfig: appSettings?.devConfig)
         self.theme = theme
     }
 
-    /// Bundled schema and a faked submit: no backend, no app.
     public static func mock() -> RegistrationDependencies {
         RegistrationDependencies(forms: .mock())
     }
 }
 
 extension FormDependencies {
-    /// The ID-type dropdown decides the ID-number regex, and the date-of-birth picker cannot select an under-18 date.
-    func applyingRegistrationRules(now: Date = Date()) -> FormDependencies {
+    func applyingRegistrationRules(now: Date = Date(), devConfig: DevConfig? = nil) -> FormDependencies {
         var rules = self
         rules.regexDependencies = ["idNumber": "idNumberType"]
         rules.maximumDate = Calendar(identifier: .gregorian).date(byAdding: .year, value: -18, to: now)
+        if let devConfig {
+            rules.passwordConfig = .init(devConfig)
+        }
         return rules
     }
 }
 
-/// The Sign Up sheet: the two-page form inside `JackpotPanel`, the login row and navigation in the footer.
-/// The shell's copy is fixed here, like the Next / Previous labels, until the app-data keys are known.
 public struct RegistrationView: View {
     private let theme: JackpotTheme
     private let onClose: () -> Void
@@ -53,15 +49,18 @@ public struct RegistrationView: View {
     }
 
     public var body: some View {
-        JackpotPanel("Sign Up", onClose: onClose) {
+        JackpotPanel(model.translate("sign-up"), onClose: onClose) {
             DynamicFormContent(model: model)
         } footer: {
             VStack(spacing: .sm) {
-                JackpotLinkRow("Already have an account?", link: "Login", action: onLogin)
+                JackpotLinkRow(model.translate("already-have-account"),
+                               link: model.translate("login"),
+                               action: onLogin)
                 FormNavigationBar(model: model, onComplete: onComplete)
             }
         }
         .jackpotTheme(theme)
+        .environment(\.jackpotTranslate, model.translate)
         .task { await model.load() }
     }
 }

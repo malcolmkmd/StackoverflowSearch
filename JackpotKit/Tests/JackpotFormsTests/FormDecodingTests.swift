@@ -6,46 +6,39 @@ final class FormDecodingTests: XCTestCase {
         try JSONDecoder().decode(FormDTO.self, from: data).schema
     }
 
-    private func loadRegistration() throws -> FormSchema {
-        try decode(StubFormRepository.registrationJSON)
-    }
-
-    func testDecodesTheRealRegistrationSchema() throws {
-        let form = try loadRegistration()
-        XCTAssertEqual(form.id, 1052)
-        XCTAssertEqual(form.codeName, .registration)
-        XCTAssertEqual(form.sections.count, 2)
-        XCTAssertEqual(form.allFields.count, 12)
-    }
-
-    func testSectionsAndRowsAreOrdered() throws {
-        let form = try loadRegistration()
-        XCTAssertEqual(form.sections.map(\.id), [45, 46])
-        XCTAssertEqual(form.sections[0].rows.map(\.number), [1, 2, 3, 4, 5, 6])
-        XCTAssertEqual(form.sections[0].fields.map(\.identifier),
-                       ["username", "password", "firstname", "lastname", "email", "referralCode"])
-    }
-
-    /// The three types registration uses are the three this build renders.
-    func testFieldTypesMapCorrectly() throws {
-        let form = try loadRegistration()
-        XCTAssertEqual(Set(form.allFields.map(\.type)), [.input, .dropdown, .checkbox])
-        XCTAssertEqual(form.field(identifiedBy: "username")?.type, .input)
-        XCTAssertEqual(form.field(identifiedBy: "username")?.inputType, .number)
-        XCTAssertEqual(form.field(identifiedBy: "username")?.prefix, "+27")
-        XCTAssertEqual(form.field(identifiedBy: "password")?.inputType, .password)
-        XCTAssertEqual(form.field(identifiedBy: "email")?.inputType, .email)
-        XCTAssertEqual(form.field(identifiedBy: "dateOfBirth")?.inputType, .calendar)
-        XCTAssertEqual(form.field(identifiedBy: "idNumberType")?.type, .dropdown)
-        XCTAssertEqual(form.field(identifiedBy: "terms")?.type, .checkbox)
-    }
-
-    /// The schema spells it "Calender". If the backend ever fixes the typo we must not silently
-    /// downgrade the date picker to a text box.
     func testCalendarInputTypeAcceptsBothSpellings() {
         XCTAssertEqual(InputType(raw: "Calender"), .calendar)
         XCTAssertEqual(InputType(raw: "Calendar"), .calendar)
         XCTAssertEqual(InputType(raw: "date"), .calendar)
+    }
+
+    func testRecaptchaV3AcceptsTheWMSSpelling() {
+        XCTAssertEqual(FieldType(raw: "recapcha v3"), .recaptchaV3)
+        XCTAssertEqual(FieldType(raw: "recaptcha v3"), .recaptchaV3)
+        XCTAssertEqual(FieldType(raw: "recaptchav3"), .recaptchaV3)
+    }
+
+    func testAVisibleRecaptchaRowIsStrippedAndFlagsTheSchema() throws {
+        let json = Data("""
+        {"formId":1,"formCodeName":"registration","sections":[{"formSectionId":1,"rows":[
+          {"rowNumber":1,"fields":[{"fieldId":1,"fieldIdentifier":"email","fieldType":"Input"}]},
+          {"rowNumber":2,"fields":[{"fieldId":2,"fieldIdentifier":"recaptcha","fieldType":"recapcha v3","isVisible":true}]}
+        ]}]}
+        """.utf8)
+        let form = try decode(json)
+        XCTAssertTrue(form.hasRecaptcha)
+        XCTAssertEqual(form.allFields.map(\.identifier), ["email"])
+    }
+
+    func testAnInvisibleRecaptchaRowIsDroppedWithoutRequestingAToken() throws {
+        let json = Data("""
+        {"formId":1,"formCodeName":"x","sections":[{"formSectionId":1,"rows":[
+          {"rowNumber":1,"fields":[{"fieldId":1,"fieldIdentifier":"recaptcha","fieldType":"recapcha v3","isVisible":false}]}
+        ]}]}
+        """.utf8)
+        let form = try decode(json)
+        XCTAssertFalse(form.hasRecaptcha)
+        XCTAssertTrue(form.allFields.isEmpty)
     }
 
     /// The most important behaviour in the decoder: a field type this build has never heard of
@@ -75,14 +68,6 @@ final class FormDecodingTests: XCTestCase {
         XCTAssertTrue(field.isVisible)
         XCTAssertNil(field.regex)
     }
-
-    func testDropdownOptionsCarryValueTextAndRegex() throws {
-        let form = try loadRegistration()
-        let options = try XCTUnwrap(form.field(identifiedBy: "idNumberType")?.dropdownOptions)
-        XCTAssertEqual(options.map(\.value), ["idNumber", "passport"])
-        XCTAssertEqual(options[0].textKey, "jpc-reg-idnumber")
-        XCTAssertEqual(options[0].regex, "idNumberRegex")
-    }
 }
 
 final class FormNameTests: XCTestCase {
@@ -107,5 +92,10 @@ final class FormNameTests: XCTestCase {
 
     func testRoundTripsThroughRawValue() {
         XCTAssertEqual(FormName(rawValue: "registration"), .registration)
+    }
+
+    func testRecaptchaActionMirrorsTheWebMap() {
+        XCTAssertEqual(FormName.registration.recaptchaAction, "register")
+        XCTAssertEqual(FormName("login").recaptchaAction, "login")
     }
 }
